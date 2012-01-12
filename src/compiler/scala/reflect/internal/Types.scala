@@ -1358,7 +1358,7 @@ trait Types extends api.Types { self: SymbolTable =>
         //Console.println("baseTypeSeq(" + typeSymbol + ") = " + baseTypeSeqCache.toList);//DEBUG
       }
       if (baseTypeSeqCache eq undetBaseTypeSeq)
-        throw new TypeError("illegal cyclic inheritance involving " + typeSymbol)
+        throw new RecoverableCyclicReference(typeSymbol)
       baseTypeSeqCache
     }
 
@@ -1400,7 +1400,7 @@ trait Types extends api.Types { self: SymbolTable =>
         }
       }
       if (baseClassesCache eq null)
-        throw new TypeError("illegal cyclic reference involving " + typeSymbol)
+        throw new RecoverableCyclicReference(typeSymbol)
       baseClassesCache
     }
 
@@ -1805,7 +1805,7 @@ trait Types extends api.Types { self: SymbolTable =>
             // If a subtyping cycle is not detected here, we'll likely enter an infinite
             // loop before a sensible error can be issued.  SI-5093 is one example.
             case x: SubType if x.supertype eq this =>
-              throw new TypeError("illegal cyclic reference involving " + sym)
+              throw new RecoverableCyclicReference(sym)
             case tp => tp
           }
         }
@@ -2003,7 +2003,7 @@ A type's typeSymbol should never be inspected directly.
         }
       }
       if (baseTypeSeqCache == undetBaseTypeSeq)
-        throw new TypeError("illegal cyclic inheritance involving " + sym)
+        throw new RecoverableCyclicReference(sym)
       baseTypeSeqCache
     }
 
@@ -2018,11 +2018,11 @@ A type's typeSymbol should never be inspected directly.
       else pre.prefixString
     )
     private def argsString = if (args.isEmpty) "" else args.mkString("[", ",", "]")
-    private def refinementString = (
+    def refinementString = (
       if (sym.isStructuralRefinement) (
         decls filter (sym => sym.isPossibleInRefinement && sym.isPublic)
           map (_.defString)
-          mkString(" {", "; ", "}")
+          mkString("{", "; ", "}")
       )
       else ""
     )
@@ -2909,7 +2909,7 @@ A type's typeSymbol should never be inspected directly.
     // don't expand cyclical type alias
     // we require that object is initialized, thus info.typeParams instead of typeParams.
     if (sym1.isAliasType && sameLength(sym1.info.typeParams, args) && !sym1.lockOK)
-      throw new TypeError("illegal cyclic reference involving " + sym1)
+      throw new RecoverableCyclicReference(sym1)
 
     val pre1 = pre match {
       case x: SuperType if sym1.isEffectivelyFinal || sym1.isDeferred =>
@@ -2931,7 +2931,7 @@ A type's typeSymbol should never be inspected directly.
   def copyTypeRef(tp: Type, pre: Type, sym: Symbol, args: List[Type]): Type = tp match {
     case TypeRef(pre0, sym0, _) if pre == pre0 && sym0.name == sym.name =>
       if (sym.isAliasType && sameLength(sym.info.typeParams, args) && !sym.lockOK)
-        throw new TypeError("illegal cyclic reference involving " + sym)
+        throw new RecoverableCyclicReference(sym)
 
       TypeRef(pre, sym, args)
     case _ =>
@@ -3750,15 +3750,18 @@ A type's typeSymbol should never be inspected directly.
                       else instParamRelaxed(ps.tail, as.tail)
 
                     //Console.println("instantiating " + sym + " from " + basesym + " with " + basesym.typeParams + " and " + baseargs+", pre = "+pre+", symclazz = "+symclazz);//DEBUG
-                    if (sameLength(basesym.typeParams, baseargs)) {
+                    if (sameLength(basesym.typeParams, baseargs))
                       instParam(basesym.typeParams, baseargs)
-                    } else {
-                      throw new TypeError(
-                        "something is wrong (wrong class file?): "+basesym+
-                        " with type parameters "+
-                        basesym.typeParams.map(_.name).mkString("[",",","]")+
-                        " gets applied to arguments "+baseargs.mkString("[",",","]")+", phase = "+phase)
-                    }
+                    else
+                      if (symclazz.tpe.parents.exists(_.isErroneous))
+                        ErrorType // don't be to overzealous with throwing exceptions, see #2641
+                      else
+                        // TODO: this should stay as an error, rather than type error, right?
+                        throw new Error(
+                          "something is wrong (wrong class file?): "+basesym+
+                          " with type parameters "+
+                          basesym.typeParams.map(_.name).mkString("[",",","]")+
+                          " gets applied to arguments "+baseargs.mkString("[",",","]")+", phase = "+phase)
                   case ExistentialType(tparams, qtpe) =>
                     capturedSkolems = capturedSkolems union tparams
                     toInstance(qtpe, clazz)
@@ -6137,16 +6140,20 @@ A type's typeSymbol should never be inspected directly.
     def this(msg: String) = this(NoPosition, msg)
   }
 
+  //TODO: it shouldn't extend TypeError but that involves changing quite a lot of code
+  // so let's leave it for further refactoring
+  /** An exception for cyclic references from which we can recover */
+  case class RecoverableCyclicReference(sym: Symbol)
+  extends TypeError("illegal cyclic reference involving " + sym)
+
   class NoCommonType(tps: List[Type]) extends Throwable(
     "lub/glb of incompatible types: " + tps.mkString("", " and ", "")) with ControlThrowable
 
   /** A throwable signalling a malformed type */
+  // TODO: use something more specialized than TypeError
   class MalformedType(msg: String) extends TypeError(msg) {
     def this(pre: Type, tp: String) = this("malformed type: " + pre + "#" + tp)
   }
-
-  /** An exception signalling a variance annotation/usage conflict */
-  class VarianceError(msg: String) extends TypeError(msg)
 
   /** The current indentation string for traces */
   private var indent: String = ""
