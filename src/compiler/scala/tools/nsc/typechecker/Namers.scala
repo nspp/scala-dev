@@ -101,7 +101,7 @@ trait Namers extends MethodSynthesis {
     }
 
     def enterValueParams(vparamss: List[List[ValDef]]): List[List[Symbol]] = {
-      listutil.mmap(vparamss) { param =>
+      mmap(vparamss) { param =>
         val sym = assignSymbol(param, param.name, mask = ValueParameterFlags)
         setPrivateWithin(param, sym)
         enterInScope(sym)
@@ -426,7 +426,7 @@ trait Namers extends MethodSynthesis {
      *  @return the companion object symbol.
      */
     def ensureCompanionObject(cdef: ClassDef, creator: ClassDef => Tree = companionModuleDef(_)): Symbol = {
-      val m = companionModuleOf(cdef.symbol, context)
+      val m = companionSymbolOf(cdef.symbol, context)
       // @luc: not sure why "currentRun.compiles(m)" is needed, things breaks
       // otherwise. documentation welcome.
       //
@@ -530,13 +530,13 @@ trait Namers extends MethodSynthesis {
         val vparamss        = tree match { case x: DefDef => x.vparamss ; case _ => Nil }
         val cparamss        = constructorType.paramss
 
-        for ((vparams, cparams) <- vparamss zip cparamss) {
-          for ((param, cparam) <- vparams zip cparams) {
+        map2(vparamss, cparamss)((vparams, cparams) =>
+          map2(vparams, cparams)((param, cparam) =>
             // need to clone the type cparam.tpe???
             // problem is: we don't have the new owner yet (the new param symbol)
             param.tpt setType subst(cparam.tpe)
-          }
-        }
+          )
+        )
       }
       sym setInfo {
         mkTypeCompleter(tree) { copySym =>
@@ -587,7 +587,7 @@ trait Namers extends MethodSynthesis {
       // via "x$lzy" as can be seen in test #3927.
       val sym = (
         if (owner.isClass) createFieldSymbol(tree)
-        else owner.newValue(tree.pos, tree.name + "$lzy") setFlag tree.mods.flags resetFlag IMPLICIT
+        else owner.newValue(tree.pos, tree.name append nme.LAZY_LOCAL) setFlag tree.mods.flags resetFlag IMPLICIT
       )
       enterValSymbol(tree, sym setFlag MUTABLE setLazyAccessor lazyAccessor)
     }
@@ -635,7 +635,7 @@ trait Namers extends MethodSynthesis {
         classOfModuleClass(m.moduleClass) = new WeakReference(tree)
       }
       val hasDefault = impl.body exists {
-        case DefDef(_, nme.CONSTRUCTOR, _, vparamss, _, _)  => listutil.mexists(vparamss)(_.mods.hasDefault)
+        case DefDef(_, nme.CONSTRUCTOR, _, vparamss, _, _)  => mexists(vparamss)(_.mods.hasDefault)
         case _                                              => false
       }
       if (hasDefault) {
@@ -863,7 +863,7 @@ trait Namers extends MethodSynthesis {
       // @check: this seems to work only if the type completer of the class runs before the one of the
       // module class: the one from the module class removes the entry from classOfModuleClass (see above).
       if (clazz.isClass && !clazz.hasModuleFlag) {
-        val modClass = companionModuleOf(clazz, context).moduleClass
+        val modClass = companionSymbolOf(clazz, context).moduleClass
         Namers.this.classOfModuleClass get modClass map { cdefRef =>
           val cdef = cdefRef()
 
@@ -961,9 +961,9 @@ trait Namers extends MethodSynthesis {
       // def overriddenSymbol = meth.nextOverriddenSymbol
 
       // fill in result type and parameter types from overridden symbol if there is a unique one.
-      if (clazz.isClass && (tpt.isEmpty || listutil.mexists(vparamss)(_.tpt.isEmpty))) {
+      if (clazz.isClass && (tpt.isEmpty || mexists(vparamss)(_.tpt.isEmpty))) {
         // try to complete from matching definition in base type
-        listutil.mforeach(vparamss)(v => if (v.tpt.isEmpty) v.symbol setInfo WildcardType)
+        mforeach(vparamss)(v => if (v.tpt.isEmpty) v.symbol setInfo WildcardType)
         val overridden = overriddenSymbol
         if (overridden != NoSymbol && !overridden.isOverloaded) {
           overridden.cookJavaRawInfo() // #3404 xform java rawtypes into existentials
@@ -1001,7 +1001,7 @@ trait Namers extends MethodSynthesis {
         _.info.isInstanceOf[MethodType])) {
         vparamSymss = List(List())
       }
-      listutil.mforeach(vparamss) { vparam =>
+      mforeach(vparamss) { vparam =>
         if (vparam.tpt.isEmpty) {
           MissingParameterOrValTypeError(vparam)
           vparam.tpt defineType ErrorType
@@ -1081,7 +1081,7 @@ trait Namers extends MethodSynthesis {
 
             // Create trees for the defaultGetter. Uses tools from Unapplies.scala
             var deftParams = tparams map copyUntyped[TypeDef]
-            val defvParamss = listutil.mmap(previous) { p =>
+            val defvParamss = mmap(previous) { p =>
               // in the default getter, remove the default parameter
               val p1 = atPos(p.pos.focus) { ValDef(p.mods &~ DEFAULTPARAM, p.name, p.tpt.duplicate, EmptyTree) }
               UnTyper.traverse(p1)
@@ -1090,7 +1090,7 @@ trait Namers extends MethodSynthesis {
 
             val parentNamer = if (isConstr) {
               val (cdef, nmr) = moduleNamer.getOrElse {
-                val module = companionModuleOf(clazz, context)
+                val module = companionSymbolOf(clazz, context)
                 module.initialize // call type completer (typedTemplate), adds the
                                   // module's templateNamer to classAndNamerOfModule
                 classAndNamerOfModule get module match {

@@ -220,10 +220,10 @@ trait Implicits {
   /** An extractor for types of the form ? { name: (? >: argtpe <: Any*)restp }
    */
   object HasMethodMatching {
+    val dummyMethod = new TermSymbol(NoSymbol, NoPosition, newTermName("typer$dummy"))
+    def templateArgType(argtpe: Type) = new BoundedWildcardType(TypeBounds.lower(argtpe))
+    
     def apply(name: Name, argtpes: List[Type], restpe: Type): Type = {
-      def templateArgType(argtpe: Type) =
-        new BoundedWildcardType(TypeBounds(argtpe, AnyClass.tpe))
-      val dummyMethod = new TermSymbol(NoSymbol, NoPosition, "typer$dummy")
       val mtpe = MethodType(dummyMethod.newSyntheticValueParams(argtpes map templateArgType), restpe)
       memberWildcardType(name, mtpe)
     }
@@ -398,24 +398,6 @@ trait Implicits {
         pt match {
           case TypeRef(_, Function1.Sym, args) =>
             matchesPtView(tp, args.head, args.tail.head, undet)
-            /*
-            Since we return immediately in inferImplicit on error the
-            code below is no longer necessary. Note that this was necessary because
-            we were no longer throwing exceptions and still trying byname search.
-            Since we know that the latter will always be false it is safe to return immediately
-            for performance reasons.
-
-            val res = matchesPtView(tp, args.head, args.tail.head, undet)
-            // to overcome bug in neg/sensitive.scala
-            // TODO possibly refactor to some less critical spot?
-            if (!res && isByNameParamType(args.head))
-              args.head match {
-                case TypeRef(_, _, List(arg1)) =>
-                  matchesPtView(tp, arg1, args.tail.head, undet)
-                case _ => false
-              }
-            else res*/
-
           case _ =>
             false
         }
@@ -736,7 +718,7 @@ trait Implicits {
       )
       private def isIneligible(info: ImplicitInfo) = (
            info.isCyclicOrErroneous
-        || isView && isConforms(info.sym)
+        || isView && isPredefMemberNamed(info.sym, nme.conforms)
         || isShadowed(info.name)
       )
 
@@ -755,15 +737,6 @@ trait Implicits {
       /** Tests for validity and updates invalidImplicits by side effect when false.
        */
       private def checkValid(sym: Symbol) = isValid(sym) || { invalidImplicits += sym ; false }
-
-      /** Is `sym` the standard conforms method in Predef?
-       *  Note: DON't replace this by sym == Predef_conforms, as Predef_conforms is a `def`
-       *  which does a member lookup (it can't be a lazy val because we might reload Predef
-       *  during resident compilations).
-       */
-      private def isConforms(sym: Symbol) = (
-        (sym.name == nme.conforms) && (sym.owner == PredefModule.moduleClass)
-      )
 
       /** Preventing a divergent implicit from terminating implicit search,
        *  so that if there is a best candidate it can still be selected.
@@ -825,7 +798,14 @@ trait Implicits {
               val newPending = undoLog undo {
                 is filterNot (alt => alt == i || {
                   try improves(i, alt)
-                  catch { case e: CyclicReference => true }
+                  catch { 
+                    case e: CyclicReference => 
+                      if (printInfers) {
+                        println(i+" discarded because cyclic reference occurred")
+                        e.printStackTrace()
+                      }
+                      true 
+                  }
                 })
               }
               rankImplicits(newPending, i :: acc)

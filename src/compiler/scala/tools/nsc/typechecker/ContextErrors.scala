@@ -14,6 +14,7 @@ package typechecker
 import scala.collection.{ mutable, immutable }
 import scala.tools.util.StringOps.{ countElementsAsString, countAsString }
 import symtab.Flags.{ PRIVATE, PROTECTED }
+import scala.tools.util.EditDistance.similarString
 
 trait ContextErrors {
   self: Analyzer =>
@@ -168,17 +169,30 @@ trait ContextErrors {
       def TypedApplyError(tree: Tree, exception: TypeError) =
         issueTypeError(TypeErrorWithUnderlying(tree, exception))
 
-      def AssignmentTypedApplyError(tree: Tree) = {
-        issueNormalTypeError(tree, "reassignment to val")
-        setError(tree)
-      }
-
       // typedIdent
       def AmbiguousIdentError(tree: Tree, name: Name, msg: String) =
         NormalTypeError(tree, "reference to " + name + " is ambiguous;\n" + msg)
 
-      def SymbolNotFoundError(tree: Tree, name: Name, owner: Symbol) =
-        NormalTypeError(tree, "not found: "+decodeWithKind(name, owner))
+      def SymbolNotFoundError(tree: Tree, name: Name, owner: Symbol, cx: Context) = {
+        val similar = (
+          // name length check to limit unhelpful suggestions for e.g. "x" and "b1"
+          if (name.length > 2) {
+            val allowed = (
+              cx.enclosingContextChain
+                flatMap (ctx => ctx.scope.toList ++ ctx.imports.flatMap(_.allImportedSymbols))
+                filter (sym => sym.isTerm == name.isTermName)
+                filterNot (sym => sym.isPackage || sym.isSynthetic || sym.hasMeaninglessName)
+            )
+            val allowedStrings = (
+              allowed.map("" + _.name).distinct.sorted
+                filterNot (s => (s contains '$') || (s contains ' '))
+            )
+            similarString("" + name, allowedStrings)
+          }
+          else ""
+        )
+        NormalTypeError(tree, "not found: "+decodeWithKind(name, owner) + similar)
+      }
 
       // typedAppliedTypeTree
       def AppliedTypeNoParametersError(tree: Tree, errTpe: Type) = {
@@ -978,7 +992,7 @@ trait ContextErrors {
   object NamesDefaultsErrorGenerator {
     import typer.infer.setError
 
-    def NameClashError(sym: Symbol, arg: Tree)(implicit context: Context) = {
+    def NameClashError(sym: Symbol, arg: Tree) = {
       setError(arg)
 
       def errMsg =
@@ -996,8 +1010,8 @@ trait ContextErrors {
     def AmbiguousReferenceInNamesDefaultError(arg: Tree, name: Name)(implicit context: Context) = {
       if (!arg.isErrorTyped) {
         issueNormalTypeError(arg,
-          "reference to "+ name +" is ambiguous; it is both, a parameter\n"+
-          "name of the method and the name of a variable currently in scope.")
+          "reference to "+ name +" is ambiguous; it is both a method parameter "+
+          "and a variable in scope.")
         setError(arg)
       } else arg
     }
