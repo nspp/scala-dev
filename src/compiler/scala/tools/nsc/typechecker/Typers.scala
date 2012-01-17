@@ -272,8 +272,8 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
       }
       tp match {
         case TypeRef(pre, sym, args) =>
-          checkNotLocked(sym)
-          (!sym.isNonClassType) || checkNonCyclic(pos, appliedType(pre.memberInfo(sym), args), sym)
+          checkNotLocked(sym) && 
+          ((!sym.isNonClassType) || checkNonCyclic(pos, appliedType(pre.memberInfo(sym), args), sym))
           // @M! info for a type ref to a type parameter now returns a polytype
           // @M was: checkNonCyclic(pos, pre.memberInfo(sym).subst(sym.typeParams, args), sym)
 
