@@ -96,17 +96,17 @@ abstract class TreeGen extends reflect.internal.TreeGen {
   }
 
   def mkModuleVarDef(accessor: Symbol) = {
+    val inClass    = accessor.owner.isClass
+    val extraFlags = if (inClass) PrivateLocal | SYNTHETIC else 0
+    
     val mval = (
-      accessor.owner.newVariable(accessor.pos.focus, nme.moduleVarName(accessor.name))
-      setInfo accessor.tpe.finalResultType
-      setFlag (MODULEVAR)
+      accessor.owner.newVariable(nme.moduleVarName(accessor.name), accessor.pos.focus, MODULEVAR | extraFlags)
+        setInfo accessor.tpe.finalResultType
+        addAnnotation VolatileAttr
     )
+    if (inClass)
+      mval.owner.info.decls enter mval
 
-    mval addAnnotation VolatileAttr
-    if (mval.owner.isClass) {
-      mval setFlag (PrivateLocal | SYNTHETIC)
-      mval.owner.info.decls.enter(mval)
-    }
     ValDef(mval)
   }
 
@@ -218,11 +218,7 @@ abstract class TreeGen extends reflect.internal.TreeGen {
    */
   private def mkPackedValDef(expr: Tree, owner: Symbol, name: Name): (ValDef, () => Ident) = {
     val packedType = typer.packedType(expr, owner)
-    val sym = (
-      owner.newValue(expr.pos.makeTransparent, name)
-      setFlag SYNTHETIC
-      setInfo packedType
-    )
+    val sym = owner.newValue(name, expr.pos.makeTransparent, SYNTHETIC) setInfo packedType
 
     (ValDef(sym, expr), () => Ident(sym) setPos sym.pos.focus setType expr.tpe)
   }
