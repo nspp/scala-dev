@@ -6,11 +6,6 @@
 package scala.tools.nsc
 package typechecker
 
-/**
- *  @author  Hubert Plociniczak
- *  @version 1.0
- */
-
 import scala.collection.{ mutable, immutable }
 import scala.tools.util.StringOps.{ countElementsAsString, countAsString }
 import symtab.Flags.{ PRIVATE, PROTECTED }
@@ -59,7 +54,7 @@ trait ContextErrors {
 
   case class PosAndMsgTypeError(errPos: Position, errMsg: String, kind: ErrorKind = ErrorKinds.Normal) extends AbsTypeError
 
-  object ErrorGeneratorUtils {
+  object ErrorUtils {
     def issueNormalTypeError(tree: Tree, msg: String)(implicit context: Context) {
       issueTypeError(NormalTypeError(tree, msg))
     }
@@ -77,9 +72,14 @@ trait ContextErrors {
     }
 
     def issueTypeError(err: AbsTypeError)(implicit context: Context) { context.issue(err) }
+   
+    def typeErrorMsg(found: Type, req: Type, possiblyMissingArgs: Boolean) = {
+      def missingArgsMsg = if (possiblyMissingArgs) "\n possible cause: missing arguments for method or constructor" else ""
+      "type mismatch" + foundReqMsg(found, req) + missingArgsMsg
+    }
   }
 
-  import ErrorGeneratorUtils._
+  import ErrorUtils._
 
   trait TyperContextErrors {
     self: Typer =>
@@ -139,7 +139,8 @@ trait ContextErrors {
             found
         }
         assert(!found.isErroneous && !req.isErroneous)
-        issueNormalTypeError(tree, withAddendum(tree.pos)(infer.typeErrorMsg(found, req)) )
+        
+        issueNormalTypeError(tree, withAddendum(tree.pos)(typeErrorMsg(found, req, infer.isPossiblyMissingArgs(found, req))) )
         if (settings.explaintypes.value)
           explainTypes(found, req)
       }
@@ -216,7 +217,6 @@ trait ContextErrors {
       def LowerBoundError(tree: TypeDef, lowB: Type, highB: Type) =
         issueNormalTypeError(tree, "lower bound "+lowB+" does not conform to upper bound "+highB)
 
-      // check privates
       def HiddenSymbolWithError[T <: Tree](tree: T): T =
         setError(tree)
 
@@ -716,7 +716,7 @@ trait ContextErrors {
       }
 
       def NoBestExprAlternativeError(tree: Tree, pt: Type) =
-        issueNormalTypeError(tree, withAddendum(tree.pos)(typeErrorMsg(tree.symbol.tpe, pt)))
+        issueNormalTypeError(tree, withAddendum(tree.pos)(typeErrorMsg(tree.symbol.tpe, pt, isPossiblyMissingArgs(tree.symbol.tpe, pt))))
 
       def AmbiguousExprAlternativeError(tree: Tree, pre: Type, best: Symbol, firstCompeting: Symbol, pt: Type) = {
         val (pos, msg) = ambiguousErrorMsgPos(tree.pos, pre, best, firstCompeting, "expected type " + pt)
@@ -934,11 +934,11 @@ trait ContextErrors {
     }
   }
 
-  trait ImplicitContextErrors {
+  trait ImplicitsContextErrors {
     self: ImplicitSearch =>
     import definitions._
 
-    def ambiguousImplicitError(info1: ImplicitInfo, info2: ImplicitInfo,
+    def AmbiguousImplicitError(info1: ImplicitInfo, info2: ImplicitInfo,
                                pre1: String, pre2: String, trailer: String)
                                (isView: Boolean, pt: Type, tree: Tree)(implicit context0: Context) = {
       if (!info1.tpe.isErroneous && !info2.tpe.isErroneous) {
@@ -975,7 +975,7 @@ trait ContextErrors {
               else defaultExplanation
             }
 
-            infer.typeErrorMsg(found, req) + "\n" + explanation
+            typeErrorMsg(found, req, infer.isPossiblyMissingArgs(found, req)) + "\n" + explanation
           } else {
             "ambiguous implicit values:\n "+coreMsg + "match expected type "+pt
           }

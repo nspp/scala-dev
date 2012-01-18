@@ -392,7 +392,7 @@ trait TypeDiagnostics {
         // It is presumed if you are using a -Y option you would really like to hear
         // the warnings you've requested.
         if (settings.warnDeadCode.value && context.unit.exists && treeOK(tree) && exprOK)
-            context.warning(tree.pos, "dead code following this construct", true)
+          context.warning(tree.pos, "dead code following this construct", true)
         tree
       }
 
@@ -419,11 +419,7 @@ trait TypeDiagnostics {
           "\nIf applicable, you may wish to try moving some members into another object."
         )
     }
-
-    def reportTypeError(pos: Position, ex: TypeError) {
-      reportTypeError(context, pos, ex)
-    }
-
+    
     /** Report a type error.
      *
      *  @param pos0   The position where to report the error

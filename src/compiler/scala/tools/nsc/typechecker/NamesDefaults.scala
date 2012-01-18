@@ -497,7 +497,7 @@ trait NamesDefaults { self: Analyzer =>
           // CyclicReferences.  Fix for #3685
           case cr @ CyclicReference(sym, _) =>
             (sym.name == param.name) && sym.accessedOrSelf.isVariable && {
-              ErrorGeneratorUtils.issueTypeError(NameClashError(sym, arg))(typer.context)
+              ErrorUtils.issueTypeError(NameClashError(sym, arg))(typer.context)
               typer.infer.setError(arg)
               true
             }

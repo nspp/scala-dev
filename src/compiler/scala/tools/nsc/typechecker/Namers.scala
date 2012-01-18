@@ -113,10 +113,7 @@ trait Namers extends MethodSynthesis {
     private def contextFile = context.unit.source.file
     private def typeErrorHandler[T](tree: Tree, alt: T): PartialFunction[Throwable, T] = {
       case ex: TypeError =>
-//        typer.reportTypeError(pos, ex)
-        // TODO: once Context errors are implemented we should be able
-        // to get rid of this catch and simply report the error
-        // (maybe apart from cyclic errors)
+        // TODO: should catch only cyclic references 
         TypeSigError(tree, ex)
         alt
     }
@@ -451,6 +448,7 @@ trait Namers extends MethodSynthesis {
     }
 
     private def checkSelectors(tree: Import): Unit = {
+      import DuplicatesErrorKinds._
       val Import(expr, selectors) = tree
       val base = expr.tpe
 
@@ -499,7 +497,6 @@ trait Namers extends MethodSynthesis {
         }
       }
 
-      import DuplicatesErrorKinds._
       def noDuplicates(names: List[Name], check: DuplicatesErrorKinds.Value) {
         def loop(xs: List[Name]): Unit = xs match {
           case Nil      => ()
@@ -1464,14 +1461,14 @@ trait Namers extends MethodSynthesis {
   //    def foo[T, T2](a: T, x: T2)(implicit w: ComputeT2[T, T2])
   // moreover, the latter is not an encoding of the former, which hides type
   // inference of T2, so you can specify T while T2 is purely computed
-  private class DependentTypeChecker(ctx: Context)(errors: NamerContextErrors) extends TypeTraverser {
+  private class DependentTypeChecker(ctx: Context)(namer: Namer) extends TypeTraverser {
     private[this] val okParams = mutable.Set[Symbol]()
     private[this] val method   = ctx.owner
 
     def traverse(tp: Type) = tp match {
       case SingleType(_, sym) =>
         if (sym.owner == method && sym.isValueParameter && !okParams(sym))
-          errors.NamerErrorGen.IllegalDependentMethTpeError(sym)(ctx)
+          namer.NamerErrorGen.IllegalDependentMethTpeError(sym)(ctx)
 
       case _ => mapOver(tp)
     }

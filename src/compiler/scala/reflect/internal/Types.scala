@@ -3977,7 +3977,6 @@ trait Types extends api.Types { self: SymbolTable =>
                       if (symclazz.tpe.parents.exists(_.isErroneous))
                         ErrorType // don't be to overzealous with throwing exceptions, see #2641
                       else
-                        // TODO: this should stay as an error, rather than type error, right?
                         throw new Error(
                           "something is wrong (wrong class file?): "+basesym+
                           " with type parameters "+
@@ -6267,17 +6266,16 @@ trait Types extends api.Types { self: SymbolTable =>
     def this(msg: String) = this(NoPosition, msg)
   }
 
-  //TODO: it shouldn't extend TypeError but that involves changing quite a lot of code
-  // so let's leave it for further refactoring
+  // TODO: RecoverableCyclicReference should be separated from TypeError,
+  // but that would be a big change. Left for further refactoring.
   /** An exception for cyclic references from which we can recover */
   case class RecoverableCyclicReference(sym: Symbol)
-  extends TypeError("illegal cyclic reference involving " + sym)
+    extends TypeError("illegal cyclic reference involving " + sym)
 
   class NoCommonType(tps: List[Type]) extends Throwable(
     "lub/glb of incompatible types: " + tps.mkString("", " and ", "")) with ControlThrowable
 
   /** A throwable signalling a malformed type */
-  // TODO: use something more specialized than TypeError
   class MalformedType(msg: String) extends TypeError(msg) {
     def this(pre: Type, tp: String) = this("malformed type: " + pre + "#" + tp)
   }

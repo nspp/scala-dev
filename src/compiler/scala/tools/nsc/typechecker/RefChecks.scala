@@ -1241,9 +1241,8 @@ abstract class RefChecks extends InfoTransform with reflect.internal.transform.R
 
     /* Check whether argument types conform to bounds of type parameters */
     private def checkBounds(tree0: Tree, pre: Type, owner: Symbol, tparams: List[Symbol], argtps: List[Type]): Unit =
-      try {
-        typer.infer.checkBounds(tree0, pre, owner, tparams, argtps, "")
-      } catch {
+      try typer.infer.checkBounds(tree0, pre, owner, tparams, argtps, "")
+      catch {
         case ex: TypeError =>
           unit.error(tree0.pos, ex.getMessage())
           if (settings.explaintypes.value) {

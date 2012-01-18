@@ -10,13 +10,6 @@ import scala.collection.mutable.ListBuffer
 
 trait Trees /*extends reflect.generic.Trees*/ { self: Universe =>
 
-  // Pretty convenient when you need it:
-  //
-  // implicit def treeOps(tree: Tree): TreeOps
-  // type TreeOps <: {
-  //   def summaryString: String
-  // }
-
   private[scala] var nodeCount = 0
 
   type Modifiers <: AbsModifiers

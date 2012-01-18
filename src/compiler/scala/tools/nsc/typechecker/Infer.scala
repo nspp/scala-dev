@@ -209,18 +209,10 @@ trait Infer {
 
     def getContext = context
 
-    def issue(err: AbsTypeError) {
-      context.issue(err)
-    }
-
-    // TODO: move to more appropriate place (isWeaklyCompatible dependency is problematic)?
-    def typeErrorMsg(found: Type, req: Type) = {
-      def isPossiblyMissingArgs = (found.resultApprox ne found) && isWeaklyCompatible(found.resultApprox, req)
-      def missingArgsMsg = if (isPossiblyMissingArgs) "\n possible cause: missing arguments for method or constructor" else ""
-
-      "type mismatch" + foundReqMsg(found, req) + missingArgsMsg
-    }
-
+    def issue(err: AbsTypeError): Unit = context.issue(err)
+    
+    def isPossiblyMissingArgs(found: Type, req: Type) = (found.resultApprox ne found) && isWeaklyCompatible(found.resultApprox, req) 
+    
     def explainTypes(tp1: Type, tp2: Type) =
       withDisambiguation(List(), tp1, tp2)(global.explainTypes(tp1, tp2))
 
@@ -251,7 +243,7 @@ trait Infer {
             Console.println(tree)
             Console.println("" + pre + " " + sym.owner + " " + context.owner + " " + context.outer.enclClass.owner + " " + sym.owner.thisType + (pre =:= sym.owner.thisType))
           }
-          ErrorGeneratorUtils.issueTypeError(AccessError(tree, sym, pre, context.enclClass.owner,
+          ErrorUtils.issueTypeError(AccessError(tree, sym, pre, context.enclClass.owner,
             if (settings.check.isDefault)
               analyzer.lastAccessCheckDetails
             else
@@ -279,7 +271,7 @@ trait Infer {
                 if (settings.debug.value) ex.printStackTrace
                 val sym2 = underlyingSymbol(sym1)
                 val itype = pre.memberType(sym2)
-                ErrorGeneratorUtils.issueTypeError(
+                ErrorUtils.issueTypeError(
                   AccessError(tree, sym, pre, context.enclClass.owner,
                           "\n because its instance type "+itype+
                           (if ("malformed type: "+itype.toString==ex.msg) " is malformed"
@@ -734,26 +726,12 @@ trait Infer {
                                               argtpes0: List[Type], pt: Type): Boolean = {
       val silentContext = context.makeSilent(false)
       val typer0 = newTyper(silentContext)
-      try {
-        val res1 = typer0.infer.isApplicable(undetparams, ftpe, argtpes0, pt)
-        if (pt != WildcardType && silentContext.hasErrors) {
-          silentContext.flushBuffer()
-          val res2 = typer0.infer.isApplicable(undetparams, ftpe, argtpes0, WildcardType)
-          if (silentContext.hasErrors) false else res2
-        } else res1
-      } catch {
-        case ex: TypeError =>
-          println("[TODO] isApplicableSafe still throws type errors 1")
-          try {
-            silentContext.flushBuffer()
-            val res1 = isApplicable(undetparams, ftpe, argtpes0, WildcardType)
-            if (silentContext.hasErrors) false else res1
-          } catch {
-            case ex: TypeError =>
-              println("[TODO] isApplicableSafe still throws type errors 2")
-              false
-          }
-      }
+      val res1 = typer0.infer.isApplicable(undetparams, ftpe, argtpes0, pt)
+      if (pt != WildcardType && silentContext.hasErrors) {
+        silentContext.flushBuffer()
+        val res2 = typer0.infer.isApplicable(undetparams, ftpe, argtpes0, WildcardType)
+        if (silentContext.hasErrors) false else res2
+      } else res1
     }
 
     /** Is type <code>ftpe1</code> strictly more specific than type <code>ftpe2</code>
@@ -1204,7 +1182,7 @@ trait Infer {
             } else if (sym == NothingClass || sym == NullClass || sym == AnyValClass) {
               TypePatternOrIsInstanceTestError(tree, tp)
             } else {
-              args.foreach( arg => {
+              for (arg <- args) {
                 if (sym == ArrayClass) check(arg, bound)
                 else if (arg.typeArgs.nonEmpty) ()   // avoid spurious warnings with higher-kinded types
                 else arg match {
@@ -1217,11 +1195,11 @@ trait Infer {
                     if (!arg.typeSymbol.isTypeParameterOrSkolem)
                       patternWarning(arg, "non variable type-argument ")
                 }
-              })
+              }
             }
             check(pre, bound)
           case RefinedType(parents, decls) =>
-            if (decls.isEmpty) parents.foreach(p => check(p, bound))
+            if (decls.isEmpty) for (p <- parents) check(p, bound)
             else patternWarning(tp, "refinement ")
           case ExistentialType(quantified, tp1) =>
             check(tp1, bound ::: quantified)
@@ -1427,11 +1405,8 @@ trait Infer {
           }
           NoBestExprAlternativeError(tree, pt)
         } else if (!competing.isEmpty) {
-          if (secondTry)
-            NoBestExprAlternativeError(tree, pt)
-          else
-            if (!pt.isErroneous)
-              AmbiguousExprAlternativeError(tree, pre, best, competing.head, pt)
+          if (secondTry) NoBestExprAlternativeError(tree, pt)
+          else { if (!pt.isErroneous) AmbiguousExprAlternativeError(tree, pre, best, competing.head, pt) }
         } else {
 //          val applicable = alts1 filter (alt =>
 //            global.typer.infer.isWeaklyCompatible(pre.memberType(alt), pt))
@@ -1567,19 +1542,21 @@ trait Infer {
       assert(!context.hasErrors, "when entering inference we shouldn't have errors")
       if (context.implicitsEnabled) {
         val saved = context.state
+        var fallback = false
         context.setBufferErrors()
         val res = try {
           context.withImplicitsDisabled(infer)
           if (context.hasErrors) {
+            fallback = true
             context.restoreState(saved)
-            context.flushBuffer() // this assumes that we enter with a clean buffer so nothing is lost
+            context.flushBuffer()
             infer
           }
         } catch {
           case ex: CyclicReference  => throw ex
           case ex: TypeError        =>
             context.restoreState(saved)
-            infer
+            if (!fallback) infer else ()
         }
         context.restoreState(saved)
         res

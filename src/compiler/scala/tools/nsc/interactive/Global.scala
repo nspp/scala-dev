@@ -1060,8 +1060,8 @@ class Global(settings: Settings, _reporter: Reporter, projectName: String = "")
 
   implicit def addOnTypeError[T](x: => T): OnTypeError[T] = new OnTypeError(x)
 
-  // TODO: this might still be necessary when we hit cyclic references
-  // but divergent implicit should be handled already
+  // OnTypeError should still catch TypeError because of cyclic references,
+  // but DivergentImplicit shouldn't leak anymore here
   class OnTypeError[T](op: => T) {
     def onTypeError(alt: => T) = try {
       op

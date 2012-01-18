@@ -141,11 +141,7 @@ trait Contexts { self: Analyzer =>
       tparams
     }
 
-    private var mode = 0
-    // use Set since we want to avoid the duplicates
-    // previously ListBuffer was used but it had to implement logic that avoids duplicates
-    // TODO for performance reasons more lightweight data structure might be more
-    // appropriate but we still need to avoid duplicates
+    private[this] var mode = 0
     private[this] val buffer = LinkedHashSet[AbsTypeError]()
 
     def errBuffer = buffer
@@ -170,22 +166,19 @@ trait Contexts { self: Analyzer =>
     def updateBuffer(context0: Context) = errBuffer ++= context0.errBuffer
     def updateBuffer(errors: LinkedHashSet[AbsTypeError]) = errBuffer ++= errors
 
-    def logError(err: AbsTypeError) {
-      assert(bufferErrors, "errors can be put into context's buffer iff we are in silent mode")
-      buffer += err
-    }
-
-    def flushBuffer() { errBuffer.clear() }
-
-    def selectiveFlushBuffer(leaveOut: AbsTypeError => Boolean) = {
-      val elems = errBuffer.filter(leaveOut)
+    def condBufferFlush(removeP: AbsTypeError => Boolean) = {
+      val elems = errBuffer.filter(removeP)
       errBuffer --= elems
     }
-
+    def flushBuffer() { errBuffer.clear() }
     def flushAndReturnBuffer(): LinkedHashSet[AbsTypeError] = {
       val current = errBuffer.clone()
       errBuffer.clear()
       current
+    }
+    
+    def logError(err: AbsTypeError) {
+      buffer += err
     }
 
     def withImplicitsDisabled[T](op: => T): T = {
@@ -238,7 +231,7 @@ trait Contexts { self: Analyzer =>
       c
     }
 
-    // TODO: not used at all?
+    // TODO: remove? Doesn't seem to be used
     def make(unit: CompilationUnit): Context = {
       val c = make(unit, EmptyTree, owner, scope, imports)
       c.setReportErrors()
@@ -336,7 +329,7 @@ trait Contexts { self: Analyzer =>
       else throw new TypeError(err.errPos, err.errMsg)
     }
 
-    // TODO to remove both
+    // TODO remove
     def error(pos: Position, err: Throwable) =
       if (reportErrors) unitError(pos, addDiagString(err.getMessage()))
       else throw err
@@ -347,7 +340,8 @@ trait Contexts { self: Analyzer =>
       else throw new TypeError(pos, msg1)
     }
 
-    def warning(pos:  Position, msg: String, force: Boolean = false) = {
+    def warning(pos: Position, msg: String): Unit = warning(pos, msg, false)
+    def warning(pos: Position, msg: String, force: Boolean) {
       if (reportErrors || force) unit.warning(pos, msg)
     }
 
