@@ -425,10 +425,11 @@ trait TypeDiagnostics {
      *  @param pos0   The position where to report the error
      *  @param ex     The exception that caused the error
      */
-    def reportTypeError(context0: Analyzer#Context, pos: Position, ex: TypeError) {
+    def reportTypeError(context0: Context, pos: Position, ex: TypeError) {
       if (ex.pos == NoPosition) ex.pos = pos
-      // TODO: replace !reportErrors with throwErrors
-      // Currently if you do this errors are not propagated and tests fail. Investigate why.
+      // TODO: should be replaced by throwErrors
+      // but it seems that throwErrors excludes some of the errors that should actually be
+      // buffered, causing TypeErrors to fly around again. This needs some more investigation.
       if (!context0.reportErrors) throw ex
       if (settings.debug.value) ex.printStackTrace()
 

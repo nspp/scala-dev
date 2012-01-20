@@ -1219,14 +1219,14 @@ trait Implicits {
         incCounter(inscopeImplicitHits)
       }
       if (result == SearchFailure) {
-        val previous = context.flushAndReturnBuffer()
+        val previousErrs = context.flushAndReturnBuffer()
         val failstart = startTimer(oftypeFailNanos)
         val succstart = startTimer(oftypeSucceedNanos)
 
         result = implicitManifestOrOfExpectedType(pt)
 
         if (result == SearchFailure) {
-          context.updateBuffer(previous)
+          context.updateBuffer(previousErrs)
           stopTimer(oftypeFailNanos, failstart)
         } else {
           stopTimer(oftypeSucceedNanos, succstart)

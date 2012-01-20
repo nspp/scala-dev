@@ -7,7 +7,7 @@ package scala.tools.nsc
 package typechecker
 
 import symtab.Flags._
-import scala.collection.mutable.LinkedHashSet
+import scala.collection.mutable.{LinkedHashSet, Set}
 import annotation.tailrec
 
 /**
@@ -145,7 +145,7 @@ trait Contexts { self: Analyzer =>
     private[this] val buffer = LinkedHashSet[AbsTypeError]()
 
     def errBuffer = buffer
-    def hasErrors = errBuffer.nonEmpty
+    def hasErrors = buffer.nonEmpty
 
     def state: Int = mode
     def restoreState(state0: Int) = mode = state0
@@ -157,29 +157,25 @@ trait Contexts { self: Analyzer =>
 
     def setReportErrors()    = mode = (ReportErrors | AmbiguousErrors)
     def setBufferErrors()    = {
-      assert(bufferErrors || !hasErrors, "When entering the buffer state, context has to be clean. Current buffer: " + errBuffer)
+      assert(bufferErrors || !hasErrors, "When entering the buffer state, context has to be clean. Current buffer: " + buffer)
       mode = BufferErrors
     }
     def setThrowErrors()     = mode &= (~AllMask)
     def setAmbiguousErrors(report: Boolean) = if (report) mode |= AmbiguousErrors else mode &= notThrowMask
 
-    def updateBuffer(context0: Context) = errBuffer ++= context0.errBuffer
-    def updateBuffer(errors: LinkedHashSet[AbsTypeError]) = errBuffer ++= errors
-
-    def condBufferFlush(removeP: AbsTypeError => Boolean) = {
-      val elems = errBuffer.filter(removeP)
-      errBuffer --= elems
+    def updateBuffer(errors: Set[AbsTypeError]) = buffer ++= errors
+    def condBufferFlush(removeP: AbsTypeError => Boolean) {
+      val elems = buffer.filter(removeP)
+      buffer --= elems
     }
-    def flushBuffer() { errBuffer.clear() }
-    def flushAndReturnBuffer(): LinkedHashSet[AbsTypeError] = {
-      val current = errBuffer.clone()
-      errBuffer.clear()
+    def flushBuffer() { buffer.clear() }
+    def flushAndReturnBuffer(): Set[AbsTypeError] = {
+      val current = buffer.clone()
+      buffer.clear()
       current
     }
     
-    def logError(err: AbsTypeError) {
-      buffer += err
-    }
+    def logError(err: AbsTypeError) = buffer += err
 
     def withImplicitsDisabled[T](op: => T): T = {
       val saved = implicitsEnabled

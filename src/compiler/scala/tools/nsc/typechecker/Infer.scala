@@ -1538,8 +1538,6 @@ trait Infer {
      *  @param infer ...
      */
     def tryTwice(infer: => Unit): Unit = {
-      // TODO: remove the assert
-      assert(!context.hasErrors, "when entering inference we shouldn't have errors")
       if (context.implicitsEnabled) {
         val saved = context.state
         var fallback = false
@@ -1554,7 +1552,7 @@ trait Infer {
           }
         } catch {
           case ex: CyclicReference  => throw ex
-          case ex: TypeError        =>
+          case ex: TypeError        => // recoverable cyclic references
             context.restoreState(saved)
             if (!fallback) infer else ()
         }

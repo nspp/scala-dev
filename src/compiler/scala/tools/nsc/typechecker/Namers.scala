@@ -113,7 +113,7 @@ trait Namers extends MethodSynthesis {
     private def contextFile = context.unit.source.file
     private def typeErrorHandler[T](tree: Tree, alt: T): PartialFunction[Throwable, T] = {
       case ex: TypeError =>
-        // TODO: should catch only cyclic references 
+        // H@ need to ensure that we handle only cyclic references 
         TypeSigError(tree, ex)
         alt
     }

@@ -17,7 +17,7 @@ trait NamesDefaults { self: Analyzer =>
 
   import global._
   import definitions._
-  import NamesDefaultsErrorGenerator._
+  import NamesDefaultsErrorsGen._
 
   val defaultParametersOfMethod =
     perRunCaches.newWeakMap[Symbol, Set[Symbol]]() withDefaultValue Set()
@@ -497,8 +497,7 @@ trait NamesDefaults { self: Analyzer =>
           // CyclicReferences.  Fix for #3685
           case cr @ CyclicReference(sym, _) =>
             (sym.name == param.name) && sym.accessedOrSelf.isVariable && {
-              ErrorUtils.issueTypeError(NameClashError(sym, arg))(typer.context)
-              typer.infer.setError(arg)
+              NameClashError(sym, arg)(typer.context)
               true
             }
         }
@@ -543,9 +542,7 @@ trait NamesDefaults { self: Analyzer =>
           else if (argPos contains pos)
             DoubleParamNamesDefaultError(arg, name)
           else if (isAmbiguousAssignment(typer, params(pos), arg))
-            if (!arg.isErroneous) // already reported, NameClash error 
-              AmbiguousReferenceInNamesDefaultError(arg, name)
-            else arg
+            AmbiguousReferenceInNamesDefaultError(arg, name)
           else {
             // if the named argument is on the original parameter
             // position, positional after named is allowed.

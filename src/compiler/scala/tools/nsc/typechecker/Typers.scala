@@ -299,11 +299,6 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
     def checkNonCyclic(pos: Position, tp: Type, lockedSym: Symbol): Boolean = try {
       if (!lockedSym.lock(CyclicReferenceError(pos, lockedSym))) false
       else checkNonCyclic(pos, tp)
-    } catch {
-      case _ :TypeError =>
-        // TODO: verify that it won't happen
-        CyclicReferenceError(pos, lockedSym)
-        false
     } finally {
       lockedSym.unlock()
     }
@@ -482,7 +477,7 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
     final def typerWithLocalContext[T](c: Context)(f: Typer => T): T = {
       val res = f(newTyper(c))
       if (c.hasErrors)
-        context.updateBuffer(c)
+        context.updateBuffer(c.flushAndReturnBuffer())
       res
     }
 
@@ -688,8 +683,8 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
           context.undetparams = context1.undetparams
           context.savedTypeBounds = context1.savedTypeBounds
           context.namedApplyBlockInfo = context1.namedApplyBlockInfo
-          if (context1.errBuffer.isEmpty) SilentResultValue(result)
-          else SilentTypeError(context1.errBuffer.head)
+          if (context1.hasErrors) SilentTypeError(context1.errBuffer.head)
+          else SilentResultValue(result)
         } else {
           assert(context.bufferErrors || isPastTyper, "silent mode is not available past typer")
           withSavedContext(context){
@@ -701,6 +696,8 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
       } catch {
         case ex: CyclicReference => throw ex
         case ex: TypeError =>
+          // fallback in case TypeError is still thrown
+          // @H this happens for example in cps annotation checker
           stopCounter(rawTypeFailed, rawTypeStart)
           stopCounter(findMemberFailed, findMemberStart)
           stopCounter(subtypeFailed, subtypeStart)
@@ -1157,15 +1154,9 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
             reportError
         }
       }
-      try {
-        silent(_.adaptToMember(qual, HasMember(name), false)) match {
+      silent(_.adaptToMember(qual, HasMember(name), false)) match {
           case SilentResultValue(res) => res
           case SilentTypeError(err) => onError({if (reportAmbiguous) { context.issue(err) }; setError(tree)})
-        }
-      } catch {
-        case ex: TypeError =>
-          // fallback necessary?
-          onError(AdaptToMemberWithArgsError(tree, ex))
       }
     }
 
@@ -1304,6 +1295,8 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
       }
       catch {
         case ex: TypeError =>
+          // fallback in case of cyclic errors
+          // @H none of the tests enter here but I couldn't rule it out
           ParentTypesError(templ, ex)
           List(TypeTree(AnyRefClass.tpe))
       }
@@ -2122,20 +2115,18 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
                 // in a constructor, even if it is the only thing in the constructor.
                 val result = checkDead(localTyper.typed(stat, EXPRmode | BYVALmode, WildcardType))
 
-                val result1 =
-                  if (treeInfo.isSelfOrSuperConstrCall(result)) {
-                    context.inConstructorSuffix = true
-                    if (treeInfo.isSelfConstrCall(result) && result.symbol.pos.pointOrElse(0) >= exprOwner.enclMethod.pos.pointOrElse(0))
-                      ConstructorsOrderError(stat)
-                    else result
-                  } else result
+                if (treeInfo.isSelfOrSuperConstrCall(result)) {
+                  context.inConstructorSuffix = true
+                  if (treeInfo.isSelfConstrCall(result) && result.symbol.pos.pointOrElse(0) >= exprOwner.enclMethod.pos.pointOrElse(0))
+                    ConstructorsOrderError(stat)
+                }
 
-                if (isWarnablePureExpression(result1)) context.warning(stat.pos,
+                if (isWarnablePureExpression(result)) context.warning(stat.pos,
                   "a pure expression does nothing in statement position; " +
                   "you may be omitting necessary parentheses"
                 )
                 statsErrors ++= localTyper.context.errBuffer
-                result1
+                result
               }
           }
       }
@@ -2934,7 +2925,7 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
             if (sym.isAliasType && containsLocal(tp)) apply(tp.normalize)
             else {
               if (pre.isVolatile)
-                InferTypeWithVolatileTypeSelectionError(tree, tp)
+                InferTypeWithVolatileTypeSelectionError(tree, pre)
               mapOver(tp)
             }
           case _ =>
@@ -3414,17 +3405,19 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
        *  @param args ...
        *  @return     ...
        */
-      def tryTypedArgs(args: List[Tree], mode: Int): SilentResult[List[Tree]] = {
+      def tryTypedArgs(args: List[Tree], mode: Int): Option[List[Tree]] = {
         val c = context.makeSilent(false)
         c.retyping = true
         try {
           val res = newTyper(c).typedArgs(args, mode)
-          if (c.hasErrors) SilentTypeError(c.errBuffer.head) else SilentResultValue(res)
+          if (c.hasErrors) None else Some(res)
         } catch {
           case ex: CyclicReference =>
             throw ex
-          case te: TypeError => // TODO
-            SilentTypeError(TypeErrorWrapper(te))
+          case te: TypeError =>
+            // @H some of typer erros can still leak,
+            // for instance in continuations
+            None
         } finally {
           c.flushBuffer()
         }
@@ -3470,7 +3463,7 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
             if (retry) {
               val Select(qual, name) = fun
               tryTypedArgs(args, forArgMode(fun, mode)) match {
-                case SilentResultValue(args1) =>
+                case Some(args1) =>
                   assert((args1.length == 0) || !args1.head.tpe.isErroneous, "try typed args is ok")
                   val qual1 =
                     if (!pt.isError) adaptToArguments(qual, name, args1, pt, true, true)
@@ -3793,14 +3786,7 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
                 }) setType qual.tpe setPos qual.pos,
                 name)
             case _ if accessibleError.isDefined =>
-              val qual1 =
-                try adaptToMemberWithArgs(tree, qual, name, mode, false, false)
-                catch {
-                  case _: TypeError =>
-                    // TODO recoverable cyclic references?
-                    qual
-                }
-
+              val qual1 = adaptToMemberWithArgs(tree, qual, name, mode, false, false)
               if (!qual1.isErrorTyped && (qual1 ne qual))
                 typed(Select(qual1, name) setPos tree.pos, mode, pt)
               else {
