@@ -1587,7 +1587,7 @@ trait Infer {
           val sym = sym0 filter (alt => isWithinBounds(pre, alt.owner, alt.typeParams, argtypes))
           if (sym == NoSymbol) {
             if (argtypes forall (x => !x.isErroneous))
-              fail(PolyAlternativeErrorKind.ArgsDontConform)
+              fail(PolyAlternativeErrorKind.ArgsDoNotConform)
             return
           }
           else if (sym.isOverloaded) {
