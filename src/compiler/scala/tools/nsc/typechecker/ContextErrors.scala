@@ -170,12 +170,21 @@ trait ContextErrors {
       def AmbiguousIdentError(tree: Tree, name: Name, msg: String) =
         NormalTypeError(tree, "reference to " + name + " is ambiguous;\n" + msg)
 
-      def SymbolNotFoundError(tree: Tree, name: Name, owner: Symbol, cx: Context) = {
-        val similar = (
-          // name length check to limit unhelpful suggestions for e.g. "x" and "b1"
-          if (name.length > 2) {
+      def SymbolNotFoundError(tree: Tree, name: Name, owner: Symbol, startingIdentCx: Context) = {
+        // This laborious determination arrived at to keep the tests working.
+        val calcSimilar = (
+          name.length > 2 && (
+               startingIdentCx.reportErrors
+            || startingIdentCx.enclClassOrMethod.reportErrors	
+          )
+        )
+        // avoid calculating if we're in "silent" mode.	
+        // name length check to limit unhelpful suggestions for e.g. "x" and "b1"	
+        val similar = {
+          if (!calcSimilar) ""	
+          else {
             val allowed = (
-              cx.enclosingContextChain
+              startingIdentCx.enclosingContextChain
                 flatMap (ctx => ctx.scope.toList ++ ctx.imports.flatMap(_.allImportedSymbols))
                 filter (sym => sym.isTerm == name.isTermName)
                 filterNot (sym => sym.isPackage || sym.isSynthetic || sym.hasMeaninglessName)
@@ -186,8 +195,7 @@ trait ContextErrors {
             )
             similarString("" + name, allowedStrings)
           }
-          else ""
-        )
+        }
         NormalTypeError(tree, "not found: "+decodeWithKind(name, owner) + similar)
       }
 
@@ -624,6 +632,11 @@ trait ContextErrors {
 
      def CyclicReferenceError(errPos: Position, lockedSym: Symbol) =
        issueTypeError(PosAndMsgTypeError(errPos, "illegal cyclic reference involving " + lockedSym))
+       
+     def MacroExpandError(tree: Tree, t: Any) = { 
+       issueNormalTypeError(tree, "macros must return a compiler-specific tree; returned class is: " + t.getClass)
+       setError(tree)
+     }
     }
   }
 

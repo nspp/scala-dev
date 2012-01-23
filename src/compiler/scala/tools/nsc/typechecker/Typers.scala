@@ -937,7 +937,10 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
           }
           if (tree.isType)
             adaptType()
-          else if ((mode & (PATTERNmode | FUNmode)) == (PATTERNmode | FUNmode))
+          else if (inExprModeButNot(mode, FUNmode) && tree.symbol != null && tree.symbol.isMacro && !tree.isDef) {
+            val tree1 = expandMacro(tree)
+            if (tree1.isErroneous) tree1 else typed(tree1, mode, pt) 
+          } else if ((mode & (PATTERNmode | FUNmode)) == (PATTERNmode | FUNmode))
             adaptConstrPattern()
           else if (inAllModes(mode, EXPRmode | FUNmode) &&
             !tree.tpe.isInstanceOf[MethodType] &&
@@ -3550,9 +3553,7 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
                 // (calling typed1 more than once for the same tree)
                 if (checked ne res) typed { atPos(tree.pos)(checked) }
                 else res
-              } else if ((mode & FUNmode) == 0 && fun2.hasSymbol && fun2.symbol.isMacro)
-                typed1(macroExpand(res), mode, pt)
-              else
+              } else
                 res
             case SilentTypeError(err) =>
               onError({issue(err); setError(tree)})
@@ -3871,6 +3872,9 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
 
           var cx = startingIdentContext
           while (defSym == NoSymbol && cx != NoContext) {
+            // !!! Shouldn't the argument to compileSourceFor be cx, not context?
+            // I can't tell because those methods do nothing in the standard compiler,
+            // presumably they are overridden in the IDE.
             currentRun.compileSourceFor(context.asInstanceOf[analyzer.Context], name)
             pre = cx.enclClass.prefix
             defEntry = cx.scope.lookupEntry(name)
@@ -4483,6 +4487,13 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
         }
       }
     }
+
+    def expandMacro(tree: Tree): Tree =
+      macroExpand(tree, context) match {
+        case Some(t: Tree) => t
+        case Some(t)       => MacroExpandError(tree, t)
+        case None          => setError(tree) // error already reported
+      }
 
     def atOwner(owner: Symbol): Typer =
       newTyper(context.make(context.tree, owner))
