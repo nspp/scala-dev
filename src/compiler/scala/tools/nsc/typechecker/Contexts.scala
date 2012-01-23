@@ -7,7 +7,7 @@ package scala.tools.nsc
 package typechecker
 
 import symtab.Flags._
-import scala.collection.mutable.LinkedHashSet
+import scala.collection.mutable.{LinkedHashSet, Set}
 import annotation.tailrec
 
 /**
@@ -17,13 +17,16 @@ import annotation.tailrec
 trait Contexts { self: Analyzer =>
   import global._
 
-  val NoContext = new Context {
-    override def implicitss: List[List[ImplicitInfo]] = List()
-    outer = this
+  object NoContext extends Context {
+    outer      = this
+    enclClass  = this
+    enclMethod = this
+    
+    override def nextEnclosing(p: Context => Boolean): Context = this
+    override def enclosingContextChain: List[Context] = Nil
+    override def implicitss: List[List[ImplicitInfo]] = Nil
     override def toString = "NoContext"
   }
-  NoContext.enclClass = NoContext
-  NoContext.enclMethod = NoContext
 
   private val startContext = {
     NoContext.make(
@@ -39,11 +42,11 @@ trait Contexts { self: Analyzer =>
    *
    *  - if option `-Yno-imports` is given, nothing is imported
    *  - if the unit is java defined, only `java.lang` is imported
-   *  - if option `-Yno-predef` is given, if the unit has an import of Predef
-   *    among its leading imports, or if the unit is [[scala.ScalaObject]]
+   *  - if option `-Yno-predef` is given, if the unit body has an import of Predef
+   *    among its leading imports, or if the tree is [[scala.ScalaObject]]
    *    or [[scala.Predef]], `Predef` is not imported.
    */
-  protected def rootImports(unit: CompilationUnit, tree: Tree): List[Symbol] = {
+  protected def rootImports(unit: CompilationUnit): List[Symbol] = {
     import definitions._
     assert(isDefinitionsInitialized, "definitions uninitialized")
 
@@ -53,23 +56,15 @@ trait Contexts { self: Analyzer =>
     else List(JavaLangPackage, ScalaPackage, PredefModule)
   }
 
-  def rootContext(unit: CompilationUnit): Context =
-    rootContext(unit, EmptyTree, false)
-
+  def rootContext(unit: CompilationUnit): Context             = rootContext(unit, EmptyTree, false)
+  def rootContext(unit: CompilationUnit, tree: Tree): Context = rootContext(unit, tree, false)
   def rootContext(unit: CompilationUnit, tree: Tree, erasedTypes: Boolean): Context = {
     import definitions._
     var sc = startContext
-    def addImport(pkg: Symbol) {
-      assert(pkg ne null)
-      val qual = gen.mkAttributedStableRef(pkg)
-      sc = sc.makeNewImport(
-        Import(qual, List(ImportSelector(nme.WILDCARD, -1, null, -1)))
-        .setSymbol(NoSymbol.newImport(NoPosition).setFlag(SYNTHETIC).setInfo(ImportType(qual)))
-        .setType(NoType))
+    for (sym <- rootImports(unit)) {
+      sc = sc.makeNewImport(sym)
       sc.depth += 1
     }
-    for (imp <- rootImports(unit, tree))
-      addImport(imp)
     val c = sc.make(unit, tree, sc.owner, sc.scope, sc.imports)
     if (erasedTypes) c.setThrowErrors() else c.setReportErrors()
     c.implicitsEnabled = !erasedTypes
@@ -134,6 +129,10 @@ trait Contexts { self: Analyzer =>
     var typingIndentLevel: Int = 0
     def typingIndent = "  " * typingIndentLevel
 
+    def enclClassOrMethod: Context =
+      if ((owner eq NoSymbol) || (owner.isClass) || (owner.isMethod)) this
+      else outer.enclClassOrMethod
+
     def undetparamsString =
       if (undetparams.isEmpty) ""
       else undetparams.mkString("undetparams=", ", ", "")
@@ -146,15 +145,11 @@ trait Contexts { self: Analyzer =>
       tparams
     }
 
-    private var mode = 0
-    // use Set since we want to avoid the duplicates
-    // previously ListBuffer was used but it had to implement logic that avoids duplicates
-    // TODO for performance reasons more lightweight data structure might be more
-    // appropriate but we still need to avoid duplicates
+    private[this] var mode = 0
     private[this] val buffer = LinkedHashSet[AbsTypeError]()
 
     def errBuffer = buffer
-    def hasErrors = errBuffer.nonEmpty
+    def hasErrors = buffer.nonEmpty
 
     def state: Int = mode
     def restoreState(state0: Int) = mode = state0
@@ -166,32 +161,25 @@ trait Contexts { self: Analyzer =>
 
     def setReportErrors()    = mode = (ReportErrors | AmbiguousErrors)
     def setBufferErrors()    = {
-      assert(bufferErrors || !hasErrors, "When entering the buffer state, context has to be clean. Current buffer: " + errBuffer)
+      assert(bufferErrors || !hasErrors, "When entering the buffer state, context has to be clean. Current buffer: " + buffer)
       mode = BufferErrors
     }
     def setThrowErrors()     = mode &= (~AllMask)
     def setAmbiguousErrors(report: Boolean) = if (report) mode |= AmbiguousErrors else mode &= notThrowMask
 
-    def updateBuffer(context0: Context) = errBuffer ++= context0.errBuffer
-    def updateBuffer(errors: LinkedHashSet[AbsTypeError]) = errBuffer ++= errors
-
-    def logError(err: AbsTypeError) {
-      assert(bufferErrors, "errors can be put into context's buffer iff we are in silent mode")
-      buffer += err
+    def updateBuffer(errors: Set[AbsTypeError]) = buffer ++= errors
+    def condBufferFlush(removeP: AbsTypeError => Boolean) {
+      val elems = buffer.filter(removeP)
+      buffer --= elems
     }
-
-    def flushBuffer() { errBuffer.clear() }
-
-    def selectiveFlushBuffer(leaveOut: AbsTypeError => Boolean) = {
-      val elems = errBuffer.filter(leaveOut)
-      errBuffer --= elems
-    }
-
-    def flushAndReturnBuffer(): LinkedHashSet[AbsTypeError] = {
-      val current = errBuffer.clone()
-      errBuffer.clear()
+    def flushBuffer() { buffer.clear() }
+    def flushAndReturnBuffer(): Set[AbsTypeError] = {
+      val current = buffer.clone()
+      buffer.clear()
       current
     }
+    
+    def logError(err: AbsTypeError) = buffer += err
 
     def withImplicitsDisabled[T](op: => T): T = {
       val saved = implicitsEnabled
@@ -244,13 +232,16 @@ trait Contexts { self: Analyzer =>
       c
     }
 
-    // TODO: not used at all?
+    // TODO: remove? Doesn't seem to be used
     def make(unit: CompilationUnit): Context = {
       val c = make(unit, EmptyTree, owner, scope, imports)
       c.setReportErrors()
       c.implicitsEnabled = true
       c
     }
+    
+    def makeNewImport(sym: Symbol): Context =
+      makeNewImport(gen.mkWildcardImport(sym))
 
     def makeNewImport(imp: Import): Context = {
       val newImp = new ImportInfo(imp, depth)
@@ -342,7 +333,7 @@ trait Contexts { self: Analyzer =>
       else throw new TypeError(err.errPos, err.errMsg)
     }
 
-    // TODO to remove both
+    // TODO remove
     def error(pos: Position, err: Throwable) =
       if (reportErrors) unitError(pos, addDiagString(err.getMessage()))
       else throw err
@@ -353,7 +344,8 @@ trait Contexts { self: Analyzer =>
       else throw new TypeError(pos, msg1)
     }
 
-    def warning(pos:  Position, msg: String, force: Boolean = false) = {
+    def warning(pos: Position, msg: String): Unit = warning(pos, msg, false)
+    def warning(pos: Position, msg: String, force: Boolean) {
       if (reportErrors || force) unit.warning(pos, msg)
     }
 
@@ -384,7 +376,9 @@ trait Contexts { self: Analyzer =>
     }
 
     def nextEnclosing(p: Context => Boolean): Context =
-      if (this == NoContext || p(this)) this else outer.nextEnclosing(p)
+      if (p(this)) this else outer.nextEnclosing(p)
+
+    def enclosingContextChain: List[Context] = this :: outer.enclosingContextChain
 
     override def toString = "Context(%s@%s unit=%s scope=%s errors=%b)".format(
       owner.fullName, tree.shortClass, unit, scope.##, hasErrors

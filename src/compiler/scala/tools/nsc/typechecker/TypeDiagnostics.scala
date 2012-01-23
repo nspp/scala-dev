@@ -132,10 +132,7 @@ trait TypeDiagnostics {
       val getter = if (member.isSetter) member.getter(member.owner) else member
       val flags  = if (getter.setter(member.owner) != NoSymbol) DEFERRED | MUTABLE else DEFERRED
 
-      ( getter.owner.newValue(getter.pos, getter.name.toTermName)
-          setInfo getter.tpe.resultType
-          setFlag flags
-      )
+      getter.owner.newValue(getter.name.toTermName, getter.pos, flags) setInfo getter.tpe.resultType
     }
 
   def treeSymTypeMsg(tree: Tree): String = {
@@ -395,7 +392,7 @@ trait TypeDiagnostics {
         // It is presumed if you are using a -Y option you would really like to hear
         // the warnings you've requested.
         if (settings.warnDeadCode.value && context.unit.exists && treeOK(tree) && exprOK)
-            context.warning(tree.pos, "dead code following this construct", true)
+          context.warning(tree.pos, "dead code following this construct", true)
         tree
       }
 
@@ -416,27 +413,33 @@ trait TypeDiagnostics {
     def cyclicReferenceMessage(sym: Symbol, tree: Tree) = condOpt(tree) {
       case ValDef(_, _, tpt, _) if tpt.tpe == null        => "recursive "+sym+" needs type"
       case DefDef(_, _, _, _, tpt, _) if tpt.tpe == null  => List(cyclicAdjective(sym), sym, "needs result type") mkString " "
+      case Import(expr, selectors)                        =>
+        ( "encountered unrecoverable cycle resolving import." +
+          "\nNote: this is often due in part to a class depending on a definition nested within its companion." +
+          "\nIf applicable, you may wish to try moving some members into another object."
+        )
     }
-
-    def reportTypeError(pos: Position, ex: TypeError) {
-      reportTypeError(context, pos, ex)
-    }
-
+    
     /** Report a type error.
      *
      *  @param pos0   The position where to report the error
      *  @param ex     The exception that caused the error
      */
-    def reportTypeError(context0: Analyzer#Context, pos: Position, ex: TypeError) {
+    def reportTypeError(context0: Context, pos: Position, ex: TypeError) {
       if (ex.pos == NoPosition) ex.pos = pos
-      // TODO: replace !reportErrors with throwErrors
-      // Currently if you do this errors are not propagated and tests fail. Investigate why.
+      // TODO: should be replaced by throwErrors
+      // but it seems that throwErrors excludes some of the errors that should actually be
+      // buffered, causing TypeErrors to fly around again. This needs some more investigation.
       if (!context0.reportErrors) throw ex
       if (settings.debug.value) ex.printStackTrace()
 
       ex match {
         case CyclicReference(sym, info: TypeCompleter) =>
-          contextError(context0, ex.pos, cyclicReferenceMessage(sym, info.tree) getOrElse ex.getMessage())
+          val pos = info.tree match {
+            case Import(expr, _)  => expr.pos
+            case _                => ex.pos
+          }
+          contextError(context0, pos, cyclicReferenceMessage(sym, info.tree) getOrElse ex.getMessage())
 
           if (sym == ObjectClass)
             throw new FatalError("cannot redefine root "+sym)

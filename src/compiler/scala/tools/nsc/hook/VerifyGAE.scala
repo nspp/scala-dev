@@ -42,8 +42,10 @@ import VerifyGAE._
 [scalacfork]                                     ^
 */
 class VerifyGAE(override val global: Global) extends UserHook(global) {
-  import global.{ definitions, view, Symbol, EV, stringToTermName}
+  import global.{ definitions, view, Symbol, EV, TermName, newTermName}
   import EV._
+  
+  private implicit def stringToTermName(s: String): TermName = newTermName(s)
 
   private def symbolSet(xs: List[String]): Set[Symbol] =
     xs map (x => definitions.getModule(x).tpe.typeSymbol) toSet

@@ -128,7 +128,12 @@ trait AnnotationInfos extends api.AnnotationInfos { self: SymbolTable =>
    */
   final class LazyAnnotationInfo(lazyInfo: => AnnotationInfo) extends AnnotationInfo {
     private var forced = false
-    private lazy val forcedInfo = try lazyInfo finally forced = true
+    private lazy val forcedInfo =
+      try {
+        val result = lazyInfo 
+        if (result.pos == NoPosition) result setPos pos
+        result
+      } finally forced = true
 
     def atp: Type                               = forcedInfo.atp
     def args: List[Tree]                        = forcedInfo.args
@@ -136,6 +141,8 @@ trait AnnotationInfos extends api.AnnotationInfos { self: SymbolTable =>
 
     // We should always be able to print things without forcing them.
     override def toString = if (forced) forcedInfo.toString else "@<?>"
+      
+    override def pos: Position = if (forced) forcedInfo.pos else NoPosition
   }
 
   /** Typed information about an annotation. It can be attached to either
@@ -223,10 +230,8 @@ trait AnnotationInfos extends api.AnnotationInfos { self: SymbolTable =>
     def refsSymbol(sym: Symbol) = hasArgWhich(_.symbol == sym)
 
     /** Change all ident's with Symbol "from" to instead use symbol "to" */
-    def substIdentSyms(from: Symbol, to: Symbol) = {
-      val subs = new TreeSymSubstituter(List(from), List(to))
-      AnnotationInfo(atp, args.map(subs(_)), assocs).setPos(pos)
-    }
+    def substIdentSyms(from: Symbol, to: Symbol) =
+      AnnotationInfo(atp, args map (_ substTreeSyms (from -> to)), assocs) setPos pos
 
     def stringArg(index: Int) = constantAtIndex(index) map (_.stringValue)
     def intArg(index: Int)    = constantAtIndex(index) map (_.intValue)

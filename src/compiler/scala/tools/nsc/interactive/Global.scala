@@ -22,8 +22,8 @@ import symtab.Flags.{ACCESSOR, PARAMACCESSOR}
 
 /** The main class of the presentation compiler in an interactive environment such as an IDE
  */
-class Global(settings: Settings, reporter: Reporter, projectName: String = "")
-  extends scala.tools.nsc.Global(settings, reporter)
+class Global(settings: Settings, _reporter: Reporter, projectName: String = "")
+  extends scala.tools.nsc.Global(settings, _reporter)
      with CompilerControl
      with RangePositions
      with ContextTrees
@@ -818,7 +818,7 @@ class Global(settings: Settings, reporter: Reporter, projectName: String = "")
     def add(sym: Symbol, pre: Type, implicitlyAdded: Boolean)(toMember: (Symbol, Type) => M) {
       if ((sym.isGetter || sym.isSetter) && sym.accessed != NoSymbol) {
         add(sym.accessed, pre, implicitlyAdded)(toMember)
-      } else if (!sym.name.decode.containsName(Dollar) && !sym.isSynthetic && sym.hasRawInfo) {
+      } else if (!sym.name.decodedName.containsName(Dollar) && !sym.isSynthetic && sym.hasRawInfo) {
         val symtpe = pre.memberType(sym) onTypeError ErrorType
         matching(sym, symtpe, this(sym.name)) match {
           case Some(m) =>
@@ -1060,8 +1060,8 @@ class Global(settings: Settings, reporter: Reporter, projectName: String = "")
 
   implicit def addOnTypeError[T](x: => T): OnTypeError[T] = new OnTypeError(x)
 
-  // TODO: this might still be necessary when we hit cyclic references
-  // but divergent implicit should be handled already
+  // OnTypeError should still catch TypeError because of cyclic references,
+  // but DivergentImplicit shouldn't leak anymore here
   class OnTypeError[T](op: => T) {
     def onTypeError(alt: => T) = try {
       op
