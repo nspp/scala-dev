@@ -14,7 +14,7 @@ import java.net.URL
 import scala.reflect.ReflectionUtils.unwrapHandler
 import ScalaClassLoader._
 import scala.util.control.Exception.{ catching }
-// import Exceptional.unwrap
+import io.Streamable
 
 trait HasClassPath {
   def classPathURLs: Seq[URL]
@@ -63,6 +63,10 @@ trait ScalaClassLoader extends JClassLoader {
     val result = super.loadClass(name, resolve)
     classLoaderLog("loadClass(%s, %s) = %s".format(name, resolve, result))
     result
+  }
+
+  def stringResource(path: String): String = {
+    new Streamable.Chars { val inputStream = getResource(path).openStream() } slurp()
   }
 
   def constructorsOf[T <: AnyRef : Manifest]: List[Constructor[T]] =

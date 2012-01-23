@@ -818,10 +818,26 @@ trait Symbols extends api.Symbols { self: SymbolTable =>
       (fs | ((fs & LateFlags) >>> LateShift)) & ~(fs >>> AntiShift)
     }
     final def flags_=(fs: Long) = rawflags = fs
-    final def setFlag(mask: Long): this.type = { rawflags = rawflags | mask; this }
-    final def resetFlag(mask: Long): this.type = { rawflags = rawflags & ~mask; this }
+
+    final def setFlag(mask: Long): this.type = {
+      val oldflags = rawflags
+      rawflags = rawflags | mask
+      if (oldflags != rawflags)
+        EV << EV.SetFlag(this, oldflags, rawflags, mask)
+      this
+    }
+
+    final def resetFlag(mask: Long): this.type = {
+      val oldflags = rawflags
+      rawflags = rawflags & ~mask
+      if (oldflags != rawflags)
+        EV << EV.ClearFlag(this, oldflags, rawflags, mask)
+      this
+    }
+
     final def getFlag(mask: Long): Long = flags & mask
     final def resetFlags() { rawflags = rawflags & TopLevelCreationFlags }
+
 
     /** Does symbol have ANY flag in `mask` set? */
     final def hasFlag(mask: Long): Boolean = (flags & mask) != 0L
@@ -940,7 +956,11 @@ trait Symbols extends api.Symbols { self: SymbolTable =>
     }
 
     /** Set initial info. */
-    def setInfo(info: Type): this.type                      = { info_=(info); this }
+    def setInfo(info: Type): this.type                      = {
+      info_=(info)
+      EV << EV.SymSetInfo(this, info)
+      this
+    }
     /** Modifies this symbol's info in place. */
     def modifyInfo(f: Type => Type): this.type              = setInfo(f(info))
     /** Substitute second list of symbols for first in current info. */
@@ -2078,6 +2098,7 @@ trait Symbols extends api.Symbols { self: SymbolTable =>
           if (sym2.isJavaDefined)
             cook(sym2)
     }
+    EV << EV.NewTermSymbol(this)
   }
 
   /** A class for module symbols */
@@ -2245,6 +2266,7 @@ trait Symbols extends api.Symbols { self: SymbolTable =>
       new TypeSymbol(owner, pos, name)
 
     incCounter(typeSymbolCount)
+    EV << EV.NewTypeSymbol(this)
   }
 
   /** A class for type parameters viewed from inside their scopes
