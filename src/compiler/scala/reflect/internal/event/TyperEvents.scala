@@ -760,6 +760,12 @@ trait TyperEventsUniverse {
       extends TreeEvent with LiteralTyperEvent {
       val tree = duplicateTreeWithPos(tree0)
     }
+    
+    case class ReferenceToBoxedTyper(tree0: Ident)
+      extends TreeEvent with TyperEvent {
+      override def tag = super.tag + "-reference-to-boxed"
+      val tree = duplicateTreeWithPos(tree0)
+    }
 
 
     // Start typed SingletonTypeTree

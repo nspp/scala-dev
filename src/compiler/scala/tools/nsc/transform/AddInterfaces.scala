@@ -121,8 +121,11 @@ abstract class AddInterfaces extends InfoTransform {
     private def implDecls(implClass: Symbol, ifaceDecls: Scope): Scope = {
       val decls = new Scope
       if ((ifaceDecls lookup nme.MIXIN_CONSTRUCTOR) == NoSymbol)
-        decls enter (implClass.newMethod(implClass.pos, nme.MIXIN_CONSTRUCTOR)
-                     setInfo MethodType(List(), UnitClass.tpe))
+        decls enter (
+          implClass.newMethod(nme.MIXIN_CONSTRUCTOR, implClass.pos)
+            setInfo MethodType(Nil, UnitClass.tpe)
+        )
+
       for (sym <- ifaceDecls.iterator) {
         if (isInterfaceMember(sym)) {
           if (needsImplMethod(sym)) {
@@ -148,8 +151,8 @@ abstract class AddInterfaces extends InfoTransform {
        */
       def mixinToImplClass(tp: Type): Type = erasure(sym,
         tp match { //@MATN: no normalize needed (comes after erasure)
-          case TypeRef(pre, sym, args) if sym.needsImplClass =>
-            typeRef(pre, implClass(sym), args)
+          case TypeRef(pre, sym, _) if sym.needsImplClass =>
+            typeRef(pre, implClass(sym), Nil)
           case _ =>
             tp
         }
@@ -247,8 +250,8 @@ abstract class AddInterfaces extends InfoTransform {
                addMixinConstructorDef(clazz, templ.body map implMemberDef))
         .setSymbol(clazz.newLocalDummy(templ.pos))
     }
-    new ChangeOwnerTraverser(templ.symbol.owner, clazz)(
-      new ChangeOwnerTraverser(templ.symbol, templ1.symbol)(templ1))
+    templ1.changeOwner(templ.symbol.owner -> clazz, templ.symbol -> templ1.symbol)
+    templ1
   }
 
   def implClassDefs(trees: List[Tree]): List[Tree] = {

@@ -359,7 +359,7 @@ abstract class TreeBrowsers {
         ("Program", EMPTY)
 
       case UnitTree(unit) =>
-        ("CompilationUnit", unit.toString)
+        ("CompilationUnit", newTermName("" + unit))
 
       case DocDef(comment, definition) =>
         ("DocDef", EMPTY)
@@ -440,7 +440,7 @@ abstract class TreeBrowsers {
         ("Apply", EMPTY)
 
       case Super(qualif, mix) =>
-        ("Super", "mix: " + mix)
+        ("Super", newTermName("mix: " + mix))
 
       case This(qualifier) =>
         ("This", qualifier)
