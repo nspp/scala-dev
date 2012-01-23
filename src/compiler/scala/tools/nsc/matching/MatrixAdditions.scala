@@ -21,6 +21,7 @@ trait MatrixAdditions extends ast.TreeDSL {
   import Debug._
   import treeInfo._
   import definitions.{ isValueClass }
+  import EVDefaults._
 
   /** The Squeezer, responsible for all the squeezing.
    */

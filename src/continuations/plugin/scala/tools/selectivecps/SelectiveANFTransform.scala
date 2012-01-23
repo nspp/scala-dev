@@ -19,6 +19,7 @@ abstract class SelectiveANFTransform extends PluginComponent with Transform with
   import global._                  // the global environment
   import definitions._             // standard classes and methods
   import typer.atOwner             // methods to type trees
+  import EVDefaults._
 
   /** the following two members override abstract members in Transform */
   val phaseName: String = "selectiveanf"

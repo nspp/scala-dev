@@ -2398,8 +2398,9 @@ A type's typeSymbol should never be inspected directly.
     // TODO why not initialise TypeConstraint with bounds of tparam?
     // @PP: I tried that, didn't work out so well for me.
     def apply(tparam: Symbol) = new TypeVar(tparam.tpeHK, new TypeConstraint, List(), tparam.typeParams)
-    def apply(origin: Type, constr: TypeConstraint, args: List[Type], params: List[Symbol]) =
+    def apply(origin: Type, constr: TypeConstraint, args: List[Type], params: List[Symbol]) = {
       new TypeVar(origin, constr, args, params)
+    }
   }
 
   // TODO: I don't really know why this happens -- maybe because
@@ -2484,11 +2485,12 @@ A type's typeSymbol should never be inspected directly.
     // <region name="constraint mutators + undoLog">
     // invariant: before mutating constr, save old state in undoLog
     // (undoLog is used to reset constraints to avoid piling up unrelated ones)
-    def setInst(tp: Type) {
+    def setInst(tp: Type, reason: EV.TVarSetInst.Value) {
 //      assert(!(tp containsTp this), this)
       undoLog record this
       // if we were compared against later typeskolems, repack the existential,
       // because skolems are only compatible if they were created at the same level
+      EV.InstantiateTypeConstraint(this, tp, reason)
       constr.inst = if (shouldRepackType) repackExistential(tp) else tp
     }
 
@@ -2496,6 +2498,7 @@ A type's typeSymbol should never be inspected directly.
       assert(tp != this, tp) // implies there is a cycle somewhere (?)
       //println("addLoBound: "+(safeToString, debugString(tp))) //DEBUG
       undoLog record this
+      EV.AddBoundTypeVar(this, tp, isNumericBound, false)
       constr.addLoBound(tp, isNumericBound)
     }
 
@@ -2503,6 +2506,7 @@ A type's typeSymbol should never be inspected directly.
       // assert(tp != this)
       //println("addHiBound: "+(safeToString, debugString(tp))) //DEBUG
       undoLog record this
+      EV.AddBoundTypeVar(this, tp, isNumericBound, true)
       constr.addHiBound(tp, isNumericBound)
     }
     // </region>
@@ -2639,7 +2643,7 @@ A type's typeSymbol should never be inspected directly.
       else if (constr.instValid) checkIsSameType(tp)
       else isRelatable(tp) && {
         val newInst = wildcardToTypeVarMap(tp)
-        (constr isWithinBounds newInst) && { setInst(tp); true }
+        (constr isWithinBounds newInst) && { setInst(tp, EV.TVarSetInst.Relatable); true }
       }
     }
 
@@ -2691,12 +2695,28 @@ A type's typeSymbol should never be inspected directly.
     }
     override def kind = "TypeVar"
 
+    override def cloneInfo(owner: Symbol) = {
+      if (settings.YfullClone.value) cloneInternal else super.cloneInfo(owner)
+    }
+
     def cloneInternal = {
       // cloning a suspended type variable when it's suspended will cause the clone
       // to never be resumed with the current implementation
       assert(!suspended)
       TypeVar(origin, constr cloneInternal, typeArgs, params) // @M TODO: clone args/params?
     }
+    /*
+    def originLocation = {
+      val sym   = origin.typeSymbolDirect
+      val owner = sym.owner
+      val clazz = owner.enclClass
+      val ownsString = (
+        if (owner.isMethod) "#" + owner.name + tparamsOfSym(owner)
+        else if (owner.isAbstractType) "#" + owner.defString
+        else ""
+      )
+      clazz.decodedName + tparamsOfSym(clazz) + ownsString
+    }*/
   }
 
   /** A type carrying some annotations. Created by the typechecker
@@ -3294,7 +3314,10 @@ A type's typeSymbol should never be inspected directly.
 
     def cloneInternal = {
       val tc = new TypeConstraint(lobounds, hibounds, numlo, numhi, avoidWidening)
-      tc.inst = inst
+      if (settings.YfullClone.value && inst != null)
+        tc.inst = inst.cloneInfo(if (inst.typeSymbol == NoSymbol) NoSymbol else inst.typeSymbol.owner)
+      else
+        tc.inst = inst
       tc
     }
 
@@ -5253,6 +5276,7 @@ A type's typeSymbol should never be inspected directly.
     def solveOne(tvar: TypeVar, tparam: Symbol, variance: Int) {
       if (tvar.constr.inst == NoType) {
         val up = if (variance != CONTRAVARIANT) upper else !upper
+        EV.eventBlock(EV.SolveSingleTVar(tvar, tparam, up), EV.InferDone(_)) {
         tvar.constr.inst = null
         val bound: Type = if (up) tparam.info.bounds.hi else tparam.info.bounds.lo
         //Console.println("solveOne0(tv, tp, v, b)="+(tvar, tparam, variance, bound))
@@ -5293,15 +5317,17 @@ A type's typeSymbol should never be inspected directly.
         //println("solving "+tvar+" "+up+" "+(if (up) (tvar.constr.hiBounds) else tvar.constr.loBounds)+((if (up) (tvar.constr.hiBounds) else tvar.constr.loBounds) map (_.widen)))
 
         tvar setInst (
-          if (up) {
-            if (depth != AnyDepth) glb(tvar.constr.hiBounds, depth) else glb(tvar.constr.hiBounds)
-          } else {
-            if (depth != AnyDepth) lub(tvar.constr.loBounds, depth) else lub(tvar.constr.loBounds)
-          })
+          EV.eventBlockInform(EV.InstantiateGlbOrLub(tvar, up, depth), (ev: Int, tp0: Type) => EV.InstantiateGlbOrLubDone(up, ev, tp0)) {
+            if (up) {
+              if (depth != AnyDepth) glb(tvar.constr.hiBounds, depth) else glb(tvar.constr.hiBounds)
+            } else {
+              if (depth != AnyDepth) lub(tvar.constr.loBounds, depth) else lub(tvar.constr.loBounds)
+            }
+          }, EV.TVarSetInst.Solve)
 
         //Console.println("solving "+tvar+" "+up+" "+(if (up) (tvar.constr.hiBounds) else tvar.constr.loBounds)+((if (up) (tvar.constr.hiBounds) else tvar.constr.loBounds) map (_.widen))+" = "+tvar.constr.inst)//@MDEBUG
       }
-    }
+    }}
 
     // println("solving "+tvars+"/"+tparams+"/"+(tparams map (_.info)))
     for ((tvar, (tparam, variance)) <- config)
@@ -6146,7 +6172,9 @@ A type's typeSymbol should never be inspected directly.
   // so let's leave it for further refactoring
   /** An exception for cyclic references from which we can recover */
   case class RecoverableCyclicReference(sym: Symbol)
-  extends TypeError("illegal cyclic reference involving " + sym)
+  extends TypeError("illegal cyclic reference involving " + sym) {
+    println("Recoverable cyclic reference")
+  }
 
   class NoCommonType(tps: List[Type]) extends Throwable(
     "lub/glb of incompatible types: " + tps.mkString("", " and ", "")) with ControlThrowable

@@ -18,6 +18,7 @@ import scala.collection.{ mutable, immutable }
  */
 abstract class Duplicators extends Analyzer {
   import global._
+  import EVDefaults._
 
   def retyped(context: Context, tree: Tree): Tree = {
     resetClassOwners
@@ -211,7 +212,7 @@ abstract class Duplicators extends Analyzer {
      *  their symbols are recreated ad-hoc and their types are fixed inline, instead of letting the
      *  namer/typer handle them, or Idents that refer to them.
      */
-    override def typed(tree: Tree, mode: Int, pt: Type): Tree = {
+    override def typed(tree: Tree, mode: Int, pt: Type)(implicit e: EV.Explanation = EV.DefaultExplanation): Tree = {
       debuglog("typing " + tree + ": " + tree.tpe + ", " + tree.getClass)
       val origtreesym = tree.symbol
       if (tree.hasSymbol && tree.symbol != NoSymbol

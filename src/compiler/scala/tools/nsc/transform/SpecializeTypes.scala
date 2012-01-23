@@ -52,6 +52,8 @@ import scala.collection.{ mutable, immutable }
 abstract class SpecializeTypes extends InfoTransform with TypingTransformers {
   import global._
   import Flags._
+  import EVDefaults._
+
   /** the name of the phase: */
   val phaseName: String = "specialize"
 

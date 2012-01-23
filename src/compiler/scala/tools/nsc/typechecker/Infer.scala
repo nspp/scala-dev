@@ -158,6 +158,7 @@ trait Infer {
       else
         assert(false, tvar.origin+" at "+tvar.origin.typeSymbol.owner)
     }
+    EV << EV.InstantiateTypeVars(tvars, tparams)
     tvars map instantiate
   }
 
@@ -264,7 +265,7 @@ trait Infer {
                 "context.outer.enclClass.owner" -> context.outer.enclClass.owner
               )
           ))(context)
-          setError(tree)
+          setError(duplicateTree(tree))
         }
         else {
           if (sym1.isTerm)
@@ -318,7 +319,7 @@ trait Infer {
      *  that's the only place in the compiler an Inferencer is ever created,
      *  I suggest this should either be abstract or have the implementation.
      */
-    def isCoercible(tp: Type, pt: Type): Boolean = false
+    def isCoercible(tp: Type, pt: Type)(implicit e: EV.Explanation = EV.DefaultExplanation): Boolean = false
 
     /* -- Type instantiation------------------------------------------------ */
 
@@ -355,10 +356,14 @@ trait Infer {
      *  @param pt      ...
      *  @return        ...
      */
-    private def exprTypeArgs(tparams: List[Symbol], restpe: Type, pt: Type, useWeaklyCompatible: Boolean = false): (List[Type], List[TypeVar]) = {
+    // TODO: isCompatible/isWeaklyCompatible doesn't take implicit
+    private def exprTypeArgs(tparams: List[Symbol], restpe: Type, pt: Type,
+                             useWeaklyCompatible: Boolean = false)(implicit e: (Type, Type) => EV.Explanation): (List[Type], List[TypeVar]) = {
       val tvars = tparams map freshVar
       val instResTp = restpe.instantiateTypeParams(tparams, tvars)
       if ( if (useWeaklyCompatible) isWeaklyCompatible(instResTp, pt) else isCompatible(instResTp, pt) ) {
+        val startEv = EV.CompatibleTypes(instResTp, pt, tparams)
+        EV <<< startEv
         try {
           // If the restpe is an implicit method, and the expected type is fully defined
           // optimize type variables wrt to the implicit formals only; ignore the result type.
@@ -370,12 +375,19 @@ trait Infer {
               restpe
           }
           //println("try to solve "+tvars+" "+tparams)
-          (solvedTypes(tvars, tparams, tparams map varianceInType(varianceType),
+          val res = (solvedTypes(tvars, tparams, tparams map varianceInType(varianceType),
                       false, lubDepth(List(restpe, pt))), tvars)
+          EV >>> EV.InferDone(startEv.id)
+          res
         } catch {
-          case ex: NoInstance => (null, null)
+          case ex: NoInstance =>
+            EV >>> EV.InferDone(startEv.id)
+            (null, null)
         }
-      } else (null, null)
+      } else {
+        EV << EV.FailedTypeCompatibilityInInferExprTypeArgs(restpe, pt)
+        (null, null)
+      }
     }
 
     /** Return inferred proto-type arguments of function, given
@@ -395,6 +407,7 @@ trait Infer {
     */
     def protoTypeArgs(tparams: List[Symbol], formals: List[Type], restpe: Type,
                       pt: Type): List[Type] = {
+      import EV.TVarSetInst._
       /** Map type variable to its instance, or, if `variance` is covariant/contravariant,
        *  to its upper/lower bound */
       def instantiateToBound(tvar: TypeVar, variance: Int): Type = try {
@@ -402,8 +415,8 @@ trait Infer {
         lazy val loBounds = tvar.constr.loBounds
         lazy val upper = glb(hiBounds)
         lazy val lower = lub(loBounds)
-        def setInst(tp: Type): Type = {
-          tvar setInst tp
+        def setInst(tp: Type, instType: EV.TVarSetInst.Value): Type = {
+          tvar setInst(tp, instType)
           assertNonCyclic(tvar)//debug
           instantiate(tvar.constr.inst)
         }
@@ -411,11 +424,11 @@ trait Infer {
         if (tvar.constr.inst != NoType)
           instantiate(tvar.constr.inst)
         else if ((variance & COVARIANT) != 0 && hiBounds.nonEmpty)
-          setInst(upper)
+          setInst(upper, CovariantPos)
         else if ((variance & CONTRAVARIANT) != 0 && loBounds.nonEmpty)
-          setInst(lower)
+          setInst(lower, ContravariantPos)
         else if (hiBounds.nonEmpty && loBounds.nonEmpty && upper <:< lower)
-          setInst(upper)
+          setInst(upper, UpperSubLower)
         else
           WildcardType
       } catch {
@@ -472,6 +485,7 @@ trait Infer {
      *    type parameters that are inferred as `scala.Nothing` and that are not covariant in <code>restpe</code> are taken to be undetermined
      */
     def adjustTypeArgs(tparams: List[Symbol], tvars: List[TypeVar], targs: List[Type], restpe: Type = WildcardType): AdjustedTypeArgs.Result  = {
+      EV << EV.AdjustedTypeArgs(tparams, targs, restpe)
       @inline def keep(targ: Type, tparam: Symbol) = (
           targ.typeSymbol != NothingClass // definitely not retracting, it's not Nothing!
           || (!restpe.isWildcard && (varianceInType(restpe)(tparam) & COVARIANT) != 0)) // occured covariantly --> don't retract
@@ -667,6 +681,7 @@ trait Infer {
         case ExistentialType(tparams, qtpe) =>
           isApplicable(undetparams, qtpe, argtpes0, pt)
         case MethodType(params, _) =>
+          EV << EV.MethodTypeApplicableDebug(ftpe)
           val formals0 = params map { param =>
             param.tpe match {
               case TypeRef(_, sym, List(tpe)) if sym isNonBottomSubClass CodeClass => tpe
@@ -689,13 +704,14 @@ trait Infer {
           }
           def typesCompatible(argtpes: List[Type]) = {
             val restpe = ftpe.resultType(argtpes)
+            EV << EV.TypesCompatibleDebug(ftpe, argtpes, restpe)
             if (undetparams.isEmpty) {
               isCompatibleArgs(argtpes, formals) && isWeaklyCompatible(restpe, pt)
             } else {
               try {
                 val AdjustedTypeArgs.Undets(okparams, okargs, leftUndet) = methTypeArgs(undetparams, formals, restpe, argtpes, pt)
                 // #2665: must use weak conformance, not regular one (follow the monomorphic case above)
-                (exprTypeArgs(leftUndet, restpe.instantiateTypeParams(okparams, okargs), pt, useWeaklyCompatible = true)._1 ne null) &&
+                (exprTypeArgs(leftUndet, restpe.instantiateTypeParams(okparams, okargs), pt, useWeaklyCompatible = true)(EV.InferFunctionTypeViewForArgument(_,_))._1 ne null) &&
                 isWithinBounds(NoPrefix, NoSymbol, okparams, okargs)
               } catch {
                 case ex: NoInstance => false
@@ -709,6 +725,7 @@ trait Infer {
           else if (lencmp == 0) {
             if (!argtpes0.exists(_.isInstanceOf[NamedType])) {
               // fast track if no named arguments are used
+              EV << EV.FastTrackMethodTypeApplicableDebug(ftpe, undetparams)
               typesCompatible(argtpes0)
             }
             else {
@@ -737,6 +754,7 @@ trait Infer {
         case NullaryMethodType(restpe) => // strip nullary method type, which used to be done by the polytype case below
           isApplicable(undetparams, restpe, argtpes0, pt)
         case PolyType(tparams, restpe) =>
+          EV << EV.PolyTypeApplicableDebug(ftpe, undetparams)
           createFromClonedSymbols(tparams, restpe)((tps1, restpe1) => isApplicable(tps1 ::: undetparams, restpe1, argtpes0, pt))
         case ErrorType =>
           true
@@ -753,14 +771,19 @@ trait Infer {
       val silentContext = context.makeSilent(false)
       val typer0 = newTyper(silentContext)
       try {
-        val res1 = typer0.infer.isApplicable(undetparams, ftpe, argtpes0, pt)
+        val res1 = EV.eventBlockInform[Boolean](EV.IsApplicableInfer(undetparams, ftpe, pt), EV.InferDone(_, _)){
+          typer0.infer.isApplicable(undetparams, ftpe, argtpes0, pt)
+        }
         if (pt != WildcardType && silentContext.hasErrors) {
           silentContext.flushBuffer()
-          val res2 = typer0.infer.isApplicable(undetparams, ftpe, argtpes0, WildcardType)
+          val res2 = EV.eventBlockInform[Boolean](EV.IsApplicableFallbackInfer(undetparams, ftpe, pt), EV.InferDone(_, _)){
+            typer0.infer.isApplicable(undetparams, ftpe, argtpes0, WildcardType)
+          }
           if (silentContext.hasErrors) false else res2
         } else res1
       } catch {
         case ex: TypeError =>
+          //EV << EV.ExceptionRecoveryEvent(ev)
           println("[TODO] isApplicableSafe still throws type errors 1")
           try {
             silentContext.flushBuffer()
@@ -993,6 +1016,7 @@ trait Infer {
      *  attempts fail, an error is produced.
      */
     def inferArgumentInstance(tree: Tree, undetparams: List[Symbol], strictPt: Type, lenientPt: Type) {
+      implicit val noExpl: (Type, Type) => EV.Explanation = (tp1: Type, tp2: Type) => EV.DefaultExplanation
       printInference(
         ptBlock("inferArgumentInstance",
           "tree"        -> tree,
@@ -1002,11 +1026,12 @@ trait Infer {
           "lenientPt"   -> lenientPt
         )
       )
+      // TODO
       var targs = exprTypeArgs(undetparams, tree.tpe, strictPt)._1
       if ((targs eq null) || !(tree.tpe.subst(undetparams, targs) <:< strictPt))
         targs = exprTypeArgs(undetparams, tree.tpe, lenientPt)._1
 
-      substExpr(tree, undetparams, targs, lenientPt)
+      substExpr(tree, undetparams, targs, lenientPt, false)
       printInference("[inferArgumentInstance] finished, targs = " + targs)
     }
 
@@ -1025,10 +1050,11 @@ trait Infer {
           "pt"      -> pt
         )
       )
-      val (targs, tvars) = exprTypeArgs(tparams, treeTp, pt, useWeaklyCompatible)
+      EV.eventBlock(EV.InferExprInstance(tree, tparams, pt), EV.InferInstanceDone(_, tree)){
+      val (targs, tvars) = exprTypeArgs(tparams, treeTp, pt, useWeaklyCompatible)((_, _) => EV.InferExprInstanceCheckCompat(tree))
 
       if (keepNothings || (targs eq null)) { //@M: adjustTypeArgs fails if targs==null, neg/t0226
-        substExpr(tree, tparams, targs, pt)
+        substExpr(tree, tparams, targs, pt, false)
         List()
       } else {
         val AdjustedTypeArgs.Undets(okParams, okArgs, leftUndet) = adjustTypeArgs(tparams, tvars, targs)
@@ -1039,8 +1065,9 @@ trait Infer {
             "leftUndet" -> leftUndet
           )
         )
-        substExpr(tree, okParams, okArgs, pt)
+        substExpr(tree, okParams, okArgs, pt, true)
         leftUndet
+      }
       }
     }
 
@@ -1053,11 +1080,12 @@ trait Infer {
      *  @param pt ...
      */
     private def substExpr(tree: Tree, undetparams: List[Symbol],
-                          targs: List[Type], pt: Type) {
+                          targs: List[Type], pt: Type, adjusted: Boolean) {
       if (targs eq null) {
         if (!tree.tpe.isErroneous && !pt.isErroneous)
           PolymorphicExpressionInstantiationError(tree, undetparams, pt)
       } else {
+        EV << EV.TreeTypeSubstitution(undetparams, targs, adjusted, tree)
         new TreeTypeSubstituter(undetparams, targs).traverse(tree)
       }
     }
@@ -1084,6 +1112,8 @@ trait Infer {
           )
         )
 
+        var correct = true
+        EV.eventBlock(EV.InferMethodInstance(fn, undetparams, args, pt0), EV.InferDone(_, correct)){
         try {
           val pt      = if (pt0.typeSymbol == UnitClass) WildcardType else pt0
           val formals = formalTypes(params0 map (_.tpe), args.length)
@@ -1093,7 +1123,7 @@ trait Infer {
           val AdjustedTypeArgs.AllArgsAndUndets(okparams, okargs, allargs, leftUndet) =
             methTypeArgs(undetparams, formals, restpe, argtpes, pt)
 
-          if (checkBounds(fn, NoPrefix, NoSymbol, undetparams, allargs, "inferred ")) {
+          val res = if (checkBounds(fn, NoPrefix, NoSymbol, undetparams, allargs, "inferred ")) {
             val treeSubst = new TreeTypeSubstituter(okparams, okargs)
             treeSubst traverseTrees fn :: args
 
@@ -1109,13 +1139,17 @@ trait Infer {
             }
             if (result.nonEmpty)
               printInference("inferMethodInstance, still undetermined: " + result)
-
             result
           } else List()
+          EV << EV.InferredMethodInstance(fn, args)
+          res
         }
         catch ifNoInstance { msg =>
+          correct = false
           NoMethodInstanceError(fn, args, msg); List()
         }
+        }
+
     }
 
     /** Type with all top-level occurrences of abstract types replaced by their bounds */
@@ -1430,6 +1464,7 @@ trait Infer {
      */
     def inferExprAlternative(tree: Tree, pt: Type) = tree.tpe match {
       case OverloadedType(pre, alts) => tryTwice {
+        EV.eventBlock(EV.InferExprAlternative(tree, pt, context.implicitsEnabled), EV.InferDone(_)) {// TODO
         val alts0     = alts filter (alt => isWeaklyCompatible(pre.memberType(alt), pt))
         val secondTry = alts0.isEmpty
         val alts1     = if (secondTry) alts else alts0
@@ -1471,6 +1506,7 @@ trait Infer {
 //            global.typer.infer.isWeaklyCompatible(pre.memberType(alt), pt))
 //          checkNotShadowed(tree.pos, pre, best, applicable)
           tree.setSymbol(best).setType(pre.memberType(best))
+        }
         }
       }
     }
@@ -1551,19 +1587,24 @@ trait Infer {
       case OverloadedType(pre, alts) =>
         val pt = if (pt0.typeSymbol == UnitClass) WildcardType else pt0
         tryTwice {
+          EV.eventBlock(EV.InferMethodAlternative(tree, argtpes, undetparams, pt, alts, context.implicitsEnabled), EV.InferDone(_)){
           debuglog("infer method alt "+ tree.symbol +" with alternatives "+
                 (alts map pre.memberType) +", argtpes = "+ argtpes +", pt = "+ pt)
 
           val applicable = resolveOverloadedMethod(argtpes, {
             alts filter { alt =>
+              val funTpe = followApply(pre.memberType(alt))
               // TODO: rewrite after context errors stabilise.
               // We wrap this applicability in try/catch because of #4457.
-              wrapTypeError(typer0 => typer0.infer.isApplicable(undetparams, followApply(pre.memberType(alt)), argtpes, pt)) &&
-              (!varArgsOnly || isVarArgsList(alt.tpe.params))
+              EV.eventBlockInform[Boolean](EV.VerifyMethodAlternative(alt, funTpe, argtpes, pt, tree), EV.PossiblyValidAlternative(tree, alt, _, _)){
+                wrapTypeError(typer0 => typer0.infer.isApplicable(undetparams, funTpe, argtpes, pt)) &&
+                (!varArgsOnly || isVarArgsList(alt.tpe.params))
+              }
             }
           })
 
-          def improves(sym1: Symbol, sym2: Symbol) = {
+          def improves(sym1: Symbol, sym2: Symbol) =
+            EV.eventBlockInform[Boolean](EV.ImprovesAlternativesCheck(sym1, sym2, tree), EV.InferDone(_, _)){
             // util.trace("improve "+sym1+sym1.locationString+" on "+sym2+sym2.locationString)
             sym2 == NoSymbol || sym2.isError || sym2.hasAnnotation(BridgeClass) ||
             isStrictlyMoreSpecific(followApply(pre.memberType(sym1)),
@@ -1577,7 +1618,9 @@ trait Infer {
             if (pt == WildcardType)
               NoBestMethodAlternativeError(tree, argtpes, pt)
             else
-              inferMethodAlternative(tree, undetparams, argtpes, WildcardType)
+              EV.eventBlock(EV.NoBestAlternativeTryWithWildcard(competing, applicable, pt, tree), EV.InferDone(_)){
+                inferMethodAlternative(tree, undetparams, argtpes, WildcardType)
+              }
           } else if (!competing.isEmpty) {
             if (!(argtpes exists (_.isErroneous)) && !pt.isErroneous)
               AmbiguousMethodAlternativeError(tree, pre, best, competing.head, argtpes, pt)
@@ -1586,6 +1629,7 @@ trait Infer {
           } else {
 //            checkNotShadowed(tree.pos, pre, best, applicable)
             tree.setSymbol(best).setType(pre.memberType(best))
+          }
           }
         }
       case _ =>
@@ -1602,7 +1646,7 @@ trait Infer {
       if (context.implicitsEnabled) {
         val saved = context.state
         context.setBufferErrors()
-        val res = try {
+        try {
           context.withImplicitsDisabled(infer)
           if (context.hasErrors) {
             context.restoreState(saved)
@@ -1610,13 +1654,14 @@ trait Infer {
             infer
           }
         } catch {
-          case ex: CyclicReference  => throw ex
+          case ex: CyclicReference  =>
+            println("TODO Cyclic reference")
+            throw ex
           case ex: TypeError        =>
+            println("TODO Type error thrown")
             context.restoreState(saved)
             infer
         }
-        context.restoreState(saved)
-        res
       }
       else infer
     }

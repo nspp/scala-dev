@@ -82,7 +82,12 @@ class Global(var currentSettings: Settings, var reporter: Reporter) extends Symb
           addHook(loader createHookFromString arg)
       }
     }
+
     isInitialized = true
+  }
+
+  object EVDefaults {
+    implicit val e: EV.Explanation = EV.DefaultExplanation
   }
 
   type ThisPlatform = Platform { val global: Global.this.type }
@@ -101,7 +106,7 @@ class Global(var currentSettings: Settings, var reporter: Reporter) extends Symb
     val global: Global.this.type = Global.this
   } with TreeGen {
     def mkAttributedCast(tree: Tree, pt: Type): Tree =
-      typer.typed(mkCast(tree, pt))
+      typer.typed(mkCast(tree, pt))(EV.DefaultExplanation)
   }
 
   /** Fold constants */

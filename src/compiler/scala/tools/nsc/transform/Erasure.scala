@@ -21,6 +21,7 @@ abstract class Erasure extends AddInterfaces
   import global._
   import definitions._
   import CODE._
+  import EVDefaults._
 
   val phaseName: String = "erasure"
 
@@ -589,14 +590,14 @@ abstract class Erasure extends AddInterfaces
 
     /** A replacement for the standard typer's adapt method.
      */
-    override protected def adapt(tree: Tree, mode: Int, pt: Type, original: Tree = EmptyTree): Tree =
+    override protected def adapt(tree: Tree, mode: Int, pt: Type, original: Tree = EmptyTree)(implicit expl: EV.Explanation = EV.DefaultExplanation): Tree =
       adaptToType(tree, pt)
 
     /** A replacement for the standard typer's `typed1` method.
      */
-    override protected def typed1(tree: Tree, mode: Int, pt: Type): Tree = {
+    override protected def typed1(tree: Tree, mode: Int, pt: Type)(implicit expl0: EV.Explanation): Tree = {
       val tree1 = try {
-        super.typed1(adaptMember(tree), mode, pt)
+        super.typed1(adaptMember(tree), mode, pt)(expl0)
       } catch {
         case er: TypeError =>
           Console.println("exception when typing " + tree)

@@ -61,7 +61,7 @@ trait PatMatVirtualiser extends ast.TreeDSL { self: Analyzer =>
       val savedUndets = context.undetparams
 
       context.undetparams = param :: context.undetparams
-      val result          = inferImplicit(EmptyTree, pt, false, false, context)
+      val result          = inferImplicit(EmptyTree, pt, false, false, context)(EV.DefaultExplanation)
       context.undetparams = savedUndets
 
       (result.tree, result.subst.to(result.subst.from indexOf param))

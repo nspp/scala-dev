@@ -889,6 +889,7 @@ class Global(settings: Settings, reporter: Reporter, projectName: String = "")
   }
 
   private def typeMembers(pos: Position): Stream[List[TypeMember]] = {
+    implicit val e = EV.DefaultExplanation
     var tree = typedTreeAt(pos)
 
     // if tree consists of just x. or x.fo where fo is not yet a full member name

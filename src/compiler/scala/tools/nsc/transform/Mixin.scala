@@ -14,6 +14,7 @@ abstract class Mixin extends InfoTransform with ast.TreeDSL {
   import global._
   import definitions._
   import CODE._
+  import EVDefaults._
 
   /** The name of the phase: */
   val phaseName: String = "mixin"

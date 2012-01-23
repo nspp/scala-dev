@@ -893,6 +893,7 @@ trait Symbols extends api.Symbols { self: SymbolTable =>
 // ------ info and type -------------------------------------------------------------------
 
     private[Symbols] var infos: TypeHistory = null
+    private[Symbols] var eventIds: List[Int] = List()
 
     /** Get type. The type of a symbol is:
      *  for a type symbol, the type corresponding to the symbol itself,
@@ -974,6 +975,30 @@ trait Symbols extends api.Symbols { self: SymbolTable =>
       infos = TypeHistory(currentPeriod, info, infos)
       validTo = if (info.isComplete) currentPeriod else NoPeriod
       this
+    }
+
+    final def updateEventInfo(maybeId: Int): Symbol = {
+      if (maybeId != EV.NoEvent.id) {
+        eventIds = id::eventIds
+      }
+      this
+    }
+
+    def previousHistoryEvent(evId: Int): Int = {
+      def findNext(acc: Int, next: Int): Int = {
+        if (next == evId)
+          next
+        else
+          acc
+      }
+
+      eventIds match {
+        case Nil =>
+          EV.NoEvent.id
+        case h::rest =>
+          val res = rest.foldLeft(h)(findNext)
+          if (res == evId) EV.NoEvent.id else res
+      }
     }
 
     def hasRawInfo: Boolean = infos ne null
@@ -2551,6 +2576,7 @@ trait Symbols extends api.Symbols { self: SymbolTable =>
   /** An exception for cyclic references of symbol definitions */
   case class CyclicReference(sym: Symbol, info: Type)
   extends TypeError("illegal cyclic reference involving " + sym) {
+    println("Cyclic reference error")
     // printStackTrace() // debug
   }
 

@@ -26,6 +26,7 @@ abstract class ExplicitOuter extends InfoTransform
   import definitions._
   import CODE._
   import Debug.TRACE
+  import EVDefaults._
 
   /** The following flags may be set by this phase: */
   override def phaseNewFlags: Long = notPROTECTED

@@ -20,6 +20,7 @@ trait Matrix extends MatrixAdditions {
   import Flags.{ SYNTHETIC, MUTABLE }
 
   private[matching] val NO_EXHAUSTIVE = Flags.TRANS_FLAG
+  import EVDefaults._
 
   /** Translation of match expressions.
    *

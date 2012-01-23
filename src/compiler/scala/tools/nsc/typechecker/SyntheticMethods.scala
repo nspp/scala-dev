@@ -35,6 +35,7 @@ trait SyntheticMethods extends ast.TreeDSL {
   import global._
   import definitions._
   import CODE._
+  import EVDefaults._ // TODO: this should include some info that we are in synthetics
 
   private object util {
     private type CM[T] = ClassManifest[T]

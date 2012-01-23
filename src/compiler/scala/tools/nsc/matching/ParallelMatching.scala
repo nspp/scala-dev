@@ -31,6 +31,7 @@ trait ParallelMatching extends ast.TreeDSL
   import CODE._
   import Types._
   import Debug._
+  import EVDefaults._
 
   /** Transition **/
   def toPats(xs: List[Tree]): List[Pattern] = xs map Pattern.apply

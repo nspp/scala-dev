@@ -28,6 +28,7 @@ abstract class SymbolTable extends api.Universe
                               with TypeDebugging
                               with Importers
                               with Required
+                              with Implicits
                               with event.EventsUniverse
                               with event.Events
 {

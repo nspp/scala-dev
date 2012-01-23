@@ -10,6 +10,7 @@ abstract class LazyVals extends Transform with TypingTransformers with ast.TreeD
   import definitions._             // standard classes and methods
   import typer.{typed, atOwner}    // methods to type trees
   import CODE._
+  import EVDefaults._
 
   val phaseName: String = "lazyvals"
   val FLAGS_PER_WORD: Int

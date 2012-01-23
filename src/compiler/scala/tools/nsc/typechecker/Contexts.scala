@@ -322,30 +322,42 @@ trait Contexts { self: Analyzer =>
       unit.error(pos, if (checking) "\n**** ERROR DURING INTERNAL CHECKING ****\n" + msg else msg)
 
     def issue(err: AbsTypeError) {
-      if (reportErrors) unitError(err.errPos, addDiagString(err.errMsg))
-      else if (bufferErrors) { buffer += err }
-      else throw new TypeError(err.errPos, err.errMsg)
+      if (reportErrors) {
+        EV << EV.ContextTypeErrorEvent(err, EV.ErrorLevel.Hard)
+        unitError(err.errPos, addDiagString(err.errMsg))
+      } else if (bufferErrors) {
+        EV << EV.ContextTypeErrorEvent(err, EV.ErrorLevel.Soft)
+        buffer += err
+      } else throw new TypeError(err.errPos, err.errMsg)
     }
 
     def issueAmbiguousError(pre: Type, sym1: Symbol, sym2: Symbol, err: AbsTypeError) {
       if (ambiguousErrors) {
-        if (!pre.isErroneous && !sym1.isErroneous && !sym2.isErroneous)
+        if (!pre.isErroneous && !sym1.isErroneous && !sym2.isErroneous) {
+          EV << EV.ContextAmbiguousTypeErrorEvent(err, EV.ErrorLevel.Hard)
           unitError(err.errPos, err.errMsg)
-      } else if (bufferErrors) { buffer += err }
-      else throw new TypeError(err.errPos, err.errMsg)
+        }
+      } else if (bufferErrors) {
+        EV << EV.ContextAmbiguousTypeErrorEvent(err, EV.ErrorLevel.Soft)
+        buffer += err
+      } else throw new TypeError(err.errPos, err.errMsg)
     }
 
     def issueAmbiguousError(err: AbsTypeError) {
-      if (ambiguousErrors)
+      if (ambiguousErrors) {
+        EV << EV.ContextAmbiguousTypeErrorEvent(err, EV.ErrorLevel.Hard)
         unitError(err.errPos, addDiagString(err.errMsg))
-      else if (bufferErrors) { buffer += err }
-      else throw new TypeError(err.errPos, err.errMsg)
+      } else if (bufferErrors) {
+        EV << EV.ContextAmbiguousTypeErrorEvent(err, EV.ErrorLevel.Soft)
+        buffer += err
+      } else throw new TypeError(err.errPos, err.errMsg)
     }
 
     // TODO to remove both
-    def error(pos: Position, err: Throwable) =
+    def error(pos: Position, err: Throwable) = {
       if (reportErrors) unitError(pos, addDiagString(err.getMessage()))
       else throw err
+    }
 
     def error(pos: Position, msg: String) = {
       val msg1 = addDiagString(msg)

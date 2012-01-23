@@ -22,6 +22,7 @@ trait Namers extends MethodSynthesis {
 
   import global._
   import definitions._
+  import EVDefaults._
 
   private var _lockedCount = 0
   def lockedCount = this._lockedCount
@@ -111,12 +112,14 @@ trait Namers extends MethodSynthesis {
 
     protected def owner       = context.owner
     private def contextFile = context.unit.source.file
-    private def typeErrorHandler[T](tree: Tree, alt: T): PartialFunction[Throwable, T] = {
+    private def typeErrorHandler[T](tree: Tree, alt: T, event: EV.Event): PartialFunction[Throwable, T] = {
       case ex: TypeError =>
 //        typer.reportTypeError(pos, ex)
         // TODO: once Context errors are implemented we should be able
         // to get rid of this catch and simply report the error
         // (maybe apart from cyclic errors)
+        println("Throwing exception")
+        EV << EV.ExceptionRecoveryEvent(event)
         TypeSigError(tree, ex)
         alt
     }
@@ -254,7 +257,9 @@ trait Namers extends MethodSynthesis {
         returnContext
       }
       tree.symbol match {
-        case NoSymbol => try dispatch() catch typeErrorHandler(tree, this.context)
+        case NoSymbol =>
+          val ev = EV <<< EV.StartTryCatchBlock()
+          try dispatch() catch typeErrorHandler(tree, this.context, ev) finally { EV >>> EV.TryCatchFinally(ev.id) }
         case sym      => enterExistingSym(sym)
       }
     }
@@ -491,7 +496,7 @@ trait Namers extends MethodSynthesis {
             // for Java code importing Scala objects
             else if (!nme.isModuleName(from) || isValid(nme.stripModuleSuffix(from))) {
               typer.TyperErrorGen.NotAMemberError(tree, expr, from)
-              typer.infer.setError(tree)
+              typer.infer.setError(duplicateTree(tree))
             }
           }
           // Setting the position at the import means that if there is
@@ -787,7 +792,7 @@ trait Namers extends MethodSynthesis {
     /** Computes the type of the body in a ValDef or DefDef, and
      *  assigns the type to the tpt's node.  Returns the type.
      */
-    private def assignTypeToTree(tree: ValOrDefDef, defnTyper: Typer, pt: Type): Type = {
+    private def assignTypeToTree(tree: ValOrDefDef, defnTyper: Typer, pt: Type)(implicit e: EV.Explanation): Type = {
       // compute result type from rhs
       val typedBody = defnTyper.computeType(tree.rhs, pt)
       val sym       = if (owner.isMethod) owner else tree.symbol
@@ -887,14 +892,16 @@ trait Namers extends MethodSynthesis {
     }
 
     private def classSig(tparams: List[TypeDef], impl: Template): Type = {
-      val tparams0   = typer.reenterTypeParams(tparams)
-      val resultType = templateSig(impl)
-
-      polyType(tparams0, resultType)
+      EV.eventBlock(EV.ClassSigNamer(impl, tparams), EV.NamerDone(_)) {
+        val tparams0   = typer.reenterTypeParams(tparams)
+        val resultType = templateSig(impl)
+        polyType(tparams0, resultType)
+      }
     }
 
     private def methodSig(ddef: DefDef, mods: Modifiers, tparams: List[TypeDef],
                           vparamss: List[List[ValDef]], tpt: Tree, rhs: Tree): Type = {
+      EV.eventBlock(EV.MethodSigNamer(ddef, rhs, tpt, tparams), EV.NamerDone(_)) {
       val meth  = owner
       val clazz = meth.owner
       // enters the skolemized version into scope, returns the deSkolemized symbols
@@ -907,7 +914,7 @@ trait Namers extends MethodSynthesis {
         tpt defineType context.enclClass.owner.tpe
         tpt setPos meth.pos.focus
       }
-      var resultPt = if (tpt.isEmpty) WildcardType else typer.typedType(tpt).tpe
+      var resultPt = if (tpt.isEmpty) WildcardType else typer.typedType(tpt)(EV.MethodReturnType(tpt)).tpe
       val site = clazz.thisType
 
       /** Called for all value parameter lists, right to left
@@ -1013,14 +1020,15 @@ trait Namers extends MethodSynthesis {
       thisMethodType({
         val rt = (
           if (!tpt.isEmpty) {
-            typer.typedType(tpt).tpe
+            typer.typedType(tpt)(EV.MethodReturnTypeAgain(tpt)).tpe
           } else if (meth.isMacro) {
+            // TODO: macro explanation
             assignTypeToTree(ddef, AnyClass.tpe)
           } else {
             // replace deSkolemized symbols with skolemized ones
             // (for resultPt computed by looking at overridden symbol, right?)
             val pt = resultPt.substSym(tparamSyms, tparams map (_.symbol))
-            assignTypeToTree(ddef, typer, pt)
+            assignTypeToTree(ddef, typer, pt)(EV.InferredMethodReturnType(rhs))
           }
         )
         // #2382: return type of default getters are always @uncheckedVariance
@@ -1028,6 +1036,7 @@ trait Namers extends MethodSynthesis {
           rt.withAnnotation(AnnotationInfo(uncheckedVarianceClass.tpe, List(), List()))
         else rt
       })
+      }
     }
 
     /**
@@ -1160,9 +1169,10 @@ trait Namers extends MethodSynthesis {
     //@M! an abstract type definition (abstract type member/type parameter)
     // may take type parameters, which are in scope in its bounds
     private def typeDefSig(tpsym: Symbol, tparams: List[TypeDef], rhs: Tree) = {
+      EV.eventBlock(EV.TypeDefSigNamer(tpsym, rhs, tparams), EV.NamerDone(_)) {
       // log("typeDefSig(" + tpsym + ", " + tparams + ")")
       val tparamSyms = typer.reenterTypeParams(tparams) //@M make tparams available in scope (just for this abstypedef)
-      val tp = typer.typedType(rhs).tpe match {
+      val tp = typer.typedType(rhs)(EV.TypeAbstractTpeBounds(rhs)).tpe match {
         case TypeBounds(lt, rt) if (lt.isError || rt.isError) =>
           TypeBounds.empty
         case tp @ TypeBounds(lt, rt) if (tpsym hasFlag JAVA) =>
@@ -1188,6 +1198,7 @@ trait Namers extends MethodSynthesis {
       // loaded to do this check, but loading the info will probably
       // lead to spurious cyclic errors.  So omit the check.
       polyType(tparamSyms, tp)
+      }
     }
 
     /** Given a case class
@@ -1255,9 +1266,11 @@ trait Namers extends MethodSynthesis {
           createNamer(tree).classSig(tparams, impl)
 
         case ModuleDef(_, _, impl) =>
+          EV.eventBlock(EV.ModuleSigNamer(impl), EV.NamerDone(_)) {
           val clazz = sym.moduleClass
           clazz setInfo createNamer(tree).templateSig(impl)
           clazz.tpe
+          }
 
         case ddef @ DefDef(mods, _, tparams, vparamss, tpt, rhs) =>
           // TODO: cleanup parameter list
@@ -1270,14 +1283,18 @@ trait Namers extends MethodSynthesis {
             && sym.owner.isConstructor
           )
           val typer1 = typer.constrTyperIf(isBeforeSupercall)
-          if (tpt.isEmpty) {
-            if (rhs.isEmpty) {
-              MissingParameterOrValTypeError(tpt)
-              ErrorType
+          EV.eventBlockWithEv(EV.ValDefSigNamer(name, tpt, rhs, vdef), EV.NamerDone(_)) { ev =>
+            sym.updateEventInfo(ev.id)
+
+            if (tpt.isEmpty) {
+              if (rhs.isEmpty) {
+                MissingParameterOrValTypeError(tpt)
+                ErrorType
+              }
+              else assignTypeToTree(vdef, newTyper(typer1.context.make(vdef, sym)), WildcardType)(EV.TypeValDefBody(rhs))
             }
-            else assignTypeToTree(vdef, newTyper(typer1.context.make(vdef, sym)), WildcardType)
+            else typer1.typedType(tpt)(EV.ValExplicitType(tpt, sym)).tpe
           }
-          else typer1.typedType(tpt).tpe
 
         case TypeDef(_, _, tparams, rhs) =>
           createNamer(tree).typeDefSig(sym, tparams, rhs) //@M!
@@ -1298,9 +1315,10 @@ trait Namers extends MethodSynthesis {
           ImportType(expr1)
       }
 
+      val ev = EV <<< EV.StartTryCatchBlock()
       val result =
         try getSig
-        catch typeErrorHandler(tree, ErrorType)
+        catch typeErrorHandler(tree, ErrorType, ev) finally { EV >>> EV.TryCatchFinally(ev.id) }
 
       result match {
         case PolyType(tparams @ (tp :: _), _) if tp.owner.isTerm => typer.deskolemizeTypeParams(tparams)(result)

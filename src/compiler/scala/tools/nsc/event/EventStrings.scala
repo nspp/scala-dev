@@ -49,6 +49,7 @@ trait EventStrings {
       )
       catch {
         case x @ (_: AssertionError | _: Exception) => "<error: " + x.getMessage + ">"
+        case x @ (_: CyclicReference) => "?" // TODO still necessary?
       }
     }
 
@@ -80,6 +81,7 @@ trait EventStrings {
     def symString(sym: Symbol): String        = sym.nameString
     def flagsString(flags: Long): String      = flagsToString(flags)
     def typeString(tpe: Type): String         = "[" + tpe.kind + ": " + (tpe match {
+      case TypeRef(_, sym, args) if !sym.lockOK => "" // TODO
       case x:TypeRef                   => x.safeToString
       case x:MethodType                => x.safeToString
       case x:PolyType                  => x.safeToString
@@ -93,18 +95,20 @@ trait EventStrings {
     }
 
     def treeName(tree: Tree): Option[String] = tree match {
-      case x if x.symbol != null && x.symbol != NoSymbol    => Some(x.symbol.name.toString)
+
       case x: DefTree               => Some(x.name.toString)
       case x: RefTree               => Some(x.name.toString)
       case x: Literal               => Some(x.value.stringValue)
-      case x: TypeApply             => Some(x.fun.toString + x.args.map(_.toString).mkString("[", ",", "]"))
+      case x: TypeApply             => Some(x.fun.toString + x.args.map(a => treeName(a).getOrElse(a.toString)).mkString("[", ",", "]"))
       case _: TermTree => Some(tree.toString)
       case _: TypTree =>
         tree match {
           case ExistentialTypeTree(tpt, _)  => treeName(tpt)
           case AppliedTypeTree(tpt, _)      => treeName(tpt)
+          case tt@TypeTree()                => Some(if (tt.original != null) tt.original.toString else tt.toString)
           case _                            => None
         }
+      case x if x.symbol != null && x.symbol != NoSymbol    => Some(x.symbol.name.toString)
       case _ => None
     }
   }

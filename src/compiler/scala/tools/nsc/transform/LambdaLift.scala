@@ -14,6 +14,7 @@ import scala.collection.mutable.{ LinkedHashMap, ListBuffer }
 abstract class LambdaLift extends InfoTransform {
   import global._
   import definitions._
+  import EVDefaults._
 
   /** the following two members override abstract members in Transform */
   val phaseName: String = "lambdalift"

@@ -269,12 +269,16 @@ trait Trees extends api.Trees { self: SymbolTable =>
   // --- specific traversers and transformers
 
   protected[scala] def duplicateTree(tree: Tree): Tree = duplicator transform tree
+  protected[scala] def duplicateTreeWithPos(tree: Tree): Tree = duplicaotrWithRanges transform tree
 
-  private lazy val duplicator = new Transformer {
+  private lazy val duplicator = new Duplicator(true)
+  private lazy val duplicaotrWithRanges = new Duplicator(false)
+
+  private class Duplicator(focusRangePos: Boolean) extends Transformer {
     override val treeCopy = newStrictTreeCopier
     override def transform(t: Tree) = {
       val t1 = super.transform(t)
-      if ((t1 ne t) && isRangePos(t1.pos)) t1 setPos focusPos(t.pos)
+      if (focusRangePos && (t1 ne t) && isRangePos(t1.pos)) t1 setPos focusPos(t.pos)
       t1
     }
   }
@@ -344,8 +348,18 @@ trait Trees extends api.Trees { self: SymbolTable =>
 
   class TypeMapTreeSubstituter(val typeMap: TypeMap) extends Traverser {
     override def traverse(tree: Tree) {
-      if (tree.tpe ne null)
-        tree.tpe = typeMap(tree.tpe)
+      if (tree.tpe ne null) {
+        tree match {
+          case tt@TypeTree() =>
+            val tp1 = typeMap(tree.tpe)
+//            if ((tp1 ne tt.tpe) && tt.original == null)
+//              tt.setOriginal(duplicateTree(tt))
+            tt.tpe = tp1
+          case _ =>
+            tree.tpe = typeMap(tree.tpe)
+        }
+      }
+
       if (tree.isDef)
         tree.symbol modifyInfo typeMap
 

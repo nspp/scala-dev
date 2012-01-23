@@ -52,7 +52,6 @@ trait EventUniverseStub {
     type Phase = internal.Phase
 
     def <<(ev: Event): Unit =  {}
-    def >>(ev: Event): Unit =  {}
     def >>>(ev: Event): Unit = {}
     def <<<(ev: Event): Unit = {}
     val Filter: FilterCompanion = null

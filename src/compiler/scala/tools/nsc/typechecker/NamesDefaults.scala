@@ -280,7 +280,7 @@ trait NamesDefaults { self: Analyzer =>
         case ((sym, byName, repeated), arg) =>
           val body =
             if (byName) {
-              val res = blockTyper.typed(Function(List(), arg))
+              val res = blockTyper.typed(Function(List(), arg))(EV.DefaultExplanation)
               new ChangeOwnerTraverser(context.owner, res.symbol) traverse arg // fixes #2290
               res
             } else {
@@ -290,7 +290,7 @@ trait NamesDefaults { self: Analyzer =>
                   expr
                 case _ =>
                   val factory = Select(gen.mkAttributedRef(SeqModule), nme.apply)
-                  blockTyper.typed(Apply(factory, List(resetLocalAttrs(arg))))
+                  blockTyper.typed(Apply(factory, List(resetLocalAttrs(arg))))(EV.DefaultExplanation)
               } else arg
             }
           atPos(body.pos)(ValDef(sym, body).setType(NoType))
@@ -304,7 +304,7 @@ trait NamesDefaults { self: Analyzer =>
       // `fun` is typed. `namelessArgs` might be typed or not, if they are types are kept.
       case Apply(fun, namelessArgs) =>
         val transformedFun = transformNamedApplication(typer, mode, pt)(fun, x => x)
-        if (transformedFun.isErroneous) setError(tree)
+        if (transformedFun.isErroneous) setError(treeCopy.Apply(tree, fun, namelessArgs))
         else {
           assert(isNamedApplyBlock(transformedFun), transformedFun)
           val NamedApplyInfo(qual, targs, vargss, blockTyper) =
@@ -484,7 +484,8 @@ trait NamesDefaults { self: Analyzer =>
           typer.context.setAmbiguousErrors(false)
 
           val typedAssign = try {
-            typer.silent(_.typed(arg, subst(paramtpe)))
+            // TODO: provide more info
+            typer.silent(_.typed(arg, subst(paramtpe))(EV.DefaultExplanation))
           } catch {
             // `silent` only catches and returns TypeErrors which are not
             // CyclicReferences.  Fix for #3685
@@ -509,7 +510,7 @@ trait NamesDefaults { self: Analyzer =>
           val res = typedAssign match {
             case SilentTypeError(err) if (err.kind == ErrorKinds.NameClash) =>
               ErrorGeneratorUtils.issueTypeError(err)
-              typer.infer.setError(arg)
+              typer.infer.setError(duplicateTree(arg))
             case SilentTypeError(_) =>
               applyNamedArg
             case SilentResultValue(t) if t.isErroneous => // #4041
