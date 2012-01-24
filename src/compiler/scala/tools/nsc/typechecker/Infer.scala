@@ -1272,7 +1272,7 @@ trait Infer {
           if (isPopulated(tp, pt1) && isInstantiatable(tvars ++ ptvars) || pattpMatchesPt)
              ptvars foreach instantiateTypeVar
           else {
-            IncompletePatternTypeError(tree0, pattp, pt)
+            PatternTypeIncompatibleWithPtError1(tree0, pattp, pt)
             ErrorType
           }
         }
@@ -1295,7 +1295,7 @@ trait Infer {
         if (pat.tpe <:< pt1)
           ptvars foreach instantiateTypeVar
         else
-          PatternTypeIncompatibleWithPtError(pat, pt1, pt)
+          PatternTypeIncompatibleWithPtError2(pat, pt1, pt)
       }
 
     object toOrigin extends TypeMap {
@@ -1416,18 +1416,11 @@ trait Infer {
       }
     }
 
-    // TODO: remove once context errors refactoring is done
-    @inline private def wrapTypeError(expr: Typer => Boolean): Boolean =
-      try {
+    @inline private def inSilentMode(expr: Typer => Boolean): Boolean = {
         val silentContext = context.makeSilent(context.ambiguousErrors)
         val res = expr(newTyper(silentContext))
         if (silentContext.hasErrors) false else res
-        //expr
-      }
-      catch { case err: TypeError =>
-        println("TODO: still throwing exceptions " + err)
-        err.printStackTrace()
-        false }
+    }
 
     // Checks against the name of the parameter and also any @deprecatedName.
     private def paramMatchesName(param: Symbol, name: Name) =
@@ -1497,9 +1490,7 @@ trait Infer {
 
           val applicable = resolveOverloadedMethod(argtpes, {
             alts filter { alt =>
-              // TODO: rewrite after context errors stabilise.
-              // We wrap this applicability in try/catch because of #4457.
-              wrapTypeError(typer0 => typer0.infer.isApplicable(undetparams, followApply(pre.memberType(alt)), argtpes, pt)) &&
+              inSilentMode(typer0 => typer0.infer.isApplicable(undetparams, followApply(pre.memberType(alt)), argtpes, pt)) &&
               (!varArgsOnly || isVarArgsList(alt.tpe.params))
             }
           })
