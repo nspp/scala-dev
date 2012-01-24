@@ -767,13 +767,13 @@ trait ContextErrors {
       def TypePatternOrIsInstanceTestError(tree: Tree, tp: Type) =
         issueNormalTypeError(tree, "type "+tp+" cannot be used in a type pattern or isInstanceOf test")
 
-      def IncompletePatternTypeError(tree: Tree, pattp: Type, pt: Type) =
+      def PatternTypeIncompatibleWithPtError1(tree: Tree, pattp: Type, pt: Type) =
         issueNormalTypeError(tree, "pattern type is incompatible with expected type" + foundReqMsg(pattp, pt))
 
       def IncompatibleScrutineeTypeError(tree: Tree, pattp: Type, pt: Type) =
         issueNormalTypeError(tree, "scrutinee is incompatible with pattern type" + foundReqMsg(pattp, pt))
 
-      def PatternTypeIncompatibleWithPtError(pat: Tree, pt1: Type, pt: Type) = {
+      def PatternTypeIncompatibleWithPtError2(pat: Tree, pt1: Type, pt: Type) = {
         def errMsg = {
           val sym   = pat.tpe.typeSymbol
           val clazz = sym.companionClass

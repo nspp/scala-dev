@@ -31,6 +31,9 @@ trait Implicits {
   import typeDebug.{ ptTree, ptBlock, ptLine }
   import global.typer.{ printTyping, deindentTyping, indentTyping, printInference }
 
+  def inferImplicit(tree: Tree, pt: Type, reportAmbiguous: Boolean, isView: Boolean, context: Context): SearchResult =
+    inferImplicit(tree, pt, reportAmbiguous, isView, context, true)
+
   /** Search for an implicit value. See the comment on `result` at the end of class `ImplicitSearch`
    *  for more info how the search is conducted.
    *  @param tree                    The tree for which the implicit needs to be inserted.
@@ -47,7 +50,7 @@ trait Implicits {
    *                                 true if they should be reported (used in further typechecking).
    *  @return                        A search result
    */
-  def inferImplicit(tree: Tree, pt: Type, reportAmbiguous: Boolean, isView: Boolean, context: Context, saveAmbiguousDivergent: Boolean = true): SearchResult = {
+  def inferImplicit(tree: Tree, pt: Type, reportAmbiguous: Boolean, isView: Boolean, context: Context, saveAmbiguousDivergent: Boolean): SearchResult = {
     printInference("[infer %s] %s with pt=%s in %s".format(
       if (isView) "view" else "implicit",
       tree, pt, context.owner.enclClass)
@@ -626,9 +629,7 @@ trait Implicits {
               case Apply(TypeApply(fun, args), _) => typedTypeApply(itree2, EXPRmode, fun, args) // t2421c
               case t                              => t
             }
-            // we call typedTypeApply which can update context errors,
-            // so we cannot ignore the tree
-            // TODO move to specific branches
+            
             if (context.hasErrors)
               fail("typing TypeApply reported errors for the implicit tree")
             else {
@@ -643,7 +644,6 @@ trait Implicits {
       }
       catch {
         case ex: TypeError =>
-          ex.printStackTrace()
           fail(ex.getMessage())
       }
     }

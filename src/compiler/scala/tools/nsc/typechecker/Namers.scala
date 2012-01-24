@@ -140,7 +140,8 @@ trait Namers extends MethodSynthesis {
             NoSymbol
           case Some(sym) =>
             sym
-        })
+        }
+      )
 
     def setPrivateWithin(tree: MemberDef, sym: Symbol): Symbol =
       setPrivateWithin(tree, sym, tree.mods)
