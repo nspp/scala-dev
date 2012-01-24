@@ -665,7 +665,7 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
 
     def silent[T](op: Typer => T,
                   reportAmbiguousErrors: Boolean = context.ambiguousErrors,
-                  newtree: Tree = context.tree): SilentResult[T] = {//Any /* in fact, TypeError or T */ = {
+                  newtree: Tree = context.tree): SilentResult[T] = {
       val rawTypeStart = startCounter(rawTypeFailed)
       val findMemberStart = startCounter(findMemberFailed)
       val subtypeStart = startCounter(subtypeFailed)
@@ -2558,7 +2558,7 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
 
         case ErrorType =>
           if (!tree.isErrorTyped) setError(tree) else tree
-          // TODO use duplErrTree ? or  setError(treeCopy.Apply(tree, fun, args))
+          // @H change to setError(treeCopy.Apply(tree, fun, args))
         /* --- begin unapply  --- */
 
         case otpe if inPatternMode(mode) && unapplyMember(otpe).exists =>

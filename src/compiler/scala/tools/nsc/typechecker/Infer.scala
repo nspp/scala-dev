@@ -1273,7 +1273,7 @@ trait Infer {
              ptvars foreach instantiateTypeVar
           else {
             PatternTypeIncompatibleWithPtError1(tree0, pattp, pt)
-            ErrorType
+            return ErrorType
           }
         }
         tvars foreach instantiateTypeVar
