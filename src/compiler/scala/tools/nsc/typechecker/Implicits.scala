@@ -481,9 +481,10 @@ trait Implicits {
       def fail(reason: String, startEvent: EV.Event): SearchResult = {
         if (settings.XlogImplicits.value)
           inform(itree+" is not a valid implicit value for "+pt+" because:\n"+reason)
+        EV >>> EV.PossiblyValidImplicit(startEvent.id, tree, info.sym, info.tpe, false)
         SearchFailure
       }
-      // TODO
+      
       val implicitEvent = EV.VerifyImplicit(itree, tree, wildPt, info.sym, info.name.toString)(EV.DefaultExplanation)
       EV <<< implicitEvent
       try {
@@ -494,10 +495,10 @@ trait Implicits {
               atPos(itree.pos)(Apply(itree, List(Ident("<argument>") setType approximate(arg1)))),
               EXPRmode,
               approximate(arg2)
-            )(EV.DefaultExplanation) //TODO
+            )(EV.DefaultExplanation)
           }
           else
-            typed1(itree, EXPRmode, wildPt)(EV.DefaultExplanation) //TODO
+            typed1(itree, EXPRmode, wildPt)(EV.DefaultExplanation)
 
         if (context.hasErrors)
           return fail("typed implicit %s has errors".format(info.sym.fullLocationString), implicitEvent)
@@ -587,7 +588,7 @@ trait Implicits {
               val result = new SearchResult(checked, subst)
               incCounter(foundImplicits)
               printInference("[success] found %s for pt %s".format(result, ptInstantiated))
-              EV >>> EV.PossiblyValidImplicit(implicitEvent.id, tree, info.sym, info.tpe)
+              EV >>> EV.PossiblyValidImplicit(implicitEvent.id, tree, info.sym, info.tpe, true)
               result
             }
           }

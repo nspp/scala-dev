@@ -106,7 +106,7 @@ trait ImplicitEventsUniverse {
       def references = List(info1Sym, info2Sym)
     }
 
-    case class PossiblyValidImplicit(originEvent: Int, origTree0: Tree, sym0: Symbol, tpe0: Type, result: Boolean = true)
+    case class PossiblyValidImplicit(originEvent: Int, origTree0: Tree, sym0: Symbol, tpe0: Type, result: Boolean)
       extends TreeEvent with ImplicitEvent with SymbolReferencesEvent with DoneBlock {
       val tree = duplicateTreeWithPos(origTree0)
       val sym = deepSymClone(sym0)
