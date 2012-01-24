@@ -561,7 +561,7 @@ trait ContextErrors {
 
       def MissingTypeParametersError(tree: Tree) = {
         issueNormalTypeError(tree, tree.symbol+" takes type parameters")
-        cleanErrorTree(tree)
+        infer.setError(tree) // cleanErrorTree causes infinite loop
       }
 
       def KindArityMismatchError(tree: Tree, pt: Type) = {
@@ -619,7 +619,7 @@ trait ContextErrors {
         issueNormalTypeError(tree,
           if (qual.isEmpty) tree + " can be used only in a class, object, or template"
           else qual + " is not an enclosing class")
-        cleanErrorTree(tree)
+        infer.setError(tree)
       }
 
       // def stabilize
@@ -736,7 +736,7 @@ trait ContextErrors {
 
       def AmbiguousExprAlternativeError(tree: Tree, pre: Type, best: Symbol, firstCompeting: Symbol, pt: Type) = {
         val (pos, msg) = ambiguousErrorMsgPos(tree.pos, pre, best, firstCompeting, "expected type " + pt)
-        setError(duplicateTree(tree))
+        setError(tree)
         issueAmbiguousTypeError(pre, best, firstCompeting, AmbiguousTypeError(tree, pos, msg))
       }
 
