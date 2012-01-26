@@ -1821,8 +1821,8 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
         }
       }
 
-      val tparams1 = ddef.tparams mapConserve typedTypeDef
-      val vparamss1 = ddef.vparamss mapConserve (_ mapConserve typedValDef)
+      val tparams1 = ddef.tparams mapConserve (p => typedTypeDef(p)(EV.TypeDefTypeParameter(p)))
+      val vparamss1 = ddef.vparamss mapConserve (_ mapConserve (p => typedValDef(p)(EV.TypeDefParameter(p))))
 
       // complete lazy annotations
       val annots = meth.annotations
@@ -2562,7 +2562,7 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
                                               // integrate this application into the block
             tryNamesDefaults
           } else {
-            EV << EV.CorrectArgumentsDoTypedApply(tree, formals, args)
+            //EV << EV.CorrectArgumentsDoTypedApply(tree, formals, args)
             val tparams = context.extractUndetparams()
             if (tparams.isEmpty) { // all type params are defined
               // In order for checkDead not to be misled by the unfortunate special
@@ -2629,7 +2629,7 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
                   if (isByNameParamType(remainingParams.head)) POLYmode
                   else POLYmode | BYVALmode
                 if (remainingParams.tail.nonEmpty) remainingParams = remainingParams.tail
-                val arg1 = typedArg(arg, forArgMode(fun, mode), newmode, lenientPt)(EV.TypeArgLenientPt(arg))
+                val arg1 = typedArg(arg, forArgMode(fun, mode), newmode, lenientPt)(EV.TypeArgWithLenientPt(arg, lenientPt))
                 val argtparams = context.extractUndetparams()
                 if (!argtparams.isEmpty) {
                   val strictPt = formal.instantiateTypeParams(tparams, strictTargs)
@@ -3145,7 +3145,7 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
           // as we don't know which alternative to choose... here we do
           map2Conserve(args, tparams) {
             //@M! the polytype denotes the expected kind
-            (arg, tparam) => typedHigherKindedType(arg, mode, polyType(tparam.typeParams, AnyClass.tpe))
+            (arg, tparam) => typedHigherKindedType(arg, mode, polyType(tparam.typeParams, AnyClass.tpe))(EV.TypeHigherKindedTypeApplyOverloaded(arg))
           }
         } else // @M: there's probably something wrong when args.length != tparams.length... (triggered by bug #320)
          // Martin, I'm using fake trees, because, if you use args or arg.map(typedType),
@@ -4191,11 +4191,12 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
             // @M: kind-arity checking is done here and in adapt, full kind-checking is in checkKindBounds (in Infer)
             val args1 =
               if (!tpt1.symbol.rawInfo.isComplete)
-                args mapConserve (typedHigherKindedType(_, mode))
+                args mapConserve (arg => typedHigherKindedType(arg, mode)(EV.TypeHigherKindedTypeForAppliedType(arg)))
                 // if symbol hasn't been fully loaded, can't check kind-arity
               else map2Conserve(args, tparams) { (arg, tparam) =>
                 //@M! the polytype denotes the expected kind
-                typedHigherKindedType(arg, mode, polyType(tparam.typeParams, AnyClass.tpe))
+                val pt1 = polyType(tparam.typeParams, AnyClass.tpe)
+                typedHigherKindedType(arg, mode, pt1)(EV.TypeHigherKindedTypeApplyWithExpectedKind(arg, pt1))
               }
             val argtypes = args1 map (_.tpe)
 
@@ -4440,7 +4441,7 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
           }
 
         case TypeApply(fun, args) =>
-          typer1Event(EV.TypedApplyTyper(fun, args, pt)){
+          typer1Event(EV.TypeApplyTyper(fun, args, pt)){
           // @M: kind-arity checking is done here and in adapt, full kind-checking is in checkKindBounds (in Infer)
           //@M! we must type fun in order to type the args, as that requires the kinds of fun's type parameters.
           // However, args should apparently be done first, to save context.undetparams. Unfortunately, the args
@@ -4450,7 +4451,7 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
           //val undets = context.undetparams
 
           // @M: fun is typed in TAPPmode because it is being applied to its actual type parameters
-          val fun1 = typed(fun, forFunMode(mode) | TAPPmode, WildcardType)
+          val fun1 = typed(fun, forFunMode(mode) | TAPPmode, WildcardType)(EV.TypeTypeConstructorTypeApply(fun))
           val tparams = fun1.symbol.typeParams
 
           //@M TODO: val undets_fun = context.undetparams  ?
@@ -4824,15 +4825,15 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
     def typedType(tree: Tree)(implicit e: EV.Explanation): Tree = typedType(tree, NOmode)
 
     /** Types a higher-kinded type tree -- pt denotes the expected kind*/
-    def typedHigherKindedType(tree: Tree, mode: Int, pt: Type): Tree =
+    def typedHigherKindedType(tree: Tree, mode: Int, pt: Type)(implicit e: EV.Explanation): Tree =
       // TODO: remove default explanation
-      if (pt.typeParams.isEmpty) typedType(tree, mode)(EV.DefaultExplanation) // kind is known and it's *
+      if (pt.typeParams.isEmpty) typedType(tree, mode) // kind is known and it's *
       else typed(tree, HKmode, pt)
 
-    def typedHigherKindedType(tree: Tree, mode: Int): Tree =
+    def typedHigherKindedType(tree: Tree, mode: Int)(implicit e: EV.Explanation): Tree =
       typed(tree, HKmode, WildcardType)
 
-    def typedHigherKindedType(tree: Tree): Tree = typedHigherKindedType(tree, NOmode)
+    def typedHigherKindedType(tree: Tree)(implicit e: EV.Explanation): Tree = typedHigherKindedType(tree, NOmode)
 
     /** Types a type constructor tree used in a new or supertype */
     def typedTypeConstructor(tree: Tree, mode: Int)(implicit e: EV.Explanation): Tree = {

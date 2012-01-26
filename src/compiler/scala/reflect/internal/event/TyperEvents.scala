@@ -30,7 +30,7 @@ trait TyperEventsUniverse {
 
     case class TyperTyped(tree0: Tree, pt: Type)(implicit val expl: Explanation)
       extends TreeEvent with TypingBlockEvent with SymbolReferencesEvent {
-      def tag = "typecheck"
+      def tag = "typecheck-tree"
       def references = expl match {
         case sRefs: SymRefsInfo =>
           sRefs.refs
@@ -138,7 +138,7 @@ trait TyperEventsUniverse {
       override def tag = "convert-constructor"
     }
 
-    trait ValidateParentClassEvent
+    trait ValidateParentClassEvent extends TyperEvent
 
     case class ValidateParentClass(parent: Tree, superclazz: Symbol)
       extends TreeEvent with ValidateParentClassEvent {
@@ -550,23 +550,39 @@ trait TyperEventsUniverse {
       override def tag = super.tag + "-general"
     }
 
-    // Start typed Apply
-    trait TypedApplyEvent extends TyperEvent {
-      override def tag = super.tag + "-typed-apply"
+    // Start typed TypeApply
+    trait TypeApplyTyperEvent extends TyperEvent {
+      override def tag = super.tag + "-type-apply"
     }
 
     // TODO: positions
-    case class TypedApplyTyper(fun0: Tree, args0: List[Tree], pt: Type)
-      extends Event with TypedApplyEvent {
+    case class TypeApplyTyper(fun0: Tree, args0: List[Tree], pt: Type)
+      extends Event with TypeApplyTyperEvent {
       val fun = duplicateTreeWithPos(fun0)
       val args = args0.map(duplicateTreeWithPos)
       protected def participants: List[Any] = List(fun0, args0, pt)
       override def tag = "type-type-application"
     }
+    
+    // Start typed Apply
+    trait ApplyTyperEvent extends TyperEvent {
+      override def tag = super.tag + "-apply"
+    }
+
+    case class ApplyTyper(app: Apply, e: Explanation)
+      extends TreeEvent with ApplyTyperEvent with SymbolReferencesEvent {
+      override def tag = "type-application"
+      val tree = duplicateTreeWithPos(app)
+      def references = e match {
+//        case TypeImplicitApplication(_, _, sym) =>
+//          List(sym)
+        case _ => tree.asInstanceOf[Apply].args.map(_.symbol).filter(_ != NoSymbol)
+      }
+    }
 
     // tree only for positions
     case class TypedTypeApplySuccessTyper(tree0: Tree, fun0: Tree, args0: List[Tree], resultTpe: Type)
-      extends TreeEvent with TypedApplyEvent {
+      extends TreeEvent with ApplyTyperEvent {
       val tree = duplicateTreeWithPos(fun0)
       val args = args0.map(duplicateTreeWithPos)
       def fun = tree
@@ -574,19 +590,19 @@ trait TyperEventsUniverse {
     }
 
     case class TypedApplyStableTyper(tree0: Tree, pt: Type)
-      extends TreeEvent with TypedApplyEvent {
+      extends TreeEvent with ApplyTyperEvent {
       val tree = duplicateTreeWithPos(tree0)
       override def tag = super.tag + "-stable"
     }
 
     case class TypedApplyUnstableTyper(tree0: Tree, patternMode: Boolean, pt: Type, args0: List[Tree])
-      extends TreeEvent with TypedApplyEvent {
+      extends TreeEvent with ApplyTyperEvent {
       val tree = duplicateTreeWithPos(tree0)
       override def tag = "unstable-function"
     }
 
     case class SuccessTypedApplyFunTyper(tree0: Tree, expectedFunPt: Type, stableApplication: Boolean, pt: Type)
-      extends TreeEvent with TypedApplyEvent with SymbolReferencesEvent {
+      extends TreeEvent with ApplyTyperEvent with SymbolReferencesEvent {
       val tree = duplicateTreeWithPos(tree0)
       override def tag = "successfully-typed-function"
 
@@ -595,8 +611,9 @@ trait TyperEventsUniverse {
       } else List()
     }
 
+    /*
     case class TypedApplyTryTyper(fun0: Tree, args0: List[Tree])
-      extends Event with TypedApplyEvent {
+      extends Event with ApplyTyperEvent {
       override def tag = super.tag + "-try-typed-apply"
       protected def participants: List[Any] = List(fun0, args0)
     }
@@ -624,10 +641,10 @@ trait TyperEventsUniverse {
       extends Event with TypedApplyEvent {
       override def tag = super.tag + "-assignment-op"
       protected def participants: List[Any] = List(qual0, name, pt)
-    }
+    }*/
 
     case class TypedApplyToAssignment(fun0: Tree, qual0: Tree, name: Name, args0: List[Tree])
-      extends Event with TypedApplyEvent {
+      extends Event with ApplyTyperEvent {
       override def tag = super.tag + "-convert-to-assignment"
       protected def participants: List[Any] = List(fun0, qual0, name, args0)
     }
@@ -640,22 +657,6 @@ trait TyperEventsUniverse {
     case class ApplyBlockTyper(tree0: Tree)
       extends TreeEvent with ApplyBlockTyperEvent {
       val tree = duplicateTreeWithPos(tree0)
-    }
-
-    // Start typed Apply
-    trait ApplyTyperEvent extends TyperEvent {
-      override def tag = super.tag + "-apply"
-    }
-
-    case class ApplyTyper(app: Apply, e: Explanation)
-      extends TreeEvent with ApplyTyperEvent with SymbolReferencesEvent {
-      override def tag = "type-application"
-      val tree = duplicateTreeWithPos(app)
-      def references = e match {
-//        case TypeImplicitApplication(_, _, sym) =>
-//          List(sym)
-        case _ => tree.asInstanceOf[Apply].args.map(_.symbol).filter(_ != NoSymbol)
-      }
     }
 
     // Start typed ApplyDynamic
@@ -1180,6 +1181,10 @@ trait TyperEventsUniverse {
     case object ClassTemplate extends TemplateInfo
     case object ModuleTemplate extends TemplateInfo
     case object TraitTemplate extends TemplateInfo
+    
+    //Unit
+    case class TypeUnit(unit: CompilationUnit)
+      extends Explanation with TyperExplanation
 
     //Package
     case class TypePackageQualifier(qual: RefTree)
@@ -1236,7 +1241,7 @@ trait TyperEventsUniverse {
       extends Explanation with TyperExplanation
 
     //TypeApply
-    case class TypeFunctionTypeApply(fun: Tree)
+    case class TypeTypeConstructorTypeApply(fun: Tree)
       extends Explanation with TyperExplanation
 
     case class TypeHigherKindedTypeApplyWithExpectedKind(arg: Tree, pt: Type)
@@ -1303,9 +1308,6 @@ trait TyperEventsUniverse {
       extends Explanation with TyperExplanation
 
     //Type constructor
-    case class TypeTypeConstructor(tree: Tree)
-      extends Explanation with TyperExplanation
-
     case class TypeTypeConstructorInNew(tpt: Tree)
       extends Explanation with TyperExplanation
 
@@ -1315,7 +1317,6 @@ trait TyperEventsUniverse {
       extends Explanation with TyperExplanation {
       val supertpt = duplicateTreeWithPos(supertpt0)
     }
-
 
     case class TypeParentMixin(mixin0: Tree)
       extends Explanation with TyperExplanation {
@@ -1366,9 +1367,8 @@ trait TyperEventsUniverse {
     case class TypeArgForCorrectArgsNum(arg: Tree)
       extends Explanation with TyperExplanation
 
-    case class TypeArgLenientPt(arg: Tree)
+    case class TypeArgWithLenientPt(arg: Tree, pt: Type)
       extends Explanation with TyperExplanation
-
 
     // Use case?
     case class TypeUseCaseStatement(tree: Tree)

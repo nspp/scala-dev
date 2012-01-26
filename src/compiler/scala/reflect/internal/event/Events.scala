@@ -11,8 +11,10 @@ trait Events {
                   with NamerEvents
                   with TyperEvents
                   with InferEvents
+                  with ImplicitEvents
                   with UtilEvents
-                  with ImplicitEvents {
+                  with LubGlbEvents
+                  {
     self: EventModel =>
 
     trait DoneBlock {

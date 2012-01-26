@@ -2170,7 +2170,7 @@ self =>
         val pname: TypeName = wildcardOrIdent().toTypeName
         val param = atPos(start, nameOffset) {
           val tparams = typeParamClauseOpt(pname, null) // @M TODO null --> no higher-order context bounds for now
-          TypeDef(mods, pname, tparams, typeBounds())
+          TypeDef(mods, pname, tparams, typeBounds(r2p(start, nameOffset, in.lastOffset max start)))
         }
         if (contextBoundBuf ne null) {
           while (in.token == VIEWBOUND) {
@@ -2195,12 +2195,16 @@ self =>
      *  TypeBounds ::= [`>:' Type] [`<:' Type]
      *  }}}
      */
-    def typeBounds(): TypeBoundsTree = {
+    def typeBounds(defaultPos: Position = NoPosition): TypeBoundsTree = {
       val t = TypeBoundsTree(
         bound(SUPERTYPE, tpnme.Nothing),
         bound(SUBTYPE, tpnme.Any)
       )
-      t setPos wrappingPos(List(t.hi, t.lo))
+      val bounds = List(t.hi, t.lo)
+      val anyRange = bounds.filter(_.pos.isRange).map(_.pos)
+      val pos = if (anyRange.length > 0 || defaultPos == NoPosition) wrappingPos(bounds) else wrappingPos(defaultPos, bounds, false)
+      //t setPos wrappingPos(List(t.hi, t.lo))
+      t setPos pos
     }
 
     def bound(tok: Int, default: TypeName): Tree =

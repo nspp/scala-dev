@@ -318,6 +318,8 @@ abstract class TreeBrowsers {
               t.symbol.owner.toString
             else
               "NoSymbol has no owner")
+          str.append("\nSymbol position: ").append(
+            if (t.symbol ne null) t.symbol.pos else "No position")
           if ((t.symbol ne null) && t.symbol.isType) {
             str.append("\ntermSymbol: " + t.symbol.tpe.termSymbol
                      + "\ntypeSymbol: " + t.symbol.tpe.typeSymbol)

@@ -93,7 +93,7 @@ trait Analyzer extends AnyRef
       }
       def apply(unit: CompilationUnit) {
         try {
-          unit.body = newTyper(rootContext(unit)).typed(unit.body)(EV.DefaultExplanation)
+          unit.body = newTyper(rootContext(unit)).typed(unit.body)(EV.TypeUnit(unit))
           if (global.settings.Yrangepos.value && !global.reporter.hasErrors) global.validatePositions(unit.body)
           for (workItem <- unit.toCheck) workItem()
         } finally {

@@ -5847,41 +5847,69 @@ trait Types extends api.Types { self: SymbolTable =>
 
   private val lubResults = new mutable.HashMap[(Int, List[Type]), Type]
   private val glbResults = new mutable.HashMap[(Int, List[Type]), Type]
+  
 
-  def lub(ts: List[Type]): Type = ts match {
-    case List() => NothingClass.tpe
-    case List(t) => t
-    case _ =>
-      try {
-        lub(ts, lubDepth(ts))
-      } finally {
-        lubResults.clear()
-        glbResults.clear()
-      }
+  def lub(ts: List[Type]): Type = {
+    import EV.LubKindEntry._
+    ts match {
+      case List() =>
+        EV << EV.CalcLub(Nil, Empty)
+        NothingClass.tpe
+      case List(t) =>
+        EV << EV.CalcLub(ts, SingleElem)
+        t
+      case _ =>
+        val ev = EV.CalcLub(ts, NonTrivial)
+        EV <<< ev
+        try {
+          lub(ts, lubDepth(ts))
+        } finally {
+          EV >>> EV.LubGlbDone(ev.id)
+          lubResults.clear()
+          glbResults.clear()
+        }
+    }
   }
 
   /** The least upper bound wrt <:< of a list of types */
   def lub(ts: List[Type], depth: Int): Type = {
+    import EV.LubKindElimSubtypes._
     def lub0(ts0: List[Type]): Type = elimSub(ts0, depth) match {
-      case List() => NothingClass.tpe
-      case List(t) => t
-      case ts @ PolyType(tparams, _) :: _ =>
+      case List()                          =>
+        EV << EV.CalcLubElimSubTypes(Nil, Empty)
+        NothingClass.tpe
+      case List(t)                         =>
+        EV << EV.CalcLubElimSubTypes(ts, SingleElem)
+        t
+      case ts @ PolyType(tparams, _) :: _  =>
+        val ev = EV.CalcLubElimSubTypes(ts, PolyTpe)
+        EV.eventBlock(EV.CalcLubElimSubTypes(ts, PolyTpe), EV.LubGlbDone(_)) {
         val tparams1 = map2(tparams, matchingBounds(ts, tparams).transpose)((tparam, bounds) =>
           tparam.cloneSymbol.setInfo(glb(bounds, depth)))
         PolyType(tparams1, lub0(matchingInstTypes(ts, tparams1)))
-      case ts @ MethodType(params, _) :: rest =>
+        }
+      case ts @ MethodType(params, _) :: _ =>
+        EV.eventBlock(EV.CalcLubElimSubTypes(ts, MethodTpe), EV.LubGlbDone(_)) {
         MethodType(params, lub0(matchingRestypes(ts, params map (_.tpe))))
-      case ts @ NullaryMethodType(_) :: rest =>
+        }
+      case ts @ NullaryMethodType(_) :: _  =>
+        EV.eventBlock(EV.CalcLubElimSubTypes(ts, NullaryMethodTpe), EV.LubGlbDone(_)) {
         NullaryMethodType(lub0(matchingRestypes(ts, Nil)))
-      case ts @ TypeBounds(_, _) :: rest =>
+        }
+      case ts @ TypeBounds(_, _) :: _      =>
+        EV.eventBlock(EV.CalcLubElimSubTypes(ts, TpeBounds), EV.LubGlbDone(_)) {
         TypeBounds(glb(ts map (_.bounds.lo), depth), lub(ts map (_.bounds.hi), depth))
-      case ts =>
+        }
+      case ts                              =>
         lubResults get (depth, ts) match {
           case Some(lubType) =>
             lubType
-          case None =>
+          case None          =>
             lubResults((depth, ts)) = AnyClass.tpe
-            val res = if (depth < 0) AnyClass.tpe else lub1(ts)
+            val res = if (depth < 0) AnyClass.tpe else
+              EV.eventBlock(EV.CalcLubElimSubTypes(ts, NonTrivial), EV.LubGlbDone(_)) {
+                lub1(ts)
+              }
             lubResults((depth, ts)) = res
             res
         }

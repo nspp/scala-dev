@@ -281,6 +281,42 @@ trait InferEventsUniverse {
       def participants = List(alt1, alt2)
     }
   }
+  
+  trait LubGlbEvents {
+    self: EventModel =>
+
+    import Util._
+    
+    trait LubEvent {
+      def tag = "lub"
+    }
+    
+    case class LubGlbDone(originEvent: Int) extends Event with LubEvent with DoneBlock {
+      def participants = List()
+    }
+    
+    object LubKindEntry extends Enumeration {
+      val Empty, SingleElem, NonTrivial = Value
+    }
+    
+    case class CalcLub(tps: List[Type], kind: LubKindEntry.Value) extends Event with LubEvent {
+      override def tag = kind.toString() + "-lub"
+      def participants = tps
+    }
+    
+    object LubKindElimSubtypes extends Enumeration {
+      val Empty, SingleElem, PolyTpe, MethodTpe, NullaryMethodTpe, TpeBounds, NonTrivial = Value 
+    }
+    
+    case class CalcLubElimSubTypes(tps0: List[Type], kind: LubKindElimSubtypes.Value)
+      extends Event with LubEvent with SymbolReferencesEvent {
+      override def tag = kind.toString() + "-lub-after-elim-subtypes"
+      val tps = tps0 map (deepTypeClone)
+      def participants = tps
+      def references = tps map (_.typeSymbol)
+    }
+    
+  }
 
   trait InferExplanations {
     self: EventModel =>
