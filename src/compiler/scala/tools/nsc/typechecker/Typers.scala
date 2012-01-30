@@ -772,12 +772,17 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
 
         withCondConstrTyper(treeInfo.isSelfOrSuperConstrCall(tree)){ typer1 =>
           if (original != EmptyTree && pt != WildcardType)
-            typer1.silent(tpr => tpr.typed(tpr.applyImplicitArgs(tree), mode, pt)) match {
+            typer1.silent(tpr => {
+              val withImplicitArgs = tpr.applyImplicitArgs(tree)
+              if (tpr.context.hasErrors) tree // silent will wrap it in SilentTypeError anyway
+              else tpr.typed(withImplicitArgs, mode, pt)(EV.FirstTryTypeTreeWithAppliedImplicitArgs(tree, pt))
+            }) match {
               case SilentResultValue(result) =>
                 result
               case _ =>
                 debuglog("fallback on implicits: " + tree + "/" + resetAllAttrs(original))
-                val tree1 = typed(resetAllAttrs(original), mode, WildcardType)
+                val cleanTree = resetAllAttrs(original)
+                val tree1 = typed(cleanTree, mode, WildcardType)(EV.FallbackImplicitArgsTypeClean(tree, cleanTree))
                 tree1.tpe = addAnnotations(tree1, tree1.tpe)
                 if (tree1.isEmpty) tree1 else adapt(tree1, mode, pt, EmptyTree)
             }
@@ -1049,7 +1054,7 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
                     debuglog(msg)
                     val silentContext = context.makeImplicit(context.ambiguousErrors)
                     val res = newTyper(silentContext).typed(
-                      new ApplyImplicitView(coercion, List(tree)) setPos tree.pos, mode, pt)
+                      new ApplyImplicitView(coercion, List(tree)) setPos tree.pos, mode, pt)(EV.TypeImplicitViewApplication(tree, coercion))
                     if (silentContext.hasErrors) context.issue(silentContext.errBuffer.head) else return res
                   }
                 }
@@ -1204,7 +1209,7 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
       def onError(reportError: => Tree): Tree = {
         context.tree match {
           case Apply(tree1, args) if (tree1 eq tree) && args.nonEmpty =>
-            silent(_.typedArgs(args, mode)(_ => EV.DefaultExplanation)) match {
+            silent(_.typedArgs(args, mode)(arg => EV.TypeArgStandalone(arg))) match {
               case SilentResultValue(xs) =>
                 val args = xs.asInstanceOf[List[Tree]]
                 if (args exists (_.isErrorTyped))
@@ -2619,7 +2624,7 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
             } else {
               assert(!inPatternMode(mode)) // this case cannot arise for patterns
               EV.eventBlockInform[Tree](EV.MethodTpeWithUndetTpeParamsDoTypedApply(fun, tparams, formals), EV.DoTypedApplyDone(_, _)){
-              val lenientTargs = protoTypeArgs(tparams, formals, mt.resultApprox, pt)
+              val lenientTargs = EV.eventBlock(EV.ProtoTypeArgsDoTypedApply(tparams, formals, mt.resultApprox, pt), EV.TyperDone(_)){protoTypeArgs(tparams, formals, mt.resultApprox, pt)}
               val strictTargs = map2(lenientTargs, tparams)((targ, tparam) =>
                 if (targ == WildcardType) tparam.tpe else targ) //@M TODO: should probably be .tpeHK
               var remainingParams = paramTypes
@@ -3527,11 +3532,11 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
        *  @param args ...
        *  @return     ...
        */
-      def tryTypedArgs(args: List[Tree], mode: Int)(implicit e: EV.Explanation): Option[List[Tree]] = {
+      def tryTypedArgs(args: List[Tree], mode: Int)(implicit e: Tree => EV.Explanation): Option[List[Tree]] = {
         val c = context.makeSilent(false)
         c.retyping = true
         try {
-          val res = newTyper(c).typedArgs(args, mode)(_ => e)
+          val res = newTyper(c).typedArgs(args, mode)
           if (c.hasErrors) None else Some(res)
         } catch {
           case ex: CyclicReference =>
@@ -3590,7 +3595,7 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
             if (retry) {
               val Select(qual, name) = fun
               val argsStandalone = EV.eventBlock(EV.TryTypedArgsTyper(args, mode), EV.TyperDone(_)){
-                tryTypedArgs(args, forArgMode(fun, mode))(EV.TypeArgsStandalone(args))
+                tryTypedArgs(args, forArgMode(fun, mode))(EV.TypeArgStandalone)
               }
               argsStandalone match {
                 case Some(args1) =>
@@ -3748,7 +3753,7 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
       }
 
       def typedSuper(qual: Tree, mix: TypeName) = {
-        val qual1 = typed(qual)(EV.TypeQualifierInSelect(qual))
+        val qual1 = typed(qual)(EV.TypeSuperQualifier(qual))
 
         val clazz = qual1 match {
           case This(_) => qual1.symbol
@@ -4536,11 +4541,14 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
             }
           }
 
-        case Select(qual, name) =>
-          typer1Event(EV.SelectTreeTyper(qual, name, pt,
+        case sel@Select(qual, name) =>
+          typer1Event(EV.SelectTreeTyper(sel, pt,
               (qual.symbol != NoSymbol) && (qual.symbol != null) && qual.symbol.isConstructor || name == nme.CONSTRUCTOR)){
           incCounter(typedSelectCount)
-          var qual1 = checkDead(typedQualifier(qual, mode)(EV.TypeQualifierInSelect(qual)))
+          // TODO should avoid manual correction
+          // tow levels of explanation?
+          val expl = if (expl0.isInstanceOf[EV.TypeAppliedImplicitView]) expl0 else EV.TypeQualifierInSelect(qual)
+          var qual1 = checkDead(typedQualifier(qual, mode)(expl))
           if (name.isTypeName) qual1 = checkStable(qual1)
 
           val tree1 = // temporarily use `filter` and an alternative for `withFilter`

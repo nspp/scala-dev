@@ -221,7 +221,7 @@ trait Implicits {
     import infer._
     /** Is implicit info `info1` better than implicit info `info2`?
      */
-    def improves(info1: ImplicitInfo, info2: ImplicitInfo) = {
+    def improves(info1: ImplicitInfo, info2: ImplicitInfo) = EV.eventBlockInform[Boolean](EV.ImprovesCompare(info1, info2), EV.ImprovesResult(info1, info2, _, _)){
       incCounter(improvesCount)
       (info2 == NoImplicitInfo) ||
       (info1 != NoImplicitInfo) && {

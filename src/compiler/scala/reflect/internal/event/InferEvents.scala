@@ -85,11 +85,30 @@ trait InferEventsUniverse {
       val ValidType, CovariantPos, ContravariantPos, UpperSubLower, Solve, Relatable = Value
     }
 
-    case class InstantiateTypeConstraint(tvar0: TypeVar, tp0: Type, reason: TVarSetInst.Value)
+    case class SetInstantiateTypeConstraint(tvar0: TypeVar, tp0: Type, reason: TVarSetInst.Value)
       extends Event with InferEvent {
       val tvar = deepTypeClone(tvar0)
-      override def tag = super.tag + "-instantiate-typeconstr"
+      override def tag = super.tag + "-set-instantiate-typeconstr"
       def participants = List(tvar, reason)
+    }
+    
+    case class InstantiateTypeVar(tvar0: TypeVar) extends Event with InferEvent {
+      val tvar = deepTypeClone(tvar0)
+      override def tag = super.tag + "-instantiate-typevar"
+      def participants = List(tvar)
+    }
+    
+    case class WildcardLenientTArg(tvar0: TypeVar, noInstance: Boolean) extends Event with InferEvent {
+      val tvar = deepTypeClone(tvar0)
+      override def tag = super.tag + "-wildcard-prototype-arg"
+      def participants = List(tvar)
+    }
+    
+    case class IncompatibleResultAndPrototype(restpe0: Type, pt: Type)
+      extends Event with InferEvent {
+      val restpe = deepTypeClone(restpe0)
+      override def tag = super.tag + "-incompatible-restpe"
+      def participants = List(restpe)
     }
 
     case class InstantiateGlbOrLub(tvar0: TypeVar, up: Boolean, depth: Int)

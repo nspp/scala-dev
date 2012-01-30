@@ -35,6 +35,22 @@ trait ImplicitEventsUniverse {
         } else List()
       override protected def participants: List[Any] = List(tree, pt)
     }
+    
+    // info2 - new implicit
+    case class ImprovesCompare(info1: ImplicitInfo, info2: ImplicitInfo)
+      extends Event with SymbolReferencesEvent with ImplicitEvent {
+      override def tag = super.tag + "-compare-two-implicits"
+      def participants = List(info1, info2)
+      def references = List(info1.sym, info2.sym)
+    }
+    
+    case class ImprovesResult(info1: ImplicitInfo, info2: ImplicitInfo, originEvent: Int, res: Boolean)
+      extends Event with SymbolReferencesEvent with ImplicitEvent with DoneBlock {
+      override def tag = super.tag + "-compared-two-implicits"
+      def participants = List(info1, info2)
+      def references = List(info1.sym, info2.sym)
+    }
+    
 
     case class VerifyImplicit(newTree0: Tree, oldTree: Tree,
         pt: Type, implicitSym: Symbol, implicitRep: String)(implicit e: Explanation)

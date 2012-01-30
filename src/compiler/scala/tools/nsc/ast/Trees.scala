@@ -77,7 +77,7 @@ trait Trees extends reflect.internal.Trees { self: Global =>
     // create parameters for <init> as synthetic trees.
     var vparamss1 =
       vparamss map (vps => vps.map { vd =>
-        atPos(focusPos(vd.pos)) {
+        atPos(vd.pos.makeTransparent) {
           ValDef(
             Modifiers(vd.mods.flags & (IMPLICIT | DEFAULTPARAM | BYNAMEPARAM) | PARAM | PARAMACCESSOR) withAnnotations vd.mods.annotations,
             vd.name, vd.tpt.duplicate, vd.rhs.duplicate)

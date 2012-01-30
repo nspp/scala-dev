@@ -72,7 +72,7 @@ trait NamerEventsUniverse {
       extends TreeEvent with NamerEvent {
       //override def tag = super.tag + "-module-signature-completer"
       override def tag = "object-signature-completer"
-      override def lName = "Typing of\n object's signature"
+      override def lName = "Typing \n object's signature"
       def tree = templ
       override protected def eventStringRep =
         "Completing object " + templ
@@ -83,7 +83,7 @@ trait NamerEventsUniverse {
       override def tag = super.tag + "-value-signature-completer"
       //override def lName = "value-signature-completer"
       override def lName = "Typing of\n value's signature"
-      def tree = rhs
+      val tree = duplicateTreeWithPos(vdef)
       override protected def eventStringRep =
         "Completing value definition " + name + ": " + tpt + "\n" +
         (if (tpt.isEmpty) "Compute type from the body of the value " else "Type type" )+

@@ -33,6 +33,7 @@ class Universe extends SymbolTable with internal.transform.Transforms with Event
   def focusPos(pos: Position) = pos
   def isRangePos(pos: Position) = false
   def showPos(pos: Position) = "<unknown position>"
+  def makeTransparent(pos: Position) = pos
 
   type Position = String // source file?
   val NoPosition = ""

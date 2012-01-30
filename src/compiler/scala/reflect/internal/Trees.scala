@@ -285,7 +285,12 @@ trait Trees extends api.Trees { self: SymbolTable =>
     override val treeCopy = newStrictTreeCopier
     override def transform(t: Tree) = {
       val t1 = super.transform(t)
-      if (focusRangePos && (t1 ne t) && isRangePos(t1.pos)) t1 setPos focusPos(t.pos)
+      if (t1 ne t) {
+        if (focusRangePos && isRangePos(t1.pos))
+          t1 setPos focusPos(t.pos)
+        else
+          t1 setPos makeTransparent(t.pos)
+      }
       t1
     }
   }

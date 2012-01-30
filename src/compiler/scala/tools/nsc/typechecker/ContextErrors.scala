@@ -110,7 +110,7 @@ trait ContextErrors {
       }
 
       def NoImplicitFoundError(tree: Tree, param: Symbol) = {
-        EV << EV.InferImplicitValueNotFound(param)
+        EV << EV.InferImplicitValueNotFound(param) // TODO only report as error below?
         def errMsg = {
           val paramName = param.name
           val paramTp   = param.tpe

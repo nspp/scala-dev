@@ -85,6 +85,7 @@ trait EventStrings {
       case x:TypeRef                   => x.safeToString
       case x:MethodType                => x.safeToString
       case x:PolyType                  => x.safeToString
+      case x:RefinedType               => x.safeToString
       case x if (x.typeSymbol != null) => symString(x.typeSymbol)
       case _                           => classString(tpe.getClass)
     }) + "]"

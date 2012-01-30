@@ -17,5 +17,6 @@ self: scala.tools.nsc.symtab.SymbolTable =>
   def focusPos(pos: Position): Position = pos.focus
   def isRangePos(pos: Position): Boolean = pos.isRange
   def showPos(pos: Position): String = pos.show
+  def makeTransparent(pos: Position): Position = pos.makeTransparent
 
 }

@@ -8,6 +8,8 @@ trait TyperEventsUniverse {
   trait TyperEvents {
     self: EventModel =>
 
+    import Util._
+      
     trait TyperEvent {
       def tag = "type"
     }
@@ -701,7 +703,7 @@ trait TyperEventsUniverse {
       override def tag = "type-full-selection"
     }
 
-    case class SelectTreeTyper(tree0: Tree, name: Name, pt: Type, constr: Boolean)
+    case class SelectTreeTyper(tree0: Select, pt: Type, constr: Boolean)
       extends TreeEvent with SelectTyperEvent {
       val tree = duplicateTreeWithPos(tree0)
       override def tag = if (constr) "type-new-object" else (super.tag + "-tree")
@@ -1132,10 +1134,12 @@ trait TyperEventsUniverse {
       override def tag = "method-with-undetermined-type-parameters"
     }
 
-     case class ProtoTypeArgsDoTypedApply(tparams: List[Symbol], formals: List[Type],
-      resultTpe: Type, lenient: List[Type], pt: Type)
+     case class ProtoTypeArgsDoTypedApply(tparams0: List[Symbol], formals: List[Type],
+      resultTpe0: Type, pt: Type)
       extends Event with DoTypedApplyEvent {
       override def tag = super.tag + "-prototypeargs"
+      val tparams = tparams0.map(deepSymClone)
+      val resultTpe = deepTypeClone(resultTpe0)
       def participants = tparams
     }
 
@@ -1260,13 +1264,6 @@ trait TyperEventsUniverse {
 
     case class TypeFunBody(fun: Tree)
       extends Explanation with TyperExplanation
-
-    //Do typed apply, try typed apply
-    case class TypeArgsStandalone(args: List[Tree])
-      extends Explanation with TyperExplanation {
-
-      override def provide(a: Tree): Explanation = TypeArgStandalone(a)
-    }
 
     //Do typed apply, try typed apply
     case class TypeArgStandalone(arg: Tree)

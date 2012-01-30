@@ -2636,7 +2636,7 @@ trait Types extends api.Types { self: SymbolTable =>
       // if we were compared against later typeskolems, repack the existential,
       // because skolems are only compatible if they were created at the same level
       val res = if (shouldRepackType) repackExistential(tp) else tp
-      EV << EV.InstantiateTypeConstraint(this, tp, reason)
+      EV << EV.SetInstantiateTypeConstraint(this, tp, reason)
       constr.inst = TypeVar.trace("setInst", "In " + originLocation + ", " + originName + "=" + res)(res)
     }
 

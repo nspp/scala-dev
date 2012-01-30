@@ -160,7 +160,8 @@ trait Infer {
       else
         assert(false, tvar.origin+" at "+tvar.origin.typeSymbol.owner)
     }
-    EV << EV.InstantiateTypeVars(tvars, tparams)
+    if (tvars.nonEmpty)
+      EV << EV.InstantiateTypeVars(tvars, tparams)
     tvars map instantiate
   }
 
@@ -412,25 +413,32 @@ trait Infer {
           instantiate(tvar.constr.inst)
         }
         //Console.println("instantiate "+tvar+tvar.constr+" variance = "+variance);//DEBUG
-        if (tvar.constr.inst != NoType)
+        if (tvar.constr.inst != NoType) {
+          EV << EV.InstantiateTypeVar(tvar)
           instantiate(tvar.constr.inst)
-        else if ((variance & COVARIANT) != 0 && hiBounds.nonEmpty)
+        } else if ((variance & COVARIANT) != 0 && hiBounds.nonEmpty)
           setInst(upper, CovariantPos)
         else if ((variance & CONTRAVARIANT) != 0 && loBounds.nonEmpty)
           setInst(lower, ContravariantPos)
         else if (hiBounds.nonEmpty && loBounds.nonEmpty && upper <:< lower)
           setInst(upper, UpperSubLower)
-        else
+        else {
+          EV << EV.WildcardLenientTArg(tvar, false)
           WildcardType
+        }
       } catch {
-        case ex: NoInstance => WildcardType
+        case ex: NoInstance =>
+          EV << EV.WildcardLenientTArg(tvar, true)
+          WildcardType
       }
       val tvars = tparams map freshVar
       if (isConservativelyCompatible(restpe.instantiateTypeParams(tparams, tvars), pt))
         map2(tparams, tvars)((tparam, tvar) =>
           instantiateToBound(tvar, varianceInTypes(formals)(tparam)))
-      else
+      else {
+        EV << EV.IncompatibleResultAndPrototype(restpe, pt)
         tvars map (tvar => WildcardType)
+      }
     }
 
     object AdjustedTypeArgs {

@@ -6,6 +6,7 @@ trait Positions extends api.Positions { self: SymbolTable =>
   def focusPos(pos: Position): Position
   def isRangePos(pos: Position): Boolean
   def showPos(pos: Position): String
+  def makeTransparent(pos: Position): Position
 
   /** A position that wraps a set of trees.
    *  The point of the wrapping position is the point of the default position.

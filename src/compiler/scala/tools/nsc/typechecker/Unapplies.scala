@@ -97,8 +97,11 @@ trait Unapplies extends ast.TreeDSL
   }
 
   def copyUntyped[T <: Tree](tree: T): T =
-    returning[T](tree.duplicate)(UnTyper traverse _)
+    //returning[T](tree.duplicate)(UnTyper traverse _)
+    // so thtat we get correct positions for the params in the MethodType
+    returning[T](duplicateTreeWithPos(tree).asInstanceOf[T])(UnTyper traverse _)
 
+  // TODO duplicateTre
   def copyUntypedInvariant(td: TypeDef): TypeDef = {
     val copy = treeCopy.TypeDef(td, td.mods &~ (COVARIANT | CONTRAVARIANT), td.name, td.tparams, td.rhs)
 
