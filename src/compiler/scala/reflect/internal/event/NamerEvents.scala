@@ -7,6 +7,8 @@ trait NamerEventsUniverse {
 
   trait NamerEvents {
     self: EventModel =>
+      
+    import Util._
 
     trait NamerEvent {
       def tag = "namer"
@@ -15,79 +17,62 @@ trait NamerEventsUniverse {
     case class NamerDone(originEvent: Int) extends Event with NamerEvent with DoneBlock {
       override def tag = super.tag + "-done"
       def participants: List[Any] = List()
-      override def eventString = ""
     }
 
     // TODO: get rid off that one?
-    case class TypeSigNamer(tree: Tree)
+    case class TypeSigNamer(tree0: Tree)
       extends TreeEvent with NamerEvent {
-      //override def tag = super.tag + "-type-signature-completer"
+      val tree = duplicateTreeWithPos(tree0)
       override def tag = "type-signature-completer"
-      override def lName = "Typing of\n type's signature"
-      override protected def eventStringRep = "Tree to be typed: " + tree
     }
 
-    case class ClassSigNamer(templ: Template, tparams: List[TypeDef])
+    case class ClassSigNamer(templ0: Template, tparams0: List[TypeDef])
       extends TreeEvent with NamerEvent {
-      //override def tag = super.tag + "-class-signature-completer"
-      override def tag = "class-signature-completer"
-      override def lName = "Typing of\n class' signature"
+      val templ = duplicateTreeWithPos(templ0)
+      val tparams = tparams0.map(duplicateTreeWithPos)
       def tree = templ
-      override protected def eventStringRep =
-        "Completing class " + templ + " with type params: " + tparams
+      override def tag = "class-signature-completer"
     }
 
     // MethodSigNamer
-
-    case class MethodSigNamer(tree: Tree, rhs: Tree, tpt: Tree, tparams: List[TypeDef])
+    case class MethodSigNamer(tree0: Tree, rhs0: Tree, tpt0: Tree, tparams0: List[TypeDef])
       extends TreeEvent with NamerEvent {
-      //override def tag = super.tag + "-method-signature-completer"
+      val tree = duplicateTreeWithPos(tree0)
+      val rhs = duplicateTreeWithPos(rhs0)
+      val tpt = duplicateTreeWithPos(tpt0)
+      val tparams = tparams0.map(duplicateTreeWithPos)
       override def tag = "method-signature-completer"
-      override def lName = "Typing of\n method's signature"
-      override protected def eventStringRep =
-        "Completing method of type " + tpt + " with type params: " + tparams +
-         "\n" + rhs
     }
 
-    case class MissingParameterType(tree: Tree)
+    case class MissingParameterType(tree0: Tree)
       extends TreeEvent with NamerEvent with HardErrorEvent {
+      val tree = duplicateTreeWithPos(tree0)      
       override def tag = "missing-parameter-type"
-      override def lName = "Missing parameter type"
-      override protected def eventStringRep =
-        "Missing parameter type for " + tree
     }
 
-    case class TypeDefSigNamer(tpsym: Symbol, rhs: Tree, tparams: List[TypeDef])
+    // can't clone symbols as it causes cyclic references
+    case class TypeDefSigNamer(tpsym: Symbol, rhs0: Tree, tparams0: List[TypeDef])
       extends TreeEvent with NamerEvent {
-      //override def tag = super.tag + "-abstract-type-signature-completer"
       override def tag = "abstract-type-signature-completer"
-      override def lName = "Typing of\n abstract type's signature"
+      val rhs = duplicateTreeWithPos(rhs0)
+      val tparams = tparams0.map(duplicateTreeWithPos)
       def tree = rhs
-      override protected def eventStringRep =
-        "Completing abstract type definition " + tpsym + " with type params: " + tparams +
-        "\n" + rhs
     }
 
-    case class ModuleSigNamer(templ: Template)
+    case class ModuleSigNamer(templ0: Template)
       extends TreeEvent with NamerEvent {
-      //override def tag = super.tag + "-module-signature-completer"
-      override def tag = "object-signature-completer"
-      override def lName = "Typing \n object's signature"
+      val templ = duplicateTreeWithPos(templ0)
       def tree = templ
-      override protected def eventStringRep =
-        "Completing object " + templ
+      override def tag = "object-signature-completer"
     }
 
-    case class ValDefSigNamer(name: Name, rhs: Tree, tpt: Tree, vdef: Tree)
+    case class ValDefSigNamer(name: Name, rhs0: Tree, tpt0: Tree, vdef0: Tree)
       extends TreeEvent with NamerEvent {
+      val rhs = duplicateTreeWithPos(rhs0)
+      val tpt = duplicateTreeWithPos(tpt0)
+      val vdef = duplicateTreeWithPos(vdef0)
+      def tree = vdef
       override def tag = super.tag + "-value-signature-completer"
-      //override def lName = "value-signature-completer"
-      override def lName = "Typing of\n value's signature"
-      val tree = duplicateTreeWithPos(vdef)
-      override protected def eventStringRep =
-        "Completing value definition " + name + ": " + tpt + "\n" +
-        (if (tpt.isEmpty) "Compute type from the body of the value " else "Type type" )+
-        "\n" + rhs
     }
   }
 
