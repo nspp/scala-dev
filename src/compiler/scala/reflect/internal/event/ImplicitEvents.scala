@@ -53,7 +53,7 @@ trait ImplicitEventsUniverse {
     
 
     case class VerifyImplicit(newTree0: Tree, oldTree: Tree,
-        pt: Type, implicitSym: Symbol, implicitRep: String)(implicit e: Explanation)
+        pt: Type, info: ImplicitInfo)(implicit e: Explanation)
       extends TreeEvent with ImplicitEvent with SymbolReferencesEvent {
       override def tag = "verify-available-implicit"
       val tree = duplicateTreeWithPos(if (oldTree.isEmpty)
@@ -62,7 +62,7 @@ trait ImplicitEventsUniverse {
           case _ => oldTree
         } else oldTree)
       val newTree = duplicateTreeWithPos(newTree0)
-      def references = List(implicitSym)
+      def references = List(info.sym)
     }
 
     case class ImplicitSearchDone(originEvent: Int)
@@ -107,11 +107,54 @@ trait ImplicitEventsUniverse {
       def tpe = tpe0
       def participants = List()
     }
+    
+    // advanced
+    trait ImplicitsEligibility
+    
+    case class AllEligibleImplicits(pt0: Type)
+      extends Event with ImplicitEvent with ImplicitsEligibility {
+      override def tag = super.tag + "-eligible-test"
+      def participants = List()
+    }
+    
+    case class AllEligibleImplicitsDone(pt0: Type, originEvent: Int, infos: List[ImplicitInfo])
+      extends Event with ImplicitEvent with DoneBlock with SymbolReferencesEvent with ImplicitsEligibility{
+      override def tag = super.tag + "-eligible-test-done"
+      def participants = infos
+      def references = infos.map(_.sym)
+    }
+    
+    case class InfoEligibleTest(info: ImplicitInfo)
+      extends Event with ImplicitEvent with SymbolReferencesEvent with ImplicitsEligibility {
+      override def tag = super.tag + "-eligible-info"
+      def participants = List(info.sym)
+      def references = List(info.sym)
+    }
+    
+    case class InfoEligibleTestDone(info: ImplicitInfo, originEvent: Int, eligible: Boolean)
+      extends Event with ImplicitEvent with DoneBlock with ImplicitsEligibility {
+      override def tag = super.tag + "-eligible-info"
+      def participants = List(info)
+      def references = List(info.sym)
+    }
+    
+    case class CheckTypesCompatibility(fast: Boolean, tp0: Type, pt0: Type)
+      extends Event with ImplicitEvent {
+      override def tag = super.tag + "-check-types-comp"
+      def participants = List(tp0, pt0)
+    }
+    
+    case class CheckedTypesCompatibility(tp0: Type, pt0: Type, originEvent: Int, res: Boolean)
+      extends Event with ImplicitEvent with DoneBlock {
+      override def tag = super.tag + "-checked-types-comp"
+      def participants = List(tp0, pt0)
+    }
+    // end advanced 
 
     case class AmbiguousImplicitsError(tree0: Tree,
       info01Sym: Symbol, info01Tpe: Type,
       info02Sym: Symbol, info02Tpe: Type)
-      extends TreeEvent with ImplicitEvent with SymbolReferencesEvent with SoftErrorEvent{
+      extends TreeEvent with ImplicitEvent with SymbolReferencesEvent with SoftErrorEvent {
       val tree = duplicateTreeWithPos(tree0)
       val info1Sym = deepSymClone(info01Sym)
       val info1Tpe = deepTypeClone(info01Tpe)

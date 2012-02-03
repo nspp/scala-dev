@@ -381,7 +381,8 @@ trait Implicits {
      *  they are: perhaps someone more familiar with the intentional distinctions
      *  can examine the now much smaller concrete implementations below.
      */
-    private def checkCompatibility(fast: Boolean, tp0: Type, pt0: Type): Boolean = {
+    private def checkCompatibility(fast: Boolean, tp0: Type, pt0: Type): Boolean =
+      EV.eventBlockInform[Boolean](EV.CheckTypesCompatibility(fast, tp0, pt0), EV.CheckedTypesCompatibility(tp0, pt0, _, _)){
       @tailrec def loop(tp: Type, pt: Type): Boolean = tp match {
         case mt @ MethodType(params, restpe) =>
           if (mt.isImplicit)
@@ -485,7 +486,7 @@ trait Implicits {
         SearchFailure
       }
       
-      val implicitEvent = EV.VerifyImplicit(itree, tree, wildPt, info.sym, info.name.toString)(EV.DefaultExplanation)
+      val implicitEvent = EV.VerifyImplicit(itree, tree, wildPt, info)(EV.DefaultExplanation)
       EV <<< implicitEvent
       try {
         val itree1 =
@@ -702,12 +703,19 @@ trait Implicits {
       /** Sorted list of eligible implicits.
        */
       val eligible = {
-        val matches = iss flatMap { is =>
-          val result = is filter (info => checkValid(info.sym) && survives(info))
+        
+        val matches = EV.eventBlockInform[List[ImplicitInfo]](EV.AllEligibleImplicits(pt), EV.AllEligibleImplicitsDone(pt, _, _)) { 
+          
+          iss flatMap { is =>
+          val result = is filter (info =>
+            EV.eventBlockInform[Boolean](EV.InfoEligibleTest(info), EV.InfoEligibleTestDone(info, _, _)) { 
+              checkValid(info.sym) && survives(info)
+            })
           if (shadowed ne null)
             shadowed addEntries (is map (_.name))
 
           result
+        }
         }
 
         // most frequent one first
