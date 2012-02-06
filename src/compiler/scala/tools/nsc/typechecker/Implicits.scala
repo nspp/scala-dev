@@ -486,8 +486,7 @@ trait Implicits {
         SearchFailure
       }
       
-      val implicitEvent = EV.VerifyImplicit(itree, tree, wildPt, info)(EV.DefaultExplanation)
-      EV <<< implicitEvent
+      val implicitEvent = EV <<< EV.VerifyImplicit(itree, tree, wildPt, info)(EV.DefaultExplanation)
       try {
         val itree1 =
           if (isView) {

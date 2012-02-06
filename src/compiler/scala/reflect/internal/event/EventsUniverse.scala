@@ -10,7 +10,8 @@ trait EventsUniverse extends AnyRef
                      with TyperEventsUniverse
                      with InferEventsUniverse
                      with NamerEventsUniverse
-                     with ImplicitEventsUniverse {
+                     with ImplicitEventsUniverse
+                     with TypesEventsUniverse {
   outer: SymbolTable =>
 
   val EV: EventModel {

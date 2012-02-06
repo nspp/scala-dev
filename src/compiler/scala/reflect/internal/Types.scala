@@ -727,8 +727,9 @@ trait Types extends api.Types { self: SymbolTable =>
       else {
         val result = (this eq that) ||
           (if (explainSwitch) explain("<:", isSubType, this, that)
-           else isSubType(this, that, AnyDepth))
-        EV << EV.SubTypeCheck(this, that, result)
+           else EV.eventBlockInform[Boolean](EV.SubTypeCheck(this, that), EV.SubTypeCheckRes(_, _)) {
+             isSubType(this, that, AnyDepth)
+           })
         result
       }
     }
@@ -2749,11 +2750,11 @@ trait Types extends api.Types { self: SymbolTable =>
       // addressed here: all lower bounds are retained and their intersection calculated when the
       // bounds are solved.
       //
-      // In a side-effect free universe, checking tp and tp.parents beofre checking tp.baseTypeSeq
+      // In a side-effect free universe, checking tp and tp.parents before checking tp.baseTypeSeq
       // would be pointless. In this case, each check we perform causes us to lose specificity: in
       // the end the best we'll do is the least specific type we tested against, since the typevar
       // does not see these checks as "probes" but as requirements to fulfill.
-      // TODO: the `suspended` flag can be used to poke around with leaving a trace
+      // TODO: the `suspended` flag can be used to poke around without leaving a trace
       //
       // So the strategy used here is to test first the type, then the direct parents, and finally
       // to fall back on the individual base types. This warrants eventual re-examination.
@@ -5121,8 +5122,9 @@ trait Types extends api.Types { self: SymbolTable =>
       // --> thus, cannot be subtypes (Any/Nothing has already been checked)
     }))
 
-  def isSubArg(t1: Type, t2: Type, variance: Int) =
+  def isSubArg(t1: Type, t2: Type, variance: Int) = EV.eventBlock(EV.SubTypeCheckArg(variance), EV.TypesDone(_)) {
     (variance > 0 || t2 <:< t1) && (variance < 0 || t1 <:< t2)
+  }
 
   def isSubArgs(tps1: List[Type], tps2: List[Type], tparams: List[Symbol]): Boolean =
     corresponds3(tps1, tps2, tparams map (_.variance))(isSubArg)
@@ -5137,6 +5139,9 @@ trait Types extends api.Types { self: SymbolTable =>
     if (tp2 eq NoPrefix) return tp1.typeSymbol.isPackageClass
     if (isSingleType(tp1) && isSingleType(tp2) || isConstantType(tp1) && isConstantType(tp2)) return tp1 =:= tp2
     if (tp1.isHigherKinded || tp2.isHigherKinded) return isHKSubType0(tp1, tp2, depth)
+    
+    import EV.Side._
+    import EV.{SubCompare => Comp, FailedSubtyping => Failed}
 
     /** First try, on the right:
      *   - unwrap Annotated types, BoundedWildcardTypes,
@@ -5152,6 +5157,7 @@ trait Types extends api.Types { self: SymbolTable =>
             val sym2 = tr2.sym
             val pre1 = tr1.pre
             val pre2 = tr2.pre
+            EV.eventBlockInform[Boolean](EV.CompareTypes(tp1, tp2, Both, Comp.CTypeRef), EV.CompareDone(tp1, tp2, _, _)) {
             (((if (sym1 == sym2) phase.erasedTypes || pre1 <:< pre2
                else (sym1.name == sym2.name && !sym1.isModuleClass && !sym2.isModuleClass &&
                      (isUnifiable(pre1, pre2) || isSameSpecializedSkolem(sym1, sym2, pre1, pre2)))) &&
@@ -5163,11 +5169,14 @@ trait Types extends api.Types { self: SymbolTable =>
              }
              ||
              thirdTryRef(tr1, tr2))
+            }
           case _ =>
             secondTry
         }
       case AnnotatedType(_, _, _) =>
-        tp1.withoutAnnotations <:< tp2.withoutAnnotations && annotationsConform(tp1, tp2)
+        EV.eventBlockInform[Boolean](EV.CompareTypes(tp1, tp2, Right, Comp.CAnnotated), EV.CompareDone(tp1, tp2, _, _)) {
+          tp1.withoutAnnotations <:< tp2.withoutAnnotations && annotationsConform(tp1, tp2)
+        }
       case BoundedWildcardType(bounds) =>
         tp1 <:< bounds.hi
       case tv2 @ TypeVar(_, constr2) =>
@@ -5188,7 +5197,9 @@ trait Types extends api.Types { self: SymbolTable =>
      */
     def secondTry = tp1 match {
       case AnnotatedType(_, _, _) =>
-        tp1.withoutAnnotations <:< tp2.withoutAnnotations && annotationsConform(tp1, tp2)
+        EV.eventBlockInform[Boolean](EV.CompareTypes(tp1, tp2, Left, Comp.CAnnotated), EV.CompareDone(tp1, tp2, _, _)) {
+          tp1.withoutAnnotations <:< tp2.withoutAnnotations && annotationsConform(tp1, tp2)
+        }
       case BoundedWildcardType(bounds) =>
         tp1.bounds.lo <:< tp2
       case tv @ TypeVar(_,_) =>
@@ -5196,7 +5207,9 @@ trait Types extends api.Types { self: SymbolTable =>
       case ExistentialType(_, _) =>
         try {
           skolemizationLevel += 1
-          tp1.skolemizeExistential <:< tp2
+          EV.eventBlockInform[Boolean](EV.CompareTypes(tp1, tp2, Left, Comp.CSkolemizedExist), EV.CompareDone(tp1, tp2, _, _)) {
+            tp1.skolemizeExistential <:< tp2
+          }
         } finally {
           skolemizationLevel -= 1
         }
@@ -5208,14 +5221,19 @@ trait Types extends api.Types { self: SymbolTable =>
       val sym2 = tp2.sym
       sym2 match {
         case NotNullClass => tp1.isNotNull
-        case SingletonClass => tp1.isStable || fourthTry
+        case SingletonClass =>
+          EV.eventBlockInform[Boolean](EV.CompareTypes(tp1, tp2, Right, Comp.CSingletonClass), EV.CompareDone(tp1, tp2, _, _)) {
+            tp1.isStable || fourthTry
+          }
         case _: ClassSymbol =>
-          if (isRaw(sym2, tp2.args))
-            isSubType(tp1, rawToExistential(tp2), depth)
-          else if (sym2.name == tpnme.REFINE_CLASS_NAME)
-            isSubType(tp1, sym2.info, depth)
-          else
-            fourthTry
+          EV.eventBlockInform[Boolean](EV.CompareTypes(tp1, tp2, Right, Comp.CClassSym), EV.CompareDone(tp1, tp2, _, _)) {
+            if (isRaw(sym2, tp2.args))
+              isSubType(tp1, rawToExistential(tp2), depth)
+            else if (sym2.name == tpnme.REFINE_CLASS_NAME)
+              isSubType(tp1, sym2.info, depth)
+            else
+              fourthTry
+          }
         case _: TypeSymbol =>
           if (sym2 hasFlag DEFERRED) {
             val tp2a = tp2.bounds.lo
@@ -5237,8 +5255,10 @@ trait Types extends api.Types { self: SymbolTable =>
       case tr2: TypeRef =>
         thirdTryRef(tp1, tr2)
       case rt2: RefinedType =>
-        (rt2.parents forall (tp1 <:< _)) &&
-        (rt2.decls forall tp1.specializes)
+        EV.eventBlockInform[Boolean](EV.CompareTypes(tp1, tp2, Right, Comp.CRefined), EV.CompareDone(tp1, tp2, _, _)) {
+          (rt2.parents forall (tp1 <:< _)) &&
+          (rt2.decls forall tp1.specializes)
+        }
       case et2: ExistentialType =>
         et2.withTypeVars(tp1 <:< _, depth) || fourthTry
       case nn2: NotNullType =>
@@ -5248,12 +5268,15 @@ trait Types extends api.Types { self: SymbolTable =>
           case mt1 @ MethodType(params1, res1) =>
             val params2 = mt2.params
             val res2 = mt2.resultType
-            (sameLength(params1, params2) &&
-             matchingParams(params1, params2, mt1.isJava, mt2.isJava) &&
-             (res1 <:< res2.substSym(params2, params1)) &&
-             mt1.isImplicit == mt2.isImplicit)
+            EV.eventBlockInform[Boolean](EV.CompareTypes(tp1, tp2, Both, Comp.CMethod), EV.CompareDone(tp1, tp2, _, _)) {
+              (sameLength(params1, params2) &&
+               matchingParams(params1, params2, mt1.isJava, mt2.isJava) &&
+               (res1 <:< res2.substSym(params2, params1)) &&
+               mt1.isImplicit == mt2.isImplicit)
+            }
           // TODO: if mt1.params.isEmpty, consider NullaryMethodType?
           case _ =>
+            EV << EV.FailedSubtyping(tp1, tp2, Right, Comp.CMethod)
             false
         }
       case pt2 @ NullaryMethodType(_) =>
@@ -5262,13 +5285,17 @@ trait Types extends api.Types { self: SymbolTable =>
           case pt1 @ NullaryMethodType(_) =>
             pt1.resultType <:< pt2.resultType
           case _ =>
+            EV << EV.FailedSubtyping(tp1, tp2, Right, Comp.CNullary)
             false
         }
       case TypeBounds(lo2, hi2) =>
         tp1 match {
           case TypeBounds(lo1, hi1) =>
-            lo2 <:< lo1 && hi1 <:< hi2
+            EV.eventBlockInform[Boolean](EV.CompareTypes(tp1, tp2, Both, Comp.CTypeBounds), EV.CompareDone(tp1, tp2, _, _)) {
+              lo2 <:< lo1 && hi1 <:< hi2
+            }
           case _ =>
+            EV << EV.FailedSubtyping(tp1, tp2, Right, Comp.CTypeBounds)
             false
         }
       case _ =>
@@ -5291,11 +5318,13 @@ trait Types extends api.Types { self: SymbolTable =>
                 isSingleType(tp2) && tp1 <:< tp2.widen
             }
           case _: ClassSymbol =>
-            if (isRaw(sym1, tr1.args))
-              isSubType(rawToExistential(tp1), tp2, depth)
-            else
-              sym1.name == tpnme.REFINE_CLASS_NAME &&
-              isSubType(sym1.info, tp2, depth)
+            EV.eventBlockInform[Boolean](EV.CompareTypes(tp1, tp2, Right, Comp.CClassSym), EV.CompareDone(tp1, tp2, _, _)) {
+              if (isRaw(sym1, tr1.args))
+                isSubType(rawToExistential(tp1), tp2, depth)
+              else
+                sym1.name == tpnme.REFINE_CLASS_NAME &&
+                isSubType(sym1.info, tp2, depth)
+            }
           case _: TypeSymbol =>
             if (sym1 hasFlag DEFERRED) {
               val tp1a = tp1.bounds.hi
@@ -5304,13 +5333,17 @@ trait Types extends api.Types { self: SymbolTable =>
               isSubType(tp1.normalize, tp2.normalize, depth)
             }
           case _ =>
+            EV << EV.FailedSubtyping(tp1, tp2, Left, Comp.CTypeRef)
             false
         }
       case RefinedType(parents1, _) =>
-        parents1 exists (_ <:< tp2)
+        EV.eventBlockInform[Boolean](EV.CompareTypes(tp1, tp2, Left, Comp.CRefined), EV.CompareDone(tp1, tp2, _, _)) {
+          parents1 exists (_ <:< tp2)
+        }
       case _: SingletonType | _: NotNullType =>
         tp1.underlying <:< tp2
       case _ =>
+        EV << EV.FailedSubtyping(tp1, tp2, Both, Comp.COther)
         false
     }
 
@@ -5860,7 +5893,7 @@ trait Types extends api.Types { self: SymbolTable =>
         t
       case _ =>
         val ev = EV.CalcLub(ts, NonTrivial)
-        EV <<< ev
+        EV <<< EV.CalcLub(ts, NonTrivial) // TODO this will need to be optimized
         try {
           lub(ts, lubDepth(ts))
         } finally {

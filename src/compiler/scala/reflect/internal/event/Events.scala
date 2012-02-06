@@ -14,6 +14,7 @@ trait Events {
                   with ImplicitEvents
                   with UtilEvents
                   with LubGlbEvents
+                  with TypesEvents
                   {
     self: EventModel =>
 
@@ -81,12 +82,7 @@ trait Events {
       private def callString(m: Symbol) = anyString(m.enclClass) + "." + anyString(m)
       override def eventString = joinString(callString(sourceMethod), binaryOp, callString(targetMethod))
     }
-    case class SubTypeCheck(value1: Type, value2: Type, result: Boolean) extends TwoTypeEvent {
-      def tag      = "subTypeCheck"
-      def lhs      = value1
-      def rhs      = value2
-      def binaryOp = "<:<"
-    }
+
     case class SymSetInfo(sym: Symbol, info: Type) extends SymEvent {
       def tag = "symSetInfo"
       override def eventString = {
