@@ -17,6 +17,8 @@ trait EventsUniverse extends AnyRef
   val EV: EventModel {
     val global: outer.type
   }
+  
+  def instrumentingOn: Boolean
 
   private[scala] var eventIds = 0
 
@@ -69,6 +71,9 @@ trait EventsUniverse extends AnyRef
     def joinString(xs: Any*) = xs map anyString filterNot (_ == "") mkString " "
     def symbolPos(sym: Symbol): Position = NoPosition
     def treePos(tree: Tree): Position = NoPosition
+    
+    def eventHooks: List[Hook]
+    def openBlockResponse(ev: Event): EventResponse
 
     protected def cast[T](x: Any): T = x.asInstanceOf[T]
     protected def anyGetClass(x: Any): JClass[_] = cast[AnyRef](x).getClass
@@ -346,8 +351,8 @@ trait EventsUniverse extends AnyRef
       def stop(): this.type
       def show(ev: Event): Unit = ()
 
-      def startBlock: Unit
-      def endBlock: Unit
+      def startBlock(): Unit
+      def endBlock(): Unit
 
       def hooking[T](body: => T): T = {
         try {
@@ -375,46 +380,99 @@ trait EventsUniverse extends AnyRef
       def apply(f: Event =>? EventResponse): Hook
     }
 
+    // Need to comment out for the inliner to do the job
+    /*
     // Normal way of informing about an event
     // Contains no information for visualization
     @elidable(2500)
-    def <<(ev: Event): EventResponse
+    @inline
+    def <<(ev: => Event): EventResponse
 
     // Event starting block
     @elidable(2500)
-    def <<<(ev: Event): EventResponse
+    @inline
+    def <<<(ev: => Event): EventResponse
 
     // Event ending block without actual handling of the event
     @elidable(2500)
-    def >>>(ev: Event): EventResponse
+    @inline
+    def >>>(ev: => Event): EventResponse*/
 
-    def eventBlock[T](startEvent: Event, endEvent: Int => Event)(f: => T): T = {
-      <<<(startEvent)
-      val res = try f finally {
-        >>>(endEvent(startEvent.id))
+    // Normal way of informing about an event
+    @elidable(2500)
+    @inline
+    final def <<(ev: Event): EventResponse = {
+      if (eventsOn) {
+        //dlog(ev.toString)
+        eventHooks foreach (_ applyIfDefined ev)
       }
-      res
+      NoResponse
     }
 
-    def eventBlockWithEv[T](startEvent: Event, endEvent: Int => Event)(f: Event => T): T = {
-      <<<(startEvent)
-      val res = try f(startEvent) finally {
-        >>>(endEvent(startEvent.id))
+    @inline
+    final def <<<(ev: Event): EventResponse = {
+      if (eventsOn) {
+        // start block
+        //dlog(ev.toString)
+        assert(!ev.isInstanceOf[DoneBlock])
+        eventHooks foreach (h => {h applyIfDefined ev; h.startBlock() })
+        openBlockResponse(ev)
+      } else NoResponse
+    }
+
+    @inline
+    final def >>>(ev: Event): EventResponse = {
+      if (eventsOn) {
+        // end block
+        //dlog(ev.toString)
+        assert(ev.isInstanceOf[DoneBlock], ev.getClass + " should be an instance of DoneBlock")
+        // Should update tag to super.tag`-done`
+        // but cannot do it easily without forwarding everything
+        eventHooks foreach (h => {h applyIfDefined ev; h.endBlock()})
       }
-      res
+      NoResponse
+    }
+    
+    // Note: assigning event within the eventsOn block is used only to
+    // avoid creating multiple instances of the same event.
+    // So that the inliner does the correct work we explicitly add the eventsOn mode
+    // so that the normal compiler's performance is not hammered by the events.
+    @inline
+    final def eventBlock[T](startEvent: => Event, endEvent: => Int => Event)(f: => T): T = {
+      if (eventsOn) {
+        <<<(startEvent)
+        val res = try f finally {
+          >>>(endEvent(startEvent.id))
+        }
+        res
+      } else f
+    }
+
+    // TODO: disallow?
+    @inline
+    final def eventBlockWithEv[T](startEvent: => Event, endEvent: => Int => Event)(f: Event => T): T = {
+      if (eventsOn) {
+        <<<(startEvent)
+        val res = try f(startEvent) finally {
+          >>>(endEvent(startEvent.id))
+        }
+        res
+      } else f(NoEvent)
     }
 
     // TODO: this is a nasty hack to make return statements being handled correctly in blocks
-    def eventBlockInform[T](startEvent: Event, endEvent: (Int, T) => Event)(f: => T): T = {
-      <<<(startEvent)
-      val res = try f catch {
-        case ex: scala.runtime.NonLocalReturnControl[T] =>
-          println("[non local return in block]")
-          >>>(endEvent(startEvent.id, ex.value))
-          throw ex
-      }
-      >>>(endEvent(startEvent.id, res))
-      res
-    }
+    @inline
+    final def eventBlockInform[T](startEvent: => Event, endEvent: => (Int, T) => Event)(f: => T): T = 
+      if (eventsOn) {
+        <<<(startEvent)
+        val res = try f catch {
+          case ex: scala.runtime.NonLocalReturnControl[T] =>
+            println("[non local return in block]")
+            >>>(endEvent(startEvent.id, ex.value))
+            throw ex
+        }
+        >>>(endEvent(startEvent.id, res))
+        res
+      } else f
   }
 }

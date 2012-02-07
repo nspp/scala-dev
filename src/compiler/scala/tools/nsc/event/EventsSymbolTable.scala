@@ -104,6 +104,8 @@ trait EventsSymbolTable extends EventsUniverse
     // object FireHose extends Hose(Int.MaxValue) {
     //
     // }
+    
+    def openBlockResponse(ev: Event): EventResponse = ev
 
 
     trait Hook extends AbsHook {
@@ -243,7 +245,8 @@ trait EventsSymbolTable extends EventsUniverse
       def apply(f: Event => Boolean): Filter = apply("", f)
     }
 
-    def <<(ev: Event): EventResponse = {
+/*    @inline
+    final def <<(ev: Event): EventResponse = {
       if (eventsOn) {
         dlog(ev.toString)
         //assert(!ev.isInstanceOf[DoneBlock])
@@ -252,7 +255,8 @@ trait EventsSymbolTable extends EventsUniverse
       NoResponse
     }
 
-    def <<<(ev: Event): EventResponse = {
+    @inline
+    final def <<<(ev: Event): EventResponse = {
       if (eventsOn) {
         // start block
         dlog(ev.toString)
@@ -262,7 +266,8 @@ trait EventsSymbolTable extends EventsUniverse
       } else NoResponse
     }
 
-    def >>>(ev: Event): EventResponse = {
+    @inline
+    final def >>>(ev: Event): EventResponse = {
       if (eventsOn) {
         // end block
         dlog(ev.toString)
@@ -273,5 +278,6 @@ trait EventsSymbolTable extends EventsUniverse
       }
       NoResponse
     }
+    */
   }
 }

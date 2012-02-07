@@ -86,6 +86,8 @@ class Global(var currentSettings: Settings, var reporter: Reporter) extends Symb
 
     isInitialized = true
   }
+  
+  def instrumentingOn = false // by default we are off
 
   object EVDefaults {
     implicit val e: EV.Explanation = EV.DefaultExplanation

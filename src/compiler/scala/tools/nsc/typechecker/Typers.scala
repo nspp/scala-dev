@@ -105,6 +105,7 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
         def mkPositionalArg(argTree: Tree, paramName: Name) = argTree
         def mkNamedArg(argTree: Tree, paramName: Name) = atPos(argTree.pos)(new AssignOrNamedArg(Ident(paramName), (argTree)))
         var mkArg: (Tree, Name) => Tree = mkPositionalArg
+        var failed = false
 
         // DEPMETTODO: instantiate type vars that depend on earlier implicit args (see adapt (4.1))
         //
@@ -124,6 +125,7 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
           } else {
             mkArg = mkNamedArg // don't pass the default argument (if any) here, but start emitting named arguments for the following args
             if (!param.hasDefault) {
+              failed = true
               context.errBuffer.find(_.kind == ErrorKinds.Divergent) match {
                 case Some(divergentImplicit) =>
                   // DivergentImplicit error has higher priority than "no implicit found"
@@ -146,7 +148,6 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
             }*/
           }
           }
-          //EV >> EV.InferredImplicitAdapt
         }
 
         val args = argBuff.toList
@@ -155,7 +156,10 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
           for (arg <- args) ar.subst traverse arg
         }
 
-        new ApplyToImplicitArgs(fun, args) setPos fun.pos
+        // TODO can be replaced by trunk failure flag
+        val res = new ApplyToImplicitArgs(fun, args) setPos fun.pos
+        if (failed) res setType ErrorType else res
+
       case ErrorType =>
         fun
     }
@@ -786,8 +790,15 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
                 tree1.tpe = addAnnotations(tree1, tree1.tpe)
                 if (tree1.isEmpty) tree1 else adapt(tree1, mode, pt, EmptyTree)
             }
-          else
-            typer1.typed(typer1.applyImplicitArgs(tree), mode, pt)
+          else {
+            val withImplicitArgs = typer1.applyImplicitArgs(tree)
+            // TODO cleanup/combine error checking
+            if (typer1.context.hasErrors || withImplicitArgs.isErrorTyped) {
+              setError(duplicateTree(tree))
+            } else {
+              typer1.typed(withImplicitArgs)
+            }
+          }
         }
       }
 
@@ -2576,7 +2587,7 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
               // target of a call.  Since this information is no longer available from
               // typedArg, it is recorded here.
               checkDead.updateExpr(fun)
-              EV << EV.TParamsResolvedDoTypedApply(tree)
+              //EV << EV.TParamsResolvedDoTypedApply(tree)
               val args1 = typedArgs(args, forArgMode(fun, mode), paramTypes, formals)(EV.TypeArgForCorrectArgsNum)
               // instantiate dependent method types, must preserve singleton types where possible (stableTypeFor) -- example use case:
               // val foo = "foo"; def precise(x: String)(y: x.type): x.type = {...}; val bar : foo.type = precise(foo)(foo)

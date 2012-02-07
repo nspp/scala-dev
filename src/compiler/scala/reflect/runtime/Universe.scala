@@ -37,6 +37,8 @@ class Universe extends SymbolTable with internal.transform.Transforms with Event
 
   type Position = String // source file?
   val NoPosition = ""
+    
+  def instrumentingOn: Boolean = false
 
   // establish root association to avoid cyclic dependency errors later
   classToScala(classOf[java.lang.Object]).initialize
@@ -52,9 +54,6 @@ trait EventUniverseStub {
     type CompilationUnit = NoCompilationUnit.type
     type Phase = internal.Phase
 
-    def <<(ev: Event): Unit =  {}
-    def >>>(ev: Event): Unit = {}
-    def <<<(ev: Event): Unit = {}
     val Filter: FilterCompanion = null
     val Hook: HookCompanion = null
     val NameManifest: scala.reflect.Manifest[outer.Name] = null
@@ -72,6 +71,8 @@ trait EventUniverseStub {
     def flagsString(flags: Long): String = internal.Flags.flagsToString(flags)
     def posString(pos: outer.Position): String = ""
     def formatTypeString(tpe: Type): String = "(not implemented)"
+    def eventHooks: List[Hook] = Nil
+    def openBlockResponse(ev: Event) = ()
 
     object NoCompilationUnit {
       def source: Any = null

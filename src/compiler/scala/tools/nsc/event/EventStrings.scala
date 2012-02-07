@@ -23,7 +23,7 @@ trait EventStrings {
      *  induces events.
      */
     private var _eventsOn: Boolean = true
-    def eventsOn = _eventsOn
+    def eventsOn = instrumentingOn && _eventsOn
     def withNoEvents[T](body: => T): T = {
       val saved = _eventsOn
       try {
