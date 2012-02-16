@@ -1112,7 +1112,7 @@ trait Implicits {
       def findSubManifest(tp: Type) = findManifest(tp, if (full) FullManifestClass else OptManifestClass)
       def mot(tp0: Type, from: List[Symbol], to: List[Type]): SearchResult = {
         implicit def wrapResult(tree: Tree): SearchResult =
-          if (tree == EmptyTree) SearchFailure else new SearchResult(tree, if (from.isEmpty) EmptyTreeTypeSubstituter else new TreeTypeSubstituter(from, to))
+          if (tree == EmptyTree || context.hasErrors) SearchFailure else new SearchResult(tree, if (from.isEmpty) EmptyTreeTypeSubstituter else new TreeTypeSubstituter(from, to))
 
         val tp1 = tp0.normalize
         tp1 match {

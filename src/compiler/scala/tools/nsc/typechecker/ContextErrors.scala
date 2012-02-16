@@ -54,7 +54,9 @@ trait ContextErrors {
     def errPos = tree.pos
   }
 
-  case class AmbiguousTypeError(underlyingTree: Tree, errPos: Position, errMsg: String, kind: ErrorKind = ErrorKinds.Ambiguous) extends AbsTypeError
+  case class AmbiguousTypeError(underlyingTree: Tree, errPos: Position, errMsg: String) extends AbsTypeError {
+    def kind: ErrorKind = ErrorKinds.Ambiguous
+  }
 
   case class PosAndMsgTypeError(errPos: Position, errMsg: String, kind: ErrorKind = ErrorKinds.Normal) extends AbsTypeError
 
@@ -807,18 +809,17 @@ trait ContextErrors {
 
       def PolyAlternativeError(tree: Tree, argtypes: List[Type], sym: Symbol, err: PolyAlternativeErrorKind.ErrorType) = {
         import PolyAlternativeErrorKind._
-        val msg =
-          err match {
-            case WrongNumber =>
-              "wrong number of type parameters for " + treeSymTypeMsg(tree)
-            case NoParams =>
-              treeSymTypeMsg(tree) + " does not take type parameters"
-            case ArgsDoNotConform =>
-              "type arguments " + argtypes.mkString("[", ",", "]") +
+        err match {
+          case WrongNumber =>
+            issueNormalTypeError(tree, "wrong number of type parameters for " + treeSymTypeMsg(tree))
+          case NoParams =>
+            issueNormalTypeError(tree, treeSymTypeMsg(tree) + " does not take type parameters")
+          case ArgsDoNotConform =>
+            val msg = "type arguments " + argtypes.mkString("[", ",", "]") +
               " conform to the bounds of none of the overloaded alternatives of\n "+sym+
               ": "+sym.info
-          }
-        issueNormalTypeError(tree, msg)
+            issueTypeError(AmbiguousTypeError(tree, tree.pos, msg))
+        }
         ()
       }
     }
