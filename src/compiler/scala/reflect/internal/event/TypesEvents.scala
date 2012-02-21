@@ -60,9 +60,10 @@ trait TypesEventsUniverse {
       def participants = List()
     }
         
-    case class CompareTypes(tp1: Type, tp2: Type, which: Side.Value, compType: SubCompare.Value)
+    case class CompareTypes(tp10: Type, tp20: Type, which: Side.Value, compType: SubCompare.Value)
       extends Event with TypesEvent with Subtyping {
-      
+      val tp1 = deepTypeClone(tp10)
+      val tp2 = deepTypeClone(tp20)
     }
 
     case class CompareDone(tp1: Type, tp2: Type, originEvent: Int, subtypes: Boolean)

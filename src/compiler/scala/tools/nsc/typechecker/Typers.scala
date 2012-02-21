@@ -1674,7 +1674,7 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
               else subst(tpt1.tpe.typeArgs(0))
             else subst(tpt1.tpe)
           } else tpt1.tpe
-          newTyper(typer1.context.make(vdef, sym)).transformedOrTyped(vdef.rhs, EXPRmode | BYVALmode, tpt2)(EV.TypeValDefBody(vdef.rhs))
+          newTyper(typer1.context.make(vdef, sym)).transformedOrTyped(vdef.rhs, EXPRmode | BYVALmode, tpt2)(EV.TypeValDefBody(vdef.rhs, true))
         }
       treeCopy.ValDef(vdef, typedMods, vdef.name, tpt1, checkDead(rhs1)) setType NoType
     }
@@ -2448,7 +2448,7 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
               // the assign is untyped; that's ok because we call doTypedApply
               atPos(arg.pos) { new AssignOrNamedArg(arg.lhs , rhs1) }
             case arg =>
-              val arg1 = typedArg(arg, amode, BYVALmode, WildcardType)(EV.DefaultExplanation)
+              val arg1 = typedArg(arg, amode, BYVALmode, WildcardType)(EV.TypeArgInOverloadedApply(arg))
               argtpes += arg1.tpe.deconst
               arg1
           }

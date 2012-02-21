@@ -22,10 +22,11 @@ trait ImplicitEventsUniverse {
       def references = if (coercion.symbol != NoSymbol) List(coercion.symbol) else List()
     }
 
-    case class InferImplicit(tree0: Tree, pt: Type, reportAmbiguous: Boolean,
+    case class InferImplicit(tree0: Tree, pt0: Type, reportAmbiguous: Boolean,
         isView: Boolean, undetParams: List[Symbol], byName: Boolean, e: Explanation)
       extends TreeEvent with TreeReferencesEvent with ImplicitEvent {
       val tree = duplicateTreeWithPos(tree0)
+      val pt = deepTypeClone(pt0)
       override def tag = super.tag + (if (byName) "-by-name" else "") + "-search"
       def references = if (tree0.isEmpty)
         e match {

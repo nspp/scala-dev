@@ -87,6 +87,7 @@ trait EventStrings {
       case x:PolyType                  => x.safeToString
       case x:RefinedType               => x.safeToString
       case x:NullaryMethodType         => typeString(x.resultType)
+      case x:OverloadedType            => ""
       case x if (x.typeSymbol != null) => symString(x.typeSymbol)
       case _                           => classString(tpe.getClass)
     }) + "]"

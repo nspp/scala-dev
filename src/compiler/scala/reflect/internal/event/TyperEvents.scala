@@ -610,7 +610,12 @@ trait TyperEventsUniverse {
 
       def references = if (tree.symbol != null && tree.symbol.isImplicit && tree.pos == NoPosition) {
         List(tree.symbol)
-      } else List()
+      } else {
+        expectedFunPt match {
+          case tp: OverloadedType => tp.alternatives
+          case _ => List()
+        }
+      }
     }
 
     /*
@@ -1012,9 +1017,10 @@ trait TyperEventsUniverse {
     // overloaded sym
     case class OverloadedSymDoTypedApply(tree0: Tree, sym: Symbol,
         argTypes: List[Type], pre: Type)
-      extends TreeEvent with DoTypedApplyEvent {
+      extends TreeEvent with DoTypedApplyEvent with SymbolReferencesEvent {
       val tree = duplicateTreeWithPos(tree0)
       override def tag = "quick-alternatives-filter-for-overloaded-function"
+      def references = sym.info.asInstanceOf[OverloadedType].alternatives
     }
 
     case class CheckApplicabilityAlternativeDoTypedApply(
