@@ -1286,7 +1286,7 @@ trait Namers extends MethodSynthesis {
                 MissingParameterOrValTypeError(tpt)
                 ErrorType
               }
-              else assignTypeToTree(vdef, newTyper(typer1.context.make(vdef, sym)), WildcardType)(EV.TypeValDefBody(rhs, false))
+              else assignTypeToTree(vdef, newTyper(typer1.context.make(vdef, sym)), WildcardType)(EV.TypeValDefBody(vdef, false))
             }
             else typer1.typedType(tpt)(EV.ValExplicitType(tpt, sym)).tpe
           }

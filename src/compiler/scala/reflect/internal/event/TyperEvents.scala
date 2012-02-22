@@ -1307,7 +1307,7 @@ trait TyperEventsUniverse {
       extends Explanation with TyperExplanation
 
     //ValDef
-    case class TypeValType(tpt: Tree)
+    case class TypeValType(vdef: Tree)
       extends Explanation with TyperExplanation
 
     //Type constructor

@@ -1643,7 +1643,7 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
 
       // complete lazy annotations
       val annots = sym.annotations
-      var tpt1 = checkNoEscaping.privates(sym, typer1.typedType(vdef.tpt)(EV.TypeValType(vdef.tpt)))
+      var tpt1 = checkNoEscaping.privates(sym, typer1.typedType(vdef.tpt)(EV.TypeValType(vdef)))
       checkNonCyclic(vdef, tpt1)
 
       if (sym.hasAnnotation(definitions.VolatileAttr)) {

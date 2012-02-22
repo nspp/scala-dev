@@ -96,7 +96,7 @@ trait NamerEventsUniverse {
     case class TypeAbstractTpeBounds(bounds: Tree)
       extends Explanation with NamerExplanation
 
-    case class TypeValDefBody(rhs: Tree, expectedPt: Boolean)
+    case class TypeValDefBody(vdef: Tree, expectedPt: Boolean)
       extends Explanation with NamerExplanation
 
     case class TypeMethodDefBody(rhs: Tree)
