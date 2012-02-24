@@ -116,7 +116,7 @@ trait EventsUniverse extends AnyRef
       def lName: String = tag // Long description if different
       protected def participants: List[Any]
       var id = { eventIds += 1; eventIds }
-      val time = newClockTick()
+      val time = currentClock()
 
       // record the phase and unit at creation
       val phase: Phase          = currentPhase

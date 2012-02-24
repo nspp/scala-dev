@@ -11,5 +11,7 @@ trait Clocks extends api.Clocks { self: SymbolTable =>
     new Tick(counter)
   }
   
+  def currentClock() = new Tick(counter)
+  
   class Tick(val id: Int) extends Clock
 }
