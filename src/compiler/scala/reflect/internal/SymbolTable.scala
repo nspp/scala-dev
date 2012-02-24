@@ -33,6 +33,7 @@ abstract class SymbolTable extends api.Universe
                               with Implicits
                               with event.EventsUniverse
                               with event.Events
+                              with Clocks
 {
 
   def rootLoader: LazyType

@@ -198,7 +198,7 @@ abstract class TreeCheckers extends Analyzer {
       case _ if tree.tpe != null  =>
         tpeOfTree.getOrElseUpdate(tree, {
           val saved = tree.tpe
-          tree.tpe = null
+          tree setType null
           saved
         })
         super.typed(tree, mode, pt) match {
@@ -289,7 +289,7 @@ abstract class TreeCheckers extends Analyzer {
               if (oldtpe =:= tree.tpe) ()
               else typesDiffer(tree, oldtpe, tree.tpe)
 
-              tree.tpe = oldtpe
+              tree setType oldtpe
               super.traverse(tree)
             }
         }

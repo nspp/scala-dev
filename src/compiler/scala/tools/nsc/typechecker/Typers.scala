@@ -53,8 +53,8 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
 
   object UnTyper extends Traverser {
     override def traverse(tree: Tree) = {
-      if (tree != EmptyTree) tree.tpe = null
-      if (tree.hasSymbol) tree.symbol = NoSymbol
+      if (tree != EmptyTree) tree setType null
+      if (tree.hasSymbol) tree setSymbol NoSymbol
       super.traverse(tree)
     }
   }
@@ -318,7 +318,7 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
 
     def checkNonCyclic(defn: Tree, tpt: Tree) {
       if (!checkNonCyclic(defn.pos, tpt.tpe, defn.symbol)) {
-        tpt.tpe = ErrorType
+        tpt setType ErrorType
         defn.symbol.setInfo(ErrorType)
       }
     }
@@ -787,7 +787,7 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
                 debuglog("fallback on implicits: " + tree + "/" + resetAllAttrs(original))
                 val cleanTree = resetAllAttrs(original)
                 val tree1 = typed(cleanTree, mode, WildcardType)(EV.FallbackImplicitArgsTypeClean(tree, cleanTree))
-                tree1.tpe = addAnnotations(tree1, tree1.tpe)
+                tree1 setType addAnnotations(tree1, tree1.tpe)
                 if (tree1.isEmpty) tree1 else adapt(tree1, mode, pt, EmptyTree)
             }
           else {
@@ -1346,7 +1346,7 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
             if (preSuperVals.isEmpty && preSuperStats.nonEmpty)
               debugwarn("Wanted to zip empty presuper val list with " + preSuperStats)
             else
-              map2(preSuperStats, preSuperVals)((ldef, gdef) => gdef.tpt.tpe = ldef.symbol.tpe)
+              map2(preSuperStats, preSuperVals)((ldef, gdef) => gdef.tpt setType ldef.symbol.tpe)
             }
           case _ =>
             if (!supertparams.isEmpty)
@@ -1933,21 +1933,21 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
       if (!nme.isLoopHeaderLabel(ldef.symbol.name) || isPastTyper) {
         val restpe = ldef.symbol.tpe.resultType
         val rhs1 = typed(ldef.rhs, restpe)(EV.DefaultExplanation)
-        ldef.params foreach (param => param.tpe = param.symbol.tpe)
+        ldef.params foreach (param => param setType param.symbol.tpe)
         treeCopy.LabelDef(ldef, ldef.name, ldef.params, rhs1) setType restpe
       } else {
         val initpe = ldef.symbol.tpe.resultType
         val rhs1 = typed(ldef.rhs)(EV.DefaultExplanation)
         val restpe = rhs1.tpe
         if (restpe == initpe) { // stable result, no need to check again
-          ldef.params foreach (param => param.tpe = param.symbol.tpe)
+          ldef.params foreach (param => param setType param.symbol.tpe)
           treeCopy.LabelDef(ldef, ldef.name, ldef.params, rhs1) setType restpe
         } else {
           context.scope.unlink(ldef.symbol)
           val sym2 = namer.enterInScope(
             context.owner.newLabel(ldef.name, ldef.pos) setInfo MethodType(List(), restpe))
           val rhs2 = typed(resetAllAttrs(ldef.rhs), restpe)(EV.DefaultExplanation)
-          ldef.params foreach (param => param.tpe = param.symbol.tpe)
+          ldef.params foreach (param => param setType param.symbol.tpe)
           treeCopy.LabelDef(ldef, ldef.name, ldef.params, rhs2) setSymbol sym2 setType restpe
         }
       }
@@ -2054,7 +2054,7 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
                          else typed(cdef.guard, BooleanClass.tpe)(EV.DefaultExplanation)
       var body1: Tree = typed(cdef.body, pt)(EV.DefaultExplanation)
       if (!context.savedTypeBounds.isEmpty) {
-        body1.tpe = context.restoreTypeBounds(body1.tpe)
+        body1 setType context.restoreTypeBounds(body1.tpe)
         if (isFullyDefined(pt) && !(body1.tpe <:< pt)) {
           // @M no need for pt.normalize here, is done in erasure
           body1 = typedPos(body1.pos)(gen.mkCast(body1, pt))
@@ -2101,7 +2101,7 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
       else {
         val vparamSyms = map2(fun.vparams, argpts) { (vparam, argpt) =>
           if (vparam.tpt.isEmpty) {
-            vparam.tpt.tpe =
+            vparam.tpt setType (
               if (isFullyDefined(argpt)) argpt
               else {
                 fun match {
@@ -2120,7 +2120,7 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
                 }
                 MissingParameterTypeError(fun, vparam, pt)
                 ErrorType
-              }
+              })
             if (!vparam.tpt.pos.isDefined) vparam.tpt setPos vparam.pos.focus
           }
           enterSym(context, vparam)
@@ -2715,7 +2715,7 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
 
             // turn any unresolved type variables in freevars into existential skolems
             val skolems = freeVars map (fv => unapplyContext.owner.newExistentialSkolem(fv, fv))
-            arg.tpe = pattp.substSym(freeVars, skolems)
+            arg setType pattp.substSym(freeVars, skolems)
             argDummy setInfo arg.tpe
           }
 
@@ -2735,7 +2735,7 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
               val pt1 = if (isFullyDefined(pt)) pt else makeFullyDefined(pt)
 
               val itype = glb(List(pt1, arg.tpe))
-              arg.tpe = pt1    // restore type (arg is a dummy tree, just needs to pass typechecking)
+              arg setType pt1    // restore type (arg is a dummy tree, just needs to pass typechecking)
               UnApply(fun1, args1) setPos tree.pos setType itype
             } else
               duplErrorTree(WrongNumberArgsPatternError(tree, fun))
@@ -3269,7 +3269,7 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
               // Erroneous annotations were already reported in typedAnnotation
               arg1  // simply drop erroneous annotations
             else {
-              ann.tpe = atype
+              ann setType atype
               TypeTree(atype) setOriginal tree
             }
           } else {
@@ -3279,7 +3279,7 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
         } else {
           if (ann.tpe == null) {
             val annotInfo = typedAnnotation(ann, annotMode)
-            ann.tpe = arg1.tpe.withAnnotation(annotInfo)
+            ann setType arg1.tpe.withAnnotation(annotInfo)
           }
           val atype = ann.tpe
           Typed(arg1, TypeTree(atype) setOriginal tree setPos tree.pos.focus) setPos tree.pos setType atype
@@ -3835,7 +3835,7 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
         val sym =
           if (tree.symbol != NoSymbol) {
             if (phase.erasedTypes && qual.isInstanceOf[Super])
-              qual.tpe = tree.symbol.owner.tpe
+              qual setType tree.symbol.owner.tpe
             if (false && settings.debug.value) { // todo: replace by settings.check.value?
               val alts = qual.tpe.member(tree.symbol.name).alternatives
               if (!(alts exists (alt =>
@@ -4701,8 +4701,8 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
         }
         if (context.retyping &&
             (tree.tpe ne null) && (tree.tpe.isErroneous || !(tree.tpe <:< pt))) {
-          tree.tpe = null
-          if (tree.hasSymbol) tree.symbol = NoSymbol
+          tree setType null
+          if (tree.hasSymbol) tree setSymbol NoSymbol
         }
 
         alreadyTyped = tree.tpe ne null
@@ -4727,7 +4727,7 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
           tree1
         }
 
-        tree1.tpe = addAnnotations(tree1, tree1.tpe)
+        tree1 setType addAnnotations(tree1, tree1.tpe)
         val result = EV.eventBlock(EV.AdaptStart(tree1, pt), EV.AdaptDone(_)) {
           if (tree1.isEmpty) tree1 else adapt(tree1, mode, pt, tree)(expl.underlying)
         }
@@ -4745,7 +4745,7 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
       } catch {
         case ex: TypeError =>
           EV << EV.ExceptionRecoveryEvent(ev)
-          tree.tpe = null
+          tree setType null
           // The only problematic case are (recoverable) cyclic reference errors which can pop up almost anywhere.
           printTyping("caught %s: while typing %s".format(ex, tree)) //DEBUG
 

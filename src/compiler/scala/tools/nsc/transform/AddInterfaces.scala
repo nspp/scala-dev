@@ -207,7 +207,7 @@ abstract class AddInterfaces extends InfoTransform {
     override def traverse(tree: Tree) {
       tree match {
         case Return(expr) =>
-          if (tree.symbol == oldowner) tree.symbol = newowner
+          if (tree.symbol == oldowner) tree setSymbol newowner
         case _ =>
       }
       super.traverse(tree)
@@ -225,7 +225,7 @@ abstract class AddInterfaces extends InfoTransform {
   private def implMethodDef(tree: Tree, ifaceMethod: Symbol): Tree =
     implMethodMap.get(ifaceMethod) match {
       case Some(implMethod) =>
-        tree.symbol = implMethod
+        tree setSymbol implMethod
         new ChangeOwnerAndReturnTraverser(ifaceMethod, implMethod)(tree)
       case None =>
         abort("implMethod missing for " + ifaceMethod)

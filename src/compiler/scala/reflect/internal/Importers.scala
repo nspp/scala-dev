@@ -327,8 +327,8 @@ trait Importers { self: SymbolTable =>
           null
       }
       if (mytree != null) {
-        if (mytree hasSymbol) mytree.symbol = importSymbol(tree.symbol)
-        mytree.tpe = importType(tree.tpe)
+        if (mytree hasSymbol) mytree setSymbol importSymbol(tree.symbol)
+        mytree setType importType(tree.tpe)
       }
       mytree
     }

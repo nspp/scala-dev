@@ -25,7 +25,33 @@ trait Trees /*extends reflect.generic.Trees*/ { self: Universe =>
   def Modifiers(mods: Set[Modifier.Value] = Set(),
                 privateWithin: Name = EmptyTypeName,
                 annotations: List[Tree] = List()): Modifiers
-
+                
+  trait AttributesHistory {
+    def clock: Clock
+    def tpe: Type
+    def sym: Symbol
+    def prev: AttributesHistory
+  }
+  
+  // todo: handle tree and sym separate?
+  private case class AttributesHistoryPoint(clock: Clock, tpe: Type, sym: Symbol, prev: AttributesHistory) extends AttributesHistory {
+    //assert(clock > prev.clock) // todo: need to define ordering for clocks
+    override def toString() = {
+      "AttributesHistoryPoint(" + clock + ":" + tpe + "," + sym + ")"
+    }
+  }
+  
+  private case object NoHistory extends AttributesHistory {
+    def clock = NoClock
+    def tpe = NoType
+    def sym = NoSymbol
+    def prev = null
+    
+    override def toString() = {
+      "NoHistory"
+    }
+  }
+  
   /** Tree is the basis for scala's abstract syntax. The nodes are
    *  implemented as case classes, and the parameters which initialize
    *  a given tree are immutable: however Trees have several mutable
@@ -60,7 +86,7 @@ trait Trees /*extends reflect.generic.Trees*/ { self: Universe =>
    *
    *  SymTrees include important nodes Ident and Select, which are
    *  used as both terms and types; they are distinguishable based on
-   *  whether the Name is a TermName or TypeName.  The correct way for
+   *  whether the Name is a TermName or TypeName.  The correct way
    *  to test for a type or a term (on any Tree) are the isTerm/isType
    *  methods on Tree.
    *
@@ -80,13 +106,41 @@ trait Trees /*extends reflect.generic.Trees*/ { self: Universe =>
     def setPos(pos: Position): this.type = { rawpos = pos; this }
 
     private[this] var rawtpe: Type = _
+    
+    private[this] var attrHistory: AttributesHistory = null
+    
+    def attributes(at: Clock): AttributesHistory= {
+      // todo add the logic
+      var attr0 = attrHistory
+      while (attr0 != null && at < attr0.clock)
+        attr0 = attr0.prev
+      if (attr0 == null) NoHistory
+      else attr0
+    }
+    
+    def currentAttributes(): AttributesHistory = attrHistory
+    
+    // TODO join together
+    @inline
+    def logType() {
+      if (tpe != null)
+        attrHistory = AttributesHistoryPoint(newClockTick(), tpe, symbol, attrHistory)
+    }
+    
+    @inline
+    def logSymbol() {
+      if (symbol != null)
+        attrHistory = AttributesHistoryPoint(newClockTick(), tpe, symbol, attrHistory)
+    }
 
     def tpe = rawtpe
-    def tpe_=(t: Type) = rawtpe = t
+    //def tpe_=(t: Type) = rawtpe = t
 
+    // TODO: inline
     /** Set tpe to give `tp` and return this.
      */
-    def setType(tp: Type): this.type = { rawtpe = tp; this }
+    def setType(tp: Type): this.type = { logType(); rawtpe = tp; this }
+    def setTypeNoLog(tp: Type) = rawtpe = tp // todo rename
 
     /** Like `setType`, but if this is a previously empty TypeTree that
      *  fact is remembered so that resetAllAttrs will snap back.
@@ -123,8 +177,10 @@ trait Trees /*extends reflect.generic.Trees*/ { self: Universe =>
      *  it will induce an exception.
      */
     def symbol: Symbol = null
-    def symbol_=(sym: Symbol) { throw new UnsupportedOperationException("symbol_= inapplicable for " + this) }
-    def setSymbol(sym: Symbol): this.type = { symbol = sym; this }
+    protected def symbol_=(sym: Symbol) { throw new UnsupportedOperationException("symbol_= inapplicable for " + this) }
+    // TODO: inline
+    def setSymbol(sym: Symbol): this.type = { logSymbol(); symbol = sym; this }
+    def setSymbolNoLog(sym: Symbol) = symbol = sym
 
     def hasSymbol = false
     def isDef = false
@@ -216,8 +272,10 @@ trait Trees /*extends reflect.generic.Trees*/ { self: Universe =>
 
     private[scala] def copyAttrs(tree: Tree): this.type = {
       pos = tree.pos
-      tpe = tree.tpe
-      if (hasSymbol) symbol = tree.symbol
+      // do not log the attributes when copying
+      rawtpe = tree.tpe
+      //setType(tree.tpe)
+      if (hasSymbol) symbol = tree.symbol//setSymbol(tree.symbol)
       this
     }
 
@@ -262,9 +320,11 @@ trait Trees /*extends reflect.generic.Trees*/ { self: Universe =>
 
   /** The empty tree */
   case object EmptyTree extends TermTree {
-    super.tpe_=(NoType)
-    override def tpe_=(t: Type) =
+    super.setType(NoType)
+    override def setType(t: Type) = {
       if (t != NoType) throw new UnsupportedOperationException("tpe_=("+t+") inapplicable for <empty>")
+      this
+    }
     override def isEmpty = true
   }
 
@@ -498,14 +558,14 @@ trait Trees /*extends reflect.generic.Trees*/ { self: Universe =>
   case class TypeApply(fun: Tree, args: List[Tree])
        extends GenericApply {
     override def symbol: Symbol = fun.symbol
-    override def symbol_=(sym: Symbol) { fun.symbol = sym }
+    protected override def symbol_=(sym: Symbol) { fun setSymbol sym }
   }
 
   /** Value application */
   case class Apply(fun: Tree, args: List[Tree])
        extends GenericApply {
     override def symbol: Symbol = fun.symbol
-    override def symbol_=(sym: Symbol) { fun.symbol = sym }
+    protected override def symbol_=(sym: Symbol) { fun setSymbol sym }
   }
 
   class ApplyToImplicitArgs(fun: Tree, args: List[Tree]) extends Apply(fun, args)
@@ -527,7 +587,7 @@ trait Trees /*extends reflect.generic.Trees*/ { self: Universe =>
     // The symbol of a Super is the class _from_ which the super reference is made.
     // For instance in C.super(...), it would be C.
     override def symbol: Symbol = qual.symbol
-    override def symbol_=(sym: Symbol) { qual.symbol = sym }
+    protected override def symbol_=(sym: Symbol) { qual setSymbol sym }
   }
 
   /** Self reference */
@@ -589,7 +649,7 @@ trait Trees /*extends reflect.generic.Trees*/ { self: Universe =>
   case class AppliedTypeTree(tpt: Tree, args: List[Tree])
        extends TypTree {
     override def symbol: Symbol = tpt.symbol
-    override def symbol_=(sym: Symbol) { tpt.symbol = sym }
+    protected override def symbol_=(sym: Symbol) { tpt setSymbol sym }
   }
 
   case class TypeBoundsTree(lo: Tree, hi: Tree)

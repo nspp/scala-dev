@@ -1571,7 +1571,7 @@ abstract class SpecializeTypes extends InfoTransform with TypingTransformers {
         source.enclClass,
         false) // don't make private fields public
       val tmp = symSubstituter(body(source).duplicate)
-      tpt.tpe = tpt.tpe.substSym(oldtparams, newtparams)
+      tpt setType tpt.tpe.substSym(oldtparams, newtparams)
 
       treeCopy.DefDef(tree, mods, name, tparams, vparamss1, tpt, tmp)
     }

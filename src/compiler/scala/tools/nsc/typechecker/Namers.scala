@@ -286,7 +286,7 @@ trait Namers extends MethodSynthesis {
 
     private def logAssignSymbol(tree: Tree, sym: Symbol): Symbol = {
       log("[+symbol] " + sym.hasFlagsToString(-1L) + " " + sym)
-      tree.symbol = sym
+      tree setSymbol sym
       sym
     }
 
@@ -1305,8 +1305,8 @@ trait Namers extends MethodSynthesis {
           transformed(tree) = newImport
           // copy symbol and type attributes back into old expression
           // so that the structure builder will find it.
-          expr.symbol = expr1.symbol
-          expr.tpe = expr1.tpe
+          expr setSymbol expr1.symbol
+          expr setType expr1.tpe
           ImportType(expr1)
       }
 

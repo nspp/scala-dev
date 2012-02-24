@@ -366,9 +366,9 @@ trait Trees extends api.Trees { self: SymbolTable =>
             val tp1 = typeMap(tree.tpe)
 //            if ((tp1 ne tt.tpe) && tt.original == null)
 //              tt.setOriginal(duplicateTree(tt))
-            tt.tpe = tp1
+            tt setType tp1
           case _ =>
-            tree.tpe = typeMap(tree.tpe)
+            tree setType typeMap(tree.tpe)
         }
       }
 
@@ -404,7 +404,7 @@ trait Trees extends api.Trees { self: SymbolTable =>
           else subst(from.tail, to.tail)
       }
 
-      if (tree.tpe ne null) tree.tpe = symSubst(tree.tpe)
+      if (tree.tpe ne null) tree setType symSubst(tree.tpe)
       if (tree.hasSymbol) {
         subst(from, to)
         tree match {

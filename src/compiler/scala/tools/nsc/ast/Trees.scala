@@ -24,7 +24,7 @@ trait Trees extends reflect.internal.Trees { self: Global =>
   case class DocDef(comment: DocComment, definition: Tree)
        extends Tree {
     override def symbol: Symbol = definition.symbol
-    override def symbol_=(sym: Symbol) { definition.symbol = sym }
+    protected override def symbol_=(sym: Symbol) { definition setSymbol sym }
     override def isDef = definition.isDef
     override def isTerm = definition.isTerm
     override def isType = definition.isType
@@ -273,24 +273,24 @@ trait Trees extends reflect.internal.Trees { self: Global =>
     private def resetDef(tree: Tree) {
       if (tree.symbol != null && tree.symbol != NoSymbol)
         erasedSyms addEntry tree.symbol
-      tree.symbol = NoSymbol
+      tree setSymbol NoSymbol
     }
     override def transform(tree: Tree): Tree = super.transform {
       tree match {
         case Template(_, _, body) =>
           body foreach resetDef
           resetDef(tree)
-          tree.tpe = null
+          tree setType null
           tree
         case _: DefTree | Function(_, _) | Template(_, _, _) =>
           resetDef(tree)
-          tree.tpe = null
+          tree setType null
           tree
         case tpt: TypeTree =>
           if (tpt.original != null)
             tpt.original
           else if (tpt.tpe != null && (tpt.wasEmpty || (tpt.tpe exists (tp => erasedSyms contains tp.typeSymbol))))
-            tpt.tpe = null
+            tpt setType null
           tree
         case TypeApply(fn, args) if args map transform exists (_.isEmpty) =>
           fn
@@ -300,8 +300,8 @@ trait Trees extends reflect.internal.Trees { self: Global =>
           tree
         case _ =>
           if (tree.hasSymbol && (!localOnly || (erasedSyms contains tree.symbol))) 
-            tree.symbol = NoSymbol
-          tree.tpe = null
+            tree setSymbol NoSymbol
+          tree setType null
           tree
       }
     }

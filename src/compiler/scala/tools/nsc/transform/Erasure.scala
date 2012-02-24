@@ -569,7 +569,7 @@ abstract class Erasure extends AddInterfaces
               qual1 = unbox(qual1, tree.symbol.owner.tpe)
 
             if (isValueClass(tree.symbol.owner) && !isValueClass(qual1.tpe.typeSymbol))
-              tree.symbol = NoSymbol
+              tree setSymbol NoSymbol
             else if (qual1.tpe.isInstanceOf[MethodType] && qual1.tpe.params.isEmpty) {
               assert(qual1.symbol.isStable, qual1.symbol);
               qual1 = Apply(qual1, List()) setPos qual1.pos setType qual1.tpe.resultType
@@ -631,8 +631,8 @@ abstract class Erasure extends AddInterfaces
               alt => alt == first || !(first.tpe looselyMatches alt.tpe)
             }
             if (tree.symbol ne sym1) {
-              tree1.symbol = sym1
-              tree1.tpe = sym1.tpe
+              tree1 setSymbol sym1
+              tree1 setType sym1.tpe
             }
           }
           tree1
@@ -1002,7 +1002,7 @@ abstract class Erasure extends AddInterfaces
           if (owner.isRefinementClass) {
             val overridden = tree.symbol.nextOverriddenSymbol
             assert(overridden != NoSymbol, tree.symbol)
-            tree.symbol = overridden
+            tree setSymbol overridden
           }
           def isAccessible(sym: Symbol) = localTyper.context.isAccessible(sym, sym.owner.thisType)
           if (!isAccessible(owner) && qual.tpe != null) {
@@ -1048,7 +1048,7 @@ abstract class Erasure extends AddInterfaces
               tree1 setType erasure(NoSymbol, tree1.tpe)
             case DefDef(_, _, _, _, tpt, _) =>
               val result = super.transform(tree1) setType null
-              tpt.tpe = erasure(tree1.symbol, tree1.symbol.tpe).resultType
+              tpt setType erasure(tree1.symbol, tree1.symbol.tpe).resultType
               result
             case _ =>
               super.transform(tree1) setType null

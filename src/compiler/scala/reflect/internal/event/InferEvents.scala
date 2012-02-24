@@ -128,7 +128,8 @@ trait InferEventsUniverse {
 
     case class InferExprInstance(tree0: Tree, tparams: List[Symbol], pt: Type)
       extends TreeEvent with InferEvent {
-      val tree = duplicateTreeWithPos(tree0)
+      //val tree = duplicateTreeWithPos(tree0)
+      def tree = tree0
       override def tag = super.tag + "-expr-instance"
     }
 

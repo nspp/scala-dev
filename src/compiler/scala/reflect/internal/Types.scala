@@ -242,8 +242,11 @@ trait Types extends api.Types { self: SymbolTable =>
 
   case object UnmappableTree extends TermTree {
     override def toString = "<unmappable>"
-    super.tpe_=(NoType)
-    override def tpe_=(t: Type) = if (t != NoType) throw new UnsupportedOperationException("tpe_=("+t+") inapplicable for <empty>")
+    setType(NoType)
+    override def setType(t: Type) = {
+      if (t != NoType) throw new UnsupportedOperationException("tpe_=("+t+") inapplicable for <empty>")
+      this
+    }
   }
 
   abstract class AbsTypeImpl extends AbsType { this: Type =>

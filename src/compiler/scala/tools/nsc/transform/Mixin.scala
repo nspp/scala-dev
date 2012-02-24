@@ -543,9 +543,9 @@ abstract class Mixin extends InfoTransform with ast.TreeDSL {
         case Apply(tapp @ TypeApply(fn, List(arg)), List()) =>
           if (arg.tpe.typeSymbol.isImplClass) {
             val ifacetpe = toInterface(arg.tpe)
-            arg.tpe = ifacetpe
-            tapp.tpe = MethodType(List(), ifacetpe)
-            tree.tpe = ifacetpe
+            arg setType ifacetpe
+            tapp setType MethodType(List(), ifacetpe)
+            tree setType ifacetpe
           }
           tree
         case ValDef(_, _, _, _) if currentOwner.isImplClass =>
@@ -1135,7 +1135,7 @@ abstract class Mixin extends InfoTransform with ast.TreeDSL {
       // change every node type that refers to an implementation class to its
       // corresponding interface, unless the node's symbol is an implementation class.
       if (tree.tpe.typeSymbol.isImplClass && ((sym eq null) || !sym.isImplClass))
-        tree.tpe = toInterface(tree.tpe)
+        tree setType toInterface(tree.tpe)
 
       tree match {
         case Template(parents, self, body) =>
