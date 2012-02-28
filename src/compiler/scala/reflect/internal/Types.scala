@@ -2588,7 +2588,7 @@ trait Types extends api.Types { self: SymbolTable =>
     
     def constr = rawconstr
     def constr_=(c: TypeConstraint) {
-      snapshot0 = TVarConstraintSnapshot(newClockTick(), rawconstr, snapshot0)
+      snapshot0 = TVarConstraintSnapshot(newClockTick(), c, snapshot0)
       rawconstr = constr
     }
     
