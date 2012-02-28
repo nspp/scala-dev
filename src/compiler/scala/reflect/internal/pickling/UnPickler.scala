@@ -263,7 +263,7 @@ abstract class UnPickler /*extends reflect.generic.UnPickler*/ {
       def finishSym(sym: Symbol): Symbol = {
         sym.flags         = flags & PickledFlags
         sym.privateWithin = privateWithin
-        sym.info = (
+        sym.setInfo(
           if (atEnd) {
             assert(!sym.isSuperAccessor, sym)
             newLazyTypeRef(inforef)

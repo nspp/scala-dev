@@ -1379,7 +1379,7 @@ defined class Foo */
       lazy val matchRes  = freshSym(NoPosition, AnyClass.tpe, "matchRes") setFlag MUTABLE
       override def runOrElse(scrut: Tree, matcher: Tree, scrutTp: Type, resTp: Type, hasDefault: Boolean) = {
         val Function(List(x: ValDef), body) = matcher
-        matchRes.info = if (resTp ne NoType) resTp.widen else AnyClass.tpe // we don't always know resTp, and it might be AnyVal, in which case we can't assign NULL
+        matchRes.setInfo(if (resTp ne NoType) resTp.widen else AnyClass.tpe) // we don't always know resTp, and it might be AnyVal, in which case we can't assign NULL
         if (dontStore(resTp)) matchRes resetFlag MUTABLE  // don't assign to Unit-typed var's, in fact, make it a val -- conveniently also works around SI-5245
         BLOCK(
           VAL(zeroSym)   === REF(NoneModule), // TODO: can we just get rid of explicitly emitted zero? don't know how to do that as a local rewrite...

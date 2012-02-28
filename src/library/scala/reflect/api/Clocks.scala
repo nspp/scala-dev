@@ -8,11 +8,14 @@ trait Clocks { self: Universe =>
     def <(c: Clock) = id < c.id
     def >(c: Clock) = id > c.id
     def ==(c: Clock) = id == c.id
+    
+    override def toString() = "[time: " + id + "]"
   }
   
   def newClockTick(): Clock
   
   object NoClock extends Clock {
     def id = -1
+    override def toString() = "[no time]"
   }
 }

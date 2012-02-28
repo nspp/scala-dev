@@ -45,7 +45,9 @@ trait InferEventsUniverse {
 
     case class CompatibleTypes(found0: Type, pt: Type, tparams0: List[Symbol])
       extends Event with InferEvent with SymbolReferencesEvent {
-      val found = deepTypeClone(found0)
+      //val found = deepTypeClone(found0)
+      def found = found0
+      val foundTmp = deepTypeClone(found0)
       val tparams = tparams0.map(deepSymClone)
       override def tag = "compatible-types"
       def participants = List(found, pt)

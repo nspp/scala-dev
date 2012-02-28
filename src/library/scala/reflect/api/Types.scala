@@ -324,15 +324,35 @@ trait Types { self: Universe =>
 
   type NullaryMethodType <: Type
   val NullaryMethodType: NullaryMethodTypeExtractor
+  
+  abstract class NullaryMethodTypeExtractor {
+    def apply(resultType: Type): NullaryMethodType
+    def unapply(tpe: NullaryMethodType): Option[(Type)]
+  }
 
   type PolyType <: Type
   val PolyType: PolyTypeExtractor
+  
+  abstract class PolyTypeExtractor {
+    def apply(typeParams: List[Symbol], resultType: Type): PolyType
+    def unapply(tpe: PolyType): Option[(List[Symbol], Type)]
+  }
 
   type ExistentialType <: Type
   val ExistentialType: ExistentialTypeExtractor
+  
+  abstract class ExistentialTypeExtractor {
+    def apply(quantified: List[Symbol], underlying: Type): ExistentialType
+    def unapply(tpe: ExistentialType): Option[(List[Symbol], Type)]
+  }
 
   type AnnotatedType <: Type
   val AnnotatedType: AnnotatedTypeExtractor
+  
+  abstract class AnnotatedTypeExtractor {
+    def apply(annotations: List[AnnotationInfo], underlying: Type, selfsym: Symbol): AnnotatedType
+    def unapply(tpe: AnnotatedType): Option[(List[AnnotationInfo], Type, Symbol)]
+  }
 
   /** The `MethodType` type signature is used to indicate parameters and result type of a method
    */
@@ -407,31 +427,6 @@ trait Types { self: Universe =>
   abstract class ClassInfoTypeExtractor {
     def apply(parents: List[Type], decls: Scope, clazz: Symbol): ClassInfoType
     def unapply(tpe: ClassInfoType): Option[(List[Type], Scope, Symbol)]
-  }
-
-
-
-
-
-
-  abstract class NullaryMethodTypeExtractor {
-    def apply(resultType: Type): NullaryMethodType
-    def unapply(tpe: NullaryMethodType): Option[(Type)]
-  }
-
-  abstract class PolyTypeExtractor {
-    def apply(typeParams: List[Symbol], resultType: Type): PolyType
-    def unapply(tpe: PolyType): Option[(List[Symbol], Type)]
-  }
-
-  abstract class ExistentialTypeExtractor {
-    def apply(quantified: List[Symbol], underlying: Type): ExistentialType
-    def unapply(tpe: ExistentialType): Option[(List[Symbol], Type)]
-  }
-
-  abstract class AnnotatedTypeExtractor {
-    def apply(annotations: List[AnnotationInfo], underlying: Type, selfsym: Symbol): AnnotatedType
-    def unapply(tpe: AnnotatedType): Option[(List[AnnotationInfo], Type, Symbol)]
   }
 
   /** The least upper bound wrt <:< of a list of types */

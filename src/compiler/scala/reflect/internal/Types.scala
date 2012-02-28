@@ -2509,6 +2509,12 @@ trait Types extends api.Types { self: SymbolTable =>
       
       trace("create", "In " + tv.originLocation)(tv)
     }
+    
+    def typeVarFactory(tv: TypeVar, constr: TypeConstraint) = tv match {
+      case hktv: HKTypeVar => TypeVar(tv.origin, constr, Nil, hktv.params)
+      case apptv: AppliedTypeVar => TypeVar(tv.origin, constr, apptv.typeArgs, apptv.params)
+      case _ => TypeVar(tv.origin, constr)
+    }
   }
 
   // TODO: I don't really know why this happens -- maybe because
@@ -2584,7 +2590,17 @@ trait Types extends api.Types { self: SymbolTable =>
     override def isHigherKinded = false
 
     /** The constraint associated with the variable */
-    var constr = constr0
+    private[this] var rawconstr: TypeConstraint = constr0
+    
+    def constr = rawconstr
+    def constr_=(c: TypeConstraint) {
+      snapshot0 = TypeVarSnapshot(newClockTick(), rawconstr, snapshot0)
+      rawconstr = constr
+    }
+    
+    private[this] var snapshot0: TypeVarSnapshot = null
+    def snapshot = snapshot0
+    
     def instValid = constr.instValid
 
     /** The variable's skolemization level */
@@ -2878,18 +2894,10 @@ trait Types extends api.Types { self: SymbolTable =>
         TypeVar(origin, constr cloneInternal, typeArgs, params) // @M TODO: clone args/params?
       )
     }
-    /*
-    def originLocation = {
-      val sym   = origin.typeSymbolDirect
-      val owner = sym.owner
-      val clazz = owner.enclClass
-      val ownsString = (
-        if (owner.isMethod) "#" + owner.name + tparamsOfSym(owner)
-        else if (owner.isAbstractType) "#" + owner.defString
-        else ""
-      )
-      clazz.decodedName + tparamsOfSym(clazz) + ownsString
-    }*/
+  }
+  
+  case class TypeVarSnapshot(clock: Clock, constr: TypeConstraint, prev: TypeVarSnapshot) {
+    override def toString() = "[" + clock + ":TypeVar constraint: " + constr + "," + prev + "]"
   }
 
   /** A type carrying some annotations. Created by the typechecker
@@ -3399,12 +3407,47 @@ trait Types extends api.Types { self: SymbolTable =>
     private var numlo = numlo0
     private var numhi = numhi0
     private var avoidWidening = avoidWidening0
+    
+    lazy val init = InitTypeConstraintSnapshot(newClockTick(), lo0, hi0, numlo0, numhi0)
+    var constrSnapshot: ConstrChange = null
+    
+    /*
+    def typeConstraintAt(time: Clock): TypeConstraint = {
+      // short-cut if clock points to the current type constraint
+      if (constrSnapshot == null) this
+      else {
+        var upTo = constrSnapshot
+        while (upTo != null && time < upTo.clock)
+          upTo = upTo.prev
+          
+  
+        // apply all the bounds in the reverse order
+        // TODO: we should apply snapshots to each of the types as well
+        val newConstraint = new TypeConstraint(init.lo, init.hi, init.numlo, init.numhi)
+        def applyChange(change: ConstrChange) { 
+          if (change == null) () else {
+            applyChange(change.prev)  
+            change match {
+              case InstChange(_, inst, _) =>
+                newConstraint.instantiation = inst
+              case BoundChange(_, bound, lowerBound, isNumericBound, _) =>
+                if (lowerBound)
+                  addLoBound(bound, isNumericBound)
+                else
+                  addHiBound(bound, isNumericBound)
+            }
+          }
+        }
+        newConstraint
+      }
+    }*/
 
     def loBounds: List[Type] = if (numlo == NoType) lobounds else numlo :: lobounds
     def hiBounds: List[Type] = if (numhi == NoType) hibounds else numhi :: hibounds
     def avoidWiden: Boolean = avoidWidening
 
     def addLoBound(tp: Type, isNumericBound: Boolean = false) {
+      constrSnapshot = BoundChange(newClockTick(), tp, true, isNumericBound, constrSnapshot)
       if (isNumericBound && isNumericValueType(tp)) {
         if (numlo == NoType || isNumericSubType(numlo, tp))
           numlo = tp
@@ -3423,6 +3466,7 @@ trait Types extends api.Types { self: SymbolTable =>
     }
 
     def addHiBound(tp: Type, isNumericBound: Boolean = false) {
+      constrSnapshot = BoundChange(newClockTick(), tp, false, isNumericBound, constrSnapshot)
       checkWidening(tp)
       if (isNumericBound && isNumericValueType(tp)) {
         if (numhi == NoType || isNumericSubType(tp, numhi))
@@ -3439,7 +3483,12 @@ trait Types extends api.Types { self: SymbolTable =>
       (numlo == NoType || (numlo weak_<:< tp)) &&
       (numhi == NoType || (tp weak_<:< numhi))
 
-    var inst: Type = NoType // @M reduce visibility?
+    private var rawinst: Type = NoType // @M reduce visibility?
+    def inst: Type = rawinst
+    def inst_=(inst0: Type) {
+      constrSnapshot = InstChange(newClockTick(), inst0, constrSnapshot)
+      rawinst = inst0
+    }
 
     def instValid = (inst ne null) && (inst ne NoType)
 
@@ -3465,6 +3514,18 @@ trait Types extends api.Types { self: SymbolTable =>
       else boundsStr + " _= " + inst.safeToString
     }
   }
+  
+  case class InitTypeConstraintSnapshot(clock: Clock, lo: List[Type], hi: List[Type],
+      numlo: Type, numhi: Type)
+      
+  sealed abstract class ConstrChange {
+    def clock: Clock
+    def prev: ConstrChange
+  }
+  
+  // TODO change name
+  case class BoundChange(clock: Clock, bound: Type, lowerBound: Boolean, isNumericBound: Boolean, prev: ConstrChange) extends ConstrChange
+  case class InstChange(clock: Clock, inst: Type, prev: ConstrChange) extends ConstrChange
 
   trait AnnotationFilter extends TypeMap {
     def keepAnnotation(annot: AnnotationInfo): Boolean
