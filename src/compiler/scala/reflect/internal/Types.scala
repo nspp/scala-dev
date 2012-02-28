@@ -2509,12 +2509,6 @@ trait Types extends api.Types { self: SymbolTable =>
       
       trace("create", "In " + tv.originLocation)(tv)
     }
-    
-    def typeVarFactory(tv: TypeVar, constr: TypeConstraint) = tv match {
-      case hktv: HKTypeVar => TypeVar(tv.origin, constr, Nil, hktv.params)
-      case apptv: AppliedTypeVar => TypeVar(tv.origin, constr, apptv.typeArgs, apptv.params)
-      case _ => TypeVar(tv.origin, constr)
-    }
   }
 
   // TODO: I don't really know why this happens -- maybe because
@@ -2594,11 +2588,11 @@ trait Types extends api.Types { self: SymbolTable =>
     
     def constr = rawconstr
     def constr_=(c: TypeConstraint) {
-      snapshot0 = TypeVarSnapshot(newClockTick(), rawconstr, snapshot0)
+      snapshot0 = TVarConstraintSnapshot(newClockTick(), rawconstr, snapshot0)
       rawconstr = constr
     }
     
-    private[this] var snapshot0: TypeVarSnapshot = null
+    private[this] var snapshot0: TVarConstraintSnapshot = null
     def snapshot = snapshot0
     
     def instValid = constr.instValid
@@ -2896,7 +2890,7 @@ trait Types extends api.Types { self: SymbolTable =>
     }
   }
   
-  case class TypeVarSnapshot(clock: Clock, constr: TypeConstraint, prev: TypeVarSnapshot) {
+  case class TVarConstraintSnapshot(clock: Clock, constr: TypeConstraint, prev: TVarConstraintSnapshot) {
     override def toString() = "[" + clock + ":TypeVar constraint: " + constr + "," + prev + "]"
   }
 
@@ -3410,37 +3404,6 @@ trait Types extends api.Types { self: SymbolTable =>
     
     lazy val init = InitTypeConstraintSnapshot(newClockTick(), lo0, hi0, numlo0, numhi0)
     var constrSnapshot: ConstrChange = null
-    
-    /*
-    def typeConstraintAt(time: Clock): TypeConstraint = {
-      // short-cut if clock points to the current type constraint
-      if (constrSnapshot == null) this
-      else {
-        var upTo = constrSnapshot
-        while (upTo != null && time < upTo.clock)
-          upTo = upTo.prev
-          
-  
-        // apply all the bounds in the reverse order
-        // TODO: we should apply snapshots to each of the types as well
-        val newConstraint = new TypeConstraint(init.lo, init.hi, init.numlo, init.numhi)
-        def applyChange(change: ConstrChange) { 
-          if (change == null) () else {
-            applyChange(change.prev)  
-            change match {
-              case InstChange(_, inst, _) =>
-                newConstraint.instantiation = inst
-              case BoundChange(_, bound, lowerBound, isNumericBound, _) =>
-                if (lowerBound)
-                  addLoBound(bound, isNumericBound)
-                else
-                  addHiBound(bound, isNumericBound)
-            }
-          }
-        }
-        newConstraint
-      }
-    }*/
 
     def loBounds: List[Type] = if (numlo == NoType) lobounds else numlo :: lobounds
     def hiBounds: List[Type] = if (numhi == NoType) hibounds else numhi :: hibounds

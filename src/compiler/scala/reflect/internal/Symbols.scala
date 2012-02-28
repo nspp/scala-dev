@@ -939,9 +939,9 @@ trait Symbols extends api.Symbols { self: SymbolTable =>
 
 // ------ info and type -------------------------------------------------------------------
 
-    private[Symbols] var infos: TypeHistory     = null
-    private[Symbols] var rawsnapshot: TypeSnapshot = null
-    private[Symbols] var eventIds: List[Int]    = List()
+    private[Symbols] var infos: TypeHistory              = null
+    private[Symbols] var rawsnapshot: SymbolTypeSnapshot = null
+    private[Symbols] var eventIds: List[Int]             = List()
 
     /** Get type. The type of a symbol is:
      *  for a type symbol, the type corresponding to the symbol itself,
@@ -1006,14 +1006,7 @@ trait Symbols extends api.Symbols { self: SymbolTable =>
 
     /** Set initial info. */
     def setInfo(info0: Type): this.type                     = {
-//      if (snapshot != null)
-//        println("SETTING TYPE FOR SYMBOL THAT ALREADY HAS INFO: " + rawname)
-      //val lastInfo = if (infos == null) null else rawInfo
-      // unlike trees' snapshots we will be storing info on the current snapshot
-      // at the given clock time
-      // so the actual search has to go one before if the search is looking for 
-      // a first snapshot that currentTime() < snapshot.clock
-      rawsnapshot = SomeTypeSnapshot(newClockTick(), info0, rawsnapshot)
+      rawsnapshot = SymbolTypeSnapshot(newClockTick(), info0, rawsnapshot)
       setInfoNoLog(info0)
     }
     
@@ -1024,16 +1017,6 @@ trait Symbols extends api.Symbols { self: SymbolTable =>
     }
     
     def snapshot = rawsnapshot
-    
-    /*def infoAt(at: Clock): Type = {
-      var snapshot0 = snapshot
-      while (snapshot0 != null && at < snapshot0.clock)
-        snapshot0 = snapshot0.prev
-        
-      if (snapshot0 == null) NoType
-      else if (snapshot0.prev == null) NoType
-      else snapshot0.prev.info
-    }*/
     
     /** Modifies this symbol's info in place. */
     def modifyInfo(f: Type => Type): this.type              = setInfo(f(info))
@@ -2715,21 +2698,9 @@ trait Symbols extends api.Symbols { self: SymbolTable =>
       "TypeHistory(" + phaseOf(validFrom)+":"+runId(validFrom) + "," + info + "," + prev + ")"
   }
   
-  trait TypeSnapshot {
-    def clock: Clock
-    def info: Type
-    def prev: TypeSnapshot
-  }
-  
-  case class SomeTypeSnapshot(clock: Clock, info: Type, prev: TypeSnapshot) extends TypeSnapshot {
+  case class SymbolTypeSnapshot(clock: Clock, info: Type, prev: SymbolTypeSnapshot) {
     //assert(prev == null || prev.clock < clock) // todo: verify that it is correct
     override def toString() =
       "TypeSnapshot(at " + clock + ": " + info + ",prev: " + prev + ")"
-  }
-  
-  case object NoTypeSnapShot extends TypeSnapshot {
-    def clock = NoClock
-    def info = NoType
-    def prev = null
   }
 }
