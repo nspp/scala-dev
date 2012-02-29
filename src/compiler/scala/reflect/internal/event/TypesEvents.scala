@@ -21,10 +21,8 @@ trait TypesEventsUniverse {
     }
 
     // TODO copy types?
-    case class SubTypeCheck(value01: Type, value02: Type) extends TwoTypeEvent with TypesEvent {
+    case class SubTypeCheck(value1: Type, value2: Type) extends TwoTypeEvent with TypesEvent {
       override def tag = super.tag + "-subTypeCheck"
-      val value1 = deepTypeClone(value01)
-      val value2 = deepTypeClone(value02)
       def lhs      = value1
       def rhs      = value2
       def binaryOp = "<:<"
@@ -55,17 +53,15 @@ trait TypesEventsUniverse {
     
     // All events involved in subtyping tests
     trait Subtyping {
-      val tp1: Type
-      val tp2: Type
+      def tp1: Type
+      def tp2: Type
       val compType: SubCompare.Value
       val which: Side.Value
       def participants = List()
     }
 
-    case class CompareTypes(tp10: Type, tp20: Type, which: Side.Value, compType: SubCompare.Value)
+    case class CompareTypes(tp1: Type, tp2: Type, which: Side.Value, compType: SubCompare.Value)
       extends Event with TypesEvent with Subtyping {
-      val tp1 = deepTypeClone(tp10)
-      val tp2 = deepTypeClone(tp20)
     }
 
     case class CompareDone(tp1: Type, tp2: Type, originEvent: Int, subtypes: Boolean)
