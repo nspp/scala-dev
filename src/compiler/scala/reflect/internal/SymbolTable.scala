@@ -276,4 +276,7 @@ abstract class SymbolTable extends api.Universe
 
   /** The phase which has given index as identifier. */
   val phaseWithId: Array[Phase]
+  
+  val TypeManifest = manifest[Type]
+  val SymbolManifest = manifest[Symbol]
 }

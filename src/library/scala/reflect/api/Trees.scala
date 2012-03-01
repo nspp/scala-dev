@@ -26,30 +26,26 @@ trait Trees /*extends reflect.generic.Trees*/ { self: Universe =>
                 privateWithin: Name = EmptyTypeName,
                 annotations: List[Tree] = List()): Modifiers
                 
-  trait AttributesHistory {
+  abstract class AttributesHistory {
+    type T
     def clock: Clock
-    def tpe: Type
-    def sym: Symbol
+    def v: T
+    def m: Manifest[T]
     def prev: AttributesHistory
   }
   
-  // todo: handle tree and sym separate?
-  private case class AttributesHistoryPoint(clock: Clock, tpe: Type, sym: Symbol, prev: AttributesHistory) extends AttributesHistory {
-    //assert(clock > prev.clock) // todo: need to define ordering for clocks
-    override def toString() = {
-      "AttributesHistoryPoint(" + clock + ":" + tpe + "," + sym + ")"
-    }
+  case class TreeSymChange(clock: Clock, sym: Symbol, prev: AttributesHistory) extends AttributesHistory {
+    type T = Symbol
+    def v = sym
+    def m = SymbolManifest
+    override def toString() = "SymbolChangeInTree[" + clock + "](" + sym + ")"
   }
   
-  private case object NoHistory extends AttributesHistory {
-    def clock = NoClock
-    def tpe = NoType
-    def sym = NoSymbol
-    def prev = null
-    
-    override def toString() = {
-      "NoHistory"
-    }
+  case class TreeTpeChange(clock: Clock, tpe: Type, prev: AttributesHistory) extends AttributesHistory {
+    type T = Type
+    def v = tpe
+    def m = TypeManifest
+    override def toString() = "SymbolChangeInTree[" + clock + "](" + tpe + ")"
   }
   
   /** Tree is the basis for scala's abstract syntax. The nodes are
@@ -108,39 +104,26 @@ trait Trees /*extends reflect.generic.Trees*/ { self: Universe =>
     private[this] var rawtpe: Type = _
     
     private[this] var attrHistory: AttributesHistory = null
+    def attributes = attrHistory
     
-    def attributes(at: Clock): AttributesHistory= {
-      // todo add the logic
-      var attr0 = attrHistory
-      while (attr0 != null && at < attr0.clock)
-        attr0 = attr0.prev
-      if (attr0 == null) NoHistory
-      else attr0
-    }
-    
-    def currentAttributes(): AttributesHistory = attrHistory
-    
-    // TODO join together
     @inline
-    def logType() {
+    def logType(tp: Type) {
       if (tpe != null)
-        attrHistory = AttributesHistoryPoint(newClockTick(), tpe, symbol, attrHistory)
+        attrHistory = TreeTpeChange(newClockTick(), tpe, attrHistory)
     }
     
     @inline
-    def logSymbol() {
+    def logSymbol(sym: Symbol) {
       if (symbol != null)
-        attrHistory = AttributesHistoryPoint(newClockTick(), tpe, symbol, attrHistory)
+        attrHistory = TreeSymChange(newClockTick(), sym, attrHistory)
     }
 
     def tpe = rawtpe
-    //def tpe_=(t: Type) = rawtpe = t
 
-    // TODO: inline
     /** Set tpe to give `tp` and return this.
      */
-    def setType(tp: Type): this.type = { logType(); rawtpe = tp; this }
-    def setTypeNoLog(tp: Type) = rawtpe = tp // todo rename
+    def setType(tp: Type): this.type = { logType(tp); rawtpe = tp; this }
+    def setTypeNoLog(tp: Type) = rawtpe = tp // only used for recreating the trees
 
     /** Like `setType`, but if this is a previously empty TypeTree that
      *  fact is remembered so that resetAllAttrs will snap back.
@@ -178,8 +161,7 @@ trait Trees /*extends reflect.generic.Trees*/ { self: Universe =>
      */
     def symbol: Symbol = null
     protected def symbol_=(sym: Symbol) { throw new UnsupportedOperationException("symbol_= inapplicable for " + this) }
-    // TODO: inline
-    def setSymbol(sym: Symbol): this.type = { logSymbol(); symbol = sym; this }
+    def setSymbol(sym: Symbol): this.type = { logSymbol(sym); symbol = sym; this }
     def setSymbolNoLog(sym: Symbol) = symbol = sym
 
     def hasSymbol = false

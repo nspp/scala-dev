@@ -434,5 +434,7 @@ trait Types { self: Universe =>
 
     /** The greatest lower bound wrt <:< of a list of types */
   def glb(ts: List[Type]): Type
+  
+  val TypeManifest: Manifest[Type]
 }
 

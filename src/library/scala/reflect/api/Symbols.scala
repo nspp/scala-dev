@@ -171,4 +171,6 @@ trait Symbols { self: Universe =>
   }
 
   val NoSymbol: Symbol
+  
+  val SymbolManifest: Manifest[Symbol]
 }
