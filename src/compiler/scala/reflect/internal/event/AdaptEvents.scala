@@ -13,9 +13,8 @@ trait AdaptEventsUniverse {
     }
 
 
-    case class AdaptStart(tree0: Tree, pt: Type)
+    case class AdaptStart(tree: Tree, pt: Type)
       extends TreeEvent with AdaptEvent {
-      val tree = duplicateTreeWithPos(tree0)
     }
 
     case class AdaptDone(originEvent: Int, status0: Boolean = true)
@@ -25,9 +24,8 @@ trait AdaptEventsUniverse {
       override def status = status0
     }
 
-    case class AdaptAnnotationsAdapt(tree0: Tree)
+    case class AdaptAnnotationsAdapt(tree: Tree)
       extends TreeEvent with AdaptEvent {
-      val tree = duplicateTreeWithPos(tree0)
       override def tag = super.tag + "-annotations"
     }
 
@@ -35,9 +33,8 @@ trait AdaptEventsUniverse {
       override def tag = super.tag + "-constanttpe"
     }
 
-    case class ConstantTpeAdapt(tree0: Tree, tpe: Type)
+    case class ConstantTpeAdapt(tree: Tree, tpe: Type)
       extends TreeTypeEventUnary with ConstantTpeAdaptEvent {
-      val tree = duplicateTreeWithPos(tree0)
     }
 
     case class OverloadedTpeAdapt(tpe: Type, alts: List[Symbol])
@@ -65,19 +62,17 @@ trait AdaptEventsUniverse {
       override def tag = super.tag + "-skolemizeExistential"
     }
 
-    case class PolyTpeAdapt(tree0: Tree, tparams: List[Symbol],
+    case class PolyTpeAdapt(tree: Tree, tparams: List[Symbol],
       tpe: Type, typeTree: Tree, undetTParams: List[Symbol])
       extends TreeEvent with AdaptEvent {
-      val tree = duplicateTreeWithPos(tree0)
       override def tag = super.tag + "-poly-type"
     }
 
     // Start implicit method type adapt
     trait ImplicitMethodTpeAdaptEvent extends AdaptEvent
 
-    case class ImplicitMethodTpeAdapt(tree0: Tree, tpe: Type)
+    case class ImplicitMethodTpeAdapt(tree: Tree, tpe: Type)
       extends TreeEvent with ImplicitMethodTpeAdaptEvent {
-      val tree = duplicateTreeWithPos(tree0)
       override def tag = super.tag + "-implicit-method-type"
     }
 
@@ -87,9 +82,8 @@ trait AdaptEventsUniverse {
       def participants: List[Any] = params
     }
 
-    case class SuccessSilentMethodTpeAdapt(tree0: Tree, tpe: Type)
+    case class SuccessSilentMethodTpeAdapt(tree: Tree, tpe: Type)
       extends TreeEvent with ImplicitMethodTpeAdaptEvent {
-      val tree = duplicateTreeWithPos(tree0)
       override def tag = super.tag + "-success-applied-implicit-args"
     }
 
@@ -123,91 +117,76 @@ trait AdaptEventsUniverse {
       override def tag = super.tag + "-method-type"
     }
 
-    case class EtaMethodTpeAdapt(meth: Symbol, tree0: Tree, pt: Type)
+    case class EtaMethodTpeAdapt(meth: Symbol, tree: Tree, pt: Type)
       extends TreeEvent with MethodTpeAdaptEvent {
-      val tree = duplicateTreeWithPos(tree0)
       override def tag = "eta-expansion"
     }
 
-    case class TreeAfterEtaExpansionMethodTpeAdapt(tree0: Tree, tree01: Tree)
+    case class TreeAfterEtaExpansionMethodTpeAdapt(tree: Tree, tree1: Tree)
       extends TreeEvent with MethodTpeAdaptEvent {
-      val tree = duplicateTreeWithPos(tree0)
-      val tree1 = duplicateTreeWithPos(tree01)
       override def tag = "eta-expanded-tree"
     }
 
-    case class InstantiateTParamsForEtaExpansionAdapt(tree0: Tree, meth: Symbol,
+    case class InstantiateTParamsForEtaExpansionAdapt(tree: Tree, meth: Symbol,
       tparams: List[Symbol])
       extends TreeEvent with MethodTpeAdaptEvent {
-      val tree = duplicateTreeWithPos(tree0)
       override def tag = "instantiate-type-params-in-eta-expansion"
     }
 
-    case class InferExprFailed(tree0: Tree, pt: Type, e: String)
+    case class InferExprFailed(tree: Tree, pt: Type, e: String)
       extends TreeEvent with MethodTpeAdaptEvent with SoftErrorEvent {
-      val tree = duplicateTreeWithPos(tree0)
       override def tag = "failed-to-infer-expr-instance"
     }
 
-    case class ApplyNullaryMethodAdapt(tree0: Tree, methTpe: Type)
+    case class ApplyNullaryMethodAdapt(tree: Tree, methTpe: Type)
       extends TreeEvent with MethodTpeAdaptEvent {
-      val tree = duplicateTreeWithPos(tree0)
       override def tag = "apply-nullary-method"
     }
 
 
-    case class TypeTreeAdapt(tree0: Tree)
+    case class TypeTreeAdapt(tree: Tree)
       extends TreeEvent with AdaptEvent {
-      val tree = duplicateTreeWithPos(tree0)
       override def tag = super.tag + "-typeTree"
     }
 
-    case class FunModeAdapt(tree0: Tree)
+    case class FunModeAdapt(tree: Tree)
       extends TreeEvent with AdaptEvent with DebugEvent {
-      val tree = duplicateTreeWithPos(tree0)
       override def tag = super.tag + "-funmode"
     }
 
-    case class ConvertToTypeTreeAdapt(tree0: Tree)
+    case class ConvertToTypeTreeAdapt(tree: Tree)
       extends TreeEvent with AdaptEvent {
-      val tree = duplicateTreeWithPos(tree0)
       override def tag = super.tag + "-convertToTypeTree"
     }
 
-    case class PatternConstructorsAdapt(tree0: Tree, sym: Symbol)
+    case class PatternConstructorsAdapt(tree: Tree, sym: Symbol)
       extends TreeEvent with AdaptEvent {
-      val tree = duplicateTreeWithPos(tree0)
       override def tag = super.tag + "-patternConstructor"
     }
 
-    case class ApplyAdapt(tree0: Tree)
+    case class ApplyAdapt(tree: Tree)
       extends TreeEvent with AdaptEvent {
-      val tree = duplicateTreeWithPos(tree0)
       override def tag = "adapt-to-tree-with-apply()"
     }
 
-    case class AdaptToNameQualAdapt(tree0: Tree)
+    case class AdaptToNameQualAdapt(tree: Tree)
       extends TreeEvent with AdaptEvent {
-      val tree = duplicateTreeWithPos(tree0)
       override def tag = super.tag + "-apply-qual"
     }
 
-    case class InferInstanceAdapt(tree0: Tree, tparams: List[Symbol],
+    case class InferInstanceAdapt(tree: Tree, tparams: List[Symbol],
       e: Explanation, pt: Type)
       extends TreeEvent with AdaptEvent {
-      val tree = duplicateTreeWithPos(tree0)
       override def tag = super.tag + "-infer-instance"
     }
 
     // Try subtyping
-    case class SuccessSubTypeAdapt(tree0: Tree, value1: Type, value2: Type) extends TwoTypeEvent with AdaptEvent {
-      val tree = duplicateTreeWithPos(tree0)
+    case class SuccessSubTypeAdapt(tree: Tree, value1: Type, value2: Type) extends TwoTypeEvent with AdaptEvent {
       override def tag = super.tag + "-subtype-ok"
       def binaryOp = "<:<"
     }
 
-    case class ConstantFoldSubTypeAdapt(tree0: Tree, value1: Type, value2: Type) extends TwoTypeEvent with AdaptEvent {
-      val tree = duplicateTreeWithPos(tree0)
+    case class ConstantFoldSubTypeAdapt(tree: Tree, value1: Type, value2: Type) extends TwoTypeEvent with AdaptEvent {
       override def tag = super.tag + "-subtype-const"
       def binaryOp = "<:<"
     }
@@ -228,34 +207,29 @@ trait AdaptEventsUniverse {
       override def tag = super.tag + "-weakConformance"
     }
 
-    case class AnnotationCheckerAdapt(tree0: Tree)
+    case class AnnotationCheckerAdapt(tree: Tree)
       extends TreeEvent with AdaptEvent {
-      val tree = duplicateTreeWithPos(tree0)
       override def tag = super.tag + "-annotationChecker"
     }
 
-    case class InstantiateAdapt(tree0: Tree)
+    case class InstantiateAdapt(tree: Tree)
       extends TreeEvent with AdaptEvent {
-      val tree = duplicateTreeWithPos(tree0)
       override def tag = super.tag + "-instantiate"
     }
 
-    case class FindViewAdapt(tree0: Tree)
+    case class FindViewAdapt(tree: Tree)
       extends TreeEvent with AdaptEvent {
-      val tree = duplicateTreeWithPos(tree0)
       override def tag = "try-to-find-view"
     }
 
-    case class ApplyViewAdapt(coercion: Tree, origTree: Tree)
+    case class ApplyViewAdapt(coercion: Tree, tree: Tree)
       extends TreeEvent with SymbolReferencesEvent with AdaptEvent {
-      val tree = duplicateTreeWithPos(origTree)
       override def tag = "apply-found-view"
       def references = List(coercion.symbol)
     }
 
-    case class NoViewFound(tree0: Tree, pt: Type)
+    case class NoViewFound(tree: Tree, pt: Type)
       extends TreeEvent with AdaptEvent {
-      val tree = duplicateTreeWithPos(tree0)
       override def tag = "no-view-found"
     }
   }

@@ -73,6 +73,12 @@ trait TypesEventsUniverse {
     case class FailedSubtyping(tp1: Type, tp2: Type, which: Side.Value, compType: SubCompare.Value)
       extends Event with TypesEvent with Subtyping {
     }
+    
+    // other
+    case class InstantiateTypeParams(formals: List[Symbol], actuals: List[Type])
+      extends Event with TypesEvent {
+      def participants = formals
+    }
   }
 
   

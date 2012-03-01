@@ -175,7 +175,7 @@ trait Events {
   }
 
   object Util {
-    @inline def withFullClone[T](f: => T): T = {
+    /*@inline def withFullClone[T](f: => T): T = {
       val clone = settings.YfullClone.value // TODO use internal flag
       settings.YfullClone.value = true
       val res = f
@@ -189,6 +189,6 @@ trait Events {
 
     def deepSymClone[T <: Symbol](sym: T): T = withFullClone {
       sym.cloneSymbol.asInstanceOf[T]
-    }
+    }*/
   }
 }

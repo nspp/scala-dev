@@ -1278,7 +1278,7 @@ trait Namers extends MethodSynthesis {
             && sym.owner.isConstructor
           )
           val typer1 = typer.constrTyperIf(isBeforeSupercall)
-          EV.eventBlockWithEv(EV.ValDefSigNamer(name, tpt, rhs, vdef), EV.NamerDone(_)) { ev =>
+          EV.eventBlockWithEv(EV.ValDefSigNamer(vdef), EV.NamerDone(_)) { ev =>
             //sym.updateEventInfo(ev.id)
 
             if (tpt.isEmpty) {

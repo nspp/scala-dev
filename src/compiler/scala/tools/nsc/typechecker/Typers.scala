@@ -4479,7 +4479,11 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
           // @M maybe the well-kindedness check should be done when checking the type arguments conform to the type parameters' bounds?
           val args1 = if (sameLength(args, tparams)) map2Conserve(args, tparams) {
                         //@M! the polytype denotes the expected kind
-                        (arg, tparam) => typedHigherKindedType(arg, mode, polyType(tparam.typeParams, AnyClass.tpe))
+                        
+                        (arg, tparam) => {
+                          val pt1 = polyType(tparam.typeParams, AnyClass.tpe)
+                          typedHigherKindedType(arg, mode, pt1)(EV.TypeHigherKindedTypeApplyWithExpectedKind(arg, pt1))
+                        }
                       } else {
                       //@M  this branch is correctly hit for an overloaded polymorphic type. It also has to handle erroneous cases.
                       // Until the right alternative for an overloaded method is known, be very liberal,
@@ -4487,7 +4491,7 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
                       // in the then-branch above. (see pos/tcpoly_overloaded.scala)
                       // this assert is too strict: be tolerant for errors like trait A { def foo[m[x], g]=error(""); def x[g] = foo[g/*ERR: missing argument type*/] }
                       //assert(fun1.symbol.info.isInstanceOf[OverloadedType] || fun1.symbol.isError) //, (fun1.symbol,fun1.symbol.info,fun1.symbol.info.getClass,args,tparams))
-                        args mapConserve (typedHigherKindedType(_, mode))
+                        args mapConserve (arg => typedHigherKindedType(arg, mode)(EV.TypeHigherKindedTypeApplyOverloaded(arg)))
                       }
 
           //@M TODO: context.undetparams = undets_fun ?
