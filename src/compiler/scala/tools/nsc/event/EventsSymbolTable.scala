@@ -41,6 +41,7 @@ trait EventsSymbolTable extends EventsUniverse
     model =>
 
     val global: SymbolTable
+    protected def instrumentingOn: Boolean
 
     type EventResponse = Event
     val NoResponse     = NoEvent
@@ -244,40 +245,5 @@ trait EventsSymbolTable extends EventsUniverse
       def apply(tag: String, f: Event => Boolean): Filter = new SimpleFilter(tag, f)
       def apply(f: Event => Boolean): Filter = apply("", f)
     }
-
-/*    @inline
-    final def <<(ev: Event): EventResponse = {
-      if (eventsOn) {
-        dlog(ev.toString)
-        //assert(!ev.isInstanceOf[DoneBlock])
-        eventHooks foreach (_ applyIfDefined ev)
-      }
-      NoResponse
-    }
-
-    @inline
-    final def <<<(ev: Event): EventResponse = {
-      if (eventsOn) {
-        // start block
-        dlog(ev.toString)
-        assert(!ev.isInstanceOf[DoneBlock])
-        eventHooks foreach (h => {h applyIfDefined ev; h.startBlock() })
-        ev
-      } else NoResponse
-    }
-
-    @inline
-    final def >>>(ev: Event): EventResponse = {
-      if (eventsOn) {
-        // end block
-        dlog(ev.toString)
-        assert(ev.isInstanceOf[DoneBlock], ev.getClass + " should be an instance of DoneBlock")
-        // Should update tag to super.tag`-done`
-        // but cannot do it easily without forwarding everything
-        eventHooks foreach (h => {h applyIfDefined ev; h.endBlock()})
-      }
-      NoResponse
-    }
-    */
   }
 }

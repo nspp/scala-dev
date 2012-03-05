@@ -37,8 +37,6 @@ class Universe extends SymbolTable with internal.transform.Transforms with Event
 
   type Position = String // source file?
   val NoPosition = ""
-    
-  def instrumentingOn: Boolean = false
 
   // establish root association to avoid cyclic dependency errors later
   classToScala(classOf[java.lang.Object]).initialize
@@ -73,6 +71,7 @@ trait EventUniverseStub {
     def formatTypeString(tpe: Type): String = "(not implemented)"
     def eventHooks: List[Hook] = Nil
     def openBlockResponse(ev: Event) = ()
+    def instrumentingOn = false
 
     object NoCompilationUnit {
       def source: Any = null

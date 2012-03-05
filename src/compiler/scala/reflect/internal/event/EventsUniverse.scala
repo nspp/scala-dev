@@ -17,8 +17,6 @@ trait EventsUniverse extends AnyRef
   val EV: EventModel {
     val global: outer.type
   }
-  
-  def instrumentingOn: Boolean
 
   private[scala] var eventIds = 0
 
@@ -380,24 +378,6 @@ trait EventsUniverse extends AnyRef
     abstract class HookCompanion {
       def apply(f: Event =>? EventResponse): Hook
     }
-
-    // Need to comment out for the inliner to do the job
-    /*
-    // Normal way of informing about an event
-    // Contains no information for visualization
-    @elidable(2500)
-    @inline
-    def <<(ev: => Event): EventResponse
-
-    // Event starting block
-    @elidable(2500)
-    @inline
-    def <<<(ev: => Event): EventResponse
-
-    // Event ending block without actual handling of the event
-    @elidable(2500)
-    @inline
-    def >>>(ev: => Event): EventResponse*/
 
     // Normal way of informing about an event
     @elidable(2500)

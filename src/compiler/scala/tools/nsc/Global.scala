@@ -66,28 +66,43 @@ class Global(var currentSettings: Settings, var reporter: Reporter) extends Symb
   // platform specific elements
 
   // event hooks ------------------------------------------------------
+  
+  trait EventPostInit {
+    def postInit: Unit
+  }
 
-  object EV extends {
+  // todo: fix when overriding inner objects is possible
+  class EVGlobal extends {
     val global: Global.this.type = Global.this
-  } with EventModel {
+  } with EventModel with EventPostInit {
     val loader = new {
       val global: Global.this.type = Global.this
     } with HookLoader
+    
+    var _postInit = false
 
-    lazy val postInit: Unit = {
-      posOK = true
-      settings.Yhook.value match {
-        case ""   => ()
-        case arg  =>
-          log("Installing user hook: " + settings.Yhook.value)
-          addHook(loader createHookFromString arg)
+    def postInit: Unit = {
+      if (!_postInit) {
+        _postInit = true
+        posOK = true
+	    settings.Yhook.value match {
+	      case ""   => ()
+	      case arg  =>
+	        log("Installing user hook: " + settings.Yhook.value)
+	        global.EV.addHook(loader createHookFromString arg)
+	    }
       }
     }
+    
+    protected def instrumentingOn = false
 
     isInitialized = true
   }
   
-  def instrumentingOn = false // by default we are off
+  protected def EVGlobal: EventModel with EventPostInit = new EVGlobal
+  
+  lazy val EV: EventModel with EventPostInit = EVGlobal
+
 
   object EVDefaults {
     implicit val e: EV.Explanation = EV.DefaultExplanation
