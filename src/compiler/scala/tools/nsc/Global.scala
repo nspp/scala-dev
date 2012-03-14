@@ -94,7 +94,7 @@ class Global(var currentSettings: Settings, var reporter: Reporter) extends Symb
       }
     }
     
-    protected def instrumentingOn = false
+    def instrumentingOn = false
 
     isInitialized = true
   }

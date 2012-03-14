@@ -23,6 +23,8 @@ trait EventsUniverse extends AnyRef
   abstract class EventModel extends AllEvents with AllExplanations {
     val global: SymbolTable
     var isInitialized = false
+    
+    def instrumentingOn: Boolean
 
 
     type EventResponse

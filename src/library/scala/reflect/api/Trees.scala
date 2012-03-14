@@ -108,13 +108,13 @@ trait Trees /*extends reflect.generic.Trees*/ { self: Universe =>
     
     @inline
     def logType(tp: Type) {
-      if (tpe != null)
+      if (isClockOn && tpe != null)
         attrHistory = TreeTpeChange(newClockTick(), tpe, attrHistory)
     }
     
     @inline
     def logSymbol(sym: Symbol) {
-      if (symbol != null)
+      if (isClockOn && symbol != null)
         attrHistory = TreeSymChange(newClockTick(), sym, attrHistory)
     }
 

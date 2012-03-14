@@ -2591,7 +2591,8 @@ trait Types extends api.Types { self: SymbolTable =>
     
     def constr = rawconstr
     def constr_=(c: TypeConstraint) {
-      snapshot0 = TVarConstraintSnapshot(newClockTick(), c, snapshot0)
+      if (isClockOn)
+        snapshot0 = TVarConstraintSnapshot(newClockTick(), c, snapshot0)
       rawconstr = constr
     }
     
@@ -3413,7 +3414,8 @@ trait Types extends api.Types { self: SymbolTable =>
     def avoidWiden: Boolean = avoidWidening
 
     def addLoBound(tp: Type, isNumericBound: Boolean = false) {
-      constrSnapshot = BoundChange(newClockTick(), tp, true, isNumericBound, constrSnapshot)
+      if (isClockOn)
+        constrSnapshot = BoundChange(newClockTick(), tp, true, isNumericBound, constrSnapshot)
       if (isNumericBound && isNumericValueType(tp)) {
         if (numlo == NoType || isNumericSubType(numlo, tp))
           numlo = tp
@@ -3432,7 +3434,8 @@ trait Types extends api.Types { self: SymbolTable =>
     }
 
     def addHiBound(tp: Type, isNumericBound: Boolean = false) {
-      constrSnapshot = BoundChange(newClockTick(), tp, false, isNumericBound, constrSnapshot)
+      if (isClockOn)
+        constrSnapshot = BoundChange(newClockTick(), tp, false, isNumericBound, constrSnapshot)
       checkWidening(tp)
       if (isNumericBound && isNumericValueType(tp)) {
         if (numhi == NoType || isNumericSubType(tp, numhi))
@@ -3452,7 +3455,8 @@ trait Types extends api.Types { self: SymbolTable =>
     private var rawinst: Type = NoType // @M reduce visibility?
     def inst: Type = rawinst
     def inst_=(inst0: Type) {
-      constrSnapshot = InstChange(newClockTick(), inst0, constrSnapshot)
+      if (isClockOn)
+        constrSnapshot = InstChange(newClockTick(), inst0, constrSnapshot)
       rawinst = inst0
     }
 

@@ -13,6 +13,7 @@ trait Clocks { self: Universe =>
   }
   
   def newClockTick(): Clock
+  def isClockOn: Boolean
   
   object NoClock extends Clock {
     def id = -1

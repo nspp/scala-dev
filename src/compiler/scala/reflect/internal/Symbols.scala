@@ -1006,10 +1006,10 @@ trait Symbols extends api.Symbols { self: SymbolTable =>
 
     /** Set initial info. */
     def setInfo(info0: Type): this.type                     = {
-      val tick = newClockTick()
-//      if (tick.id == 459)
-//        throw new Exception("crash")
-      rawsnapshot = SymbolTypeSnapshot(tick, info0, rawsnapshot)
+      if (isClockOn) {
+        val tick = newClockTick()
+        rawsnapshot = SymbolTypeSnapshot(tick, info0, rawsnapshot)
+      }
       setInfoNoLog(info0)
     }
     

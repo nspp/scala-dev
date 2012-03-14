@@ -41,7 +41,6 @@ trait EventsSymbolTable extends EventsUniverse
     model =>
 
     val global: SymbolTable
-    protected def instrumentingOn: Boolean
 
     type EventResponse = Event
     val NoResponse     = NoEvent

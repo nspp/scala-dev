@@ -7,9 +7,12 @@ trait Clocks extends api.Clocks { self: SymbolTable =>
   private var counter = 0
 
   def newClockTick(): Clock = {
+    assert(isClockOn, "attempting to get current time when internal clock is off")
     counter += 1
     new Tick(counter)
   }
+  
+  def isClockOn = EV.instrumentingOn
   
   def currentClock() = new Tick(counter)
   
