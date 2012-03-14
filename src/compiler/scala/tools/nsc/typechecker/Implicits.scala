@@ -102,21 +102,13 @@ trait Implicits {
 
   private val ManifestSymbols = Set(PartialManifestClass, FullManifestClass, OptManifestClass)
 
-  /** Map all type params in given list to WildcardType
-   *  @param   tparams  The list of type parameters to map
-   *  @param   tp  The type in which to do the mapping
-   */
-  private def tparamsToWildcards(tparams: List[Symbol], tp: Type) =
-    if (tparams.isEmpty) tp
-    else tp.instantiateTypeParams(tparams, tparams map (_ => WildcardType))
-
   /* Map a polytype to one in which all type parameters and argument-dependent types are replaced by wildcards.
    * Consider `implicit def b(implicit x: A): x.T = error("")`. We need to approximate DebruijnIndex types
    * when checking whether `b` is a valid implicit, as we haven't even searched a value for the implicit arg `x`,
    * so we have to approximate (otherwise it is excluded a priori).
    */
   private def depoly(tp: Type): Type = tp match {
-    case PolyType(tparams, restpe) => tparamsToWildcards(tparams, ApproximateDependentMap(restpe))
+    case PolyType(tparams, restpe) => deriveTypeWithWildcards(tparams)(ApproximateDependentMap(restpe))
     case _                         => ApproximateDependentMap(tp)
   }
 
@@ -221,9 +213,9 @@ trait Implicits {
   /** An extractor for types of the form ? { name: (? >: argtpe <: Any*)restp }
    */
   object HasMethodMatching {
-    val dummyMethod = new TermSymbol(NoSymbol, NoPosition, newTermName("typer$dummy"))
+    val dummyMethod = NoSymbol.newTermSymbol(newTermName("typer$dummy"))
     def templateArgType(argtpe: Type) = new BoundedWildcardType(TypeBounds.lower(argtpe))
-    
+
     def apply(name: Name, argtpes: List[Type], restpe: Type): Type = {
       val mtpe = MethodType(dummyMethod.newSyntheticValueParams(argtpes map templateArgType), restpe)
       memberWildcardType(name, mtpe)
@@ -579,7 +571,7 @@ trait Implicits {
         else {
           val tvars = undetParams map freshVar
           def ptInstantiated = pt.instantiateTypeParams(undetParams, tvars)
-          
+
           printInference("[search] considering %s (pt contains %s) trying %s against pt=%s".format(
             if (undetParams.isEmpty) "no tparams" else undetParams.map(_.name).mkString(", "),
             typeVarsInType(ptInstantiated) filterNot (_.isGround) match { case Nil => "no tvars" ; case tvs => tvs.mkString(", ") },
@@ -602,7 +594,7 @@ trait Implicits {
             // we must be conservative in leaving type params in undetparams
             // prototype == WildcardType: want to remove all inferred Nothings
             val AdjustedTypeArgs(okParams, okArgs) = adjustTypeArgs(undetParams, tvars, targs)
-            
+
             val subst: TreeTypeSubstituter =
               if (okParams.isEmpty) EmptyTreeTypeSubstituter
               else {
@@ -629,11 +621,11 @@ trait Implicits {
               case Apply(TypeApply(fun, args), _) => typedTypeApply(itree2, EXPRmode, fun, args) // t2421c
               case t                              => t
             }
-            
+
             if (context.hasErrors)
               fail("typing TypeApply reported errors for the implicit tree")
             else {
-              val result = new SearchResult(checked, subst)
+              val result = new SearchResult(itree2, subst)
               incCounter(foundImplicits)
               printInference("[success] found %s for pt %s".format(result, ptInstantiated))
               result
@@ -788,13 +780,13 @@ trait Implicits {
               val newPending = undoLog undo {
                 is filterNot (alt => alt == i || {
                   try improves(i, alt)
-                  catch { 
-                    case e: CyclicReference => 
+                  catch {
+                    case e: CyclicReference =>
                       if (printInfers) {
                         println(i+" discarded because cyclic reference occurred")
                         e.printStackTrace()
                       }
-                      true 
+                      true
                   }
                 })
               }
@@ -1171,7 +1163,7 @@ trait Implicits {
 /*          !!! the following is almost right, but we have to splice nested manifest
  *          !!! types into this type. This requires a substantial extension of
  *          !!! reifiers.
-            val reifier = new liftcode.Reifier()
+            val reifier = new Reifier()
             val rtree = reifier.reifyTopLevel(tp1)
             manifestFactoryCall("apply", tp, rtree)
 */

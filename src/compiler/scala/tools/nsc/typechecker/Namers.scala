@@ -89,7 +89,7 @@ trait Namers extends MethodSynthesis {
       newNamer(context.makeNewScope(tree, sym))
     }
     def createInnerNamer() = {
-      newNamer(context.make(context.tree, owner, new Scope))
+      newNamer(context.make(context.tree, owner, newScope))
     }
     def createPrimaryConstructorParameterNamer: Namer = { //todo: can we merge this with SCCmode?
       val classContext = context.enclClass
@@ -113,7 +113,7 @@ trait Namers extends MethodSynthesis {
     private def contextFile = context.unit.source.file
     private def typeErrorHandler[T](tree: Tree, alt: T): PartialFunction[Throwable, T] = {
       case ex: TypeError =>
-        // H@ need to ensure that we handle only cyclic references 
+        // H@ need to ensure that we handle only cyclic references
         TypeSigError(tree, ex)
         alt
     }
@@ -277,12 +277,16 @@ trait Namers extends MethodSynthesis {
     def assignAndEnterFinishedSymbol(tree: MemberDef): Symbol = {
       val sym = assignAndEnterSymbol(tree)
       sym setInfo completerOf(tree)
-      log("[+info] " + sym.fullLocationString)
+      // log("[+info] " + sym.fullLocationString)
       sym
     }
 
     private def logAssignSymbol(tree: Tree, sym: Symbol): Symbol = {
-      log("[+symbol] " + sym.hasFlagsToString(-1L) + " " + sym)
+      sym.name.toTermName match {
+        case nme.IMPORT | nme.OUTER | nme.ANON_CLASS_NAME | nme.ANON_FUN_NAME | nme.CONSTRUCTOR => ()
+        case _                                                                                  =>
+          log("[+symbol] " + sym.debugLocationString)
+      }
       tree.symbol = sym
       sym
     }
@@ -296,7 +300,7 @@ trait Namers extends MethodSynthesis {
       val pos         = tree.pos
       val isParameter = tree.mods.isParameter
       val flags       = tree.mods.flags & mask
-      
+
       tree match {
         case TypeDef(_, _, _, _) if isParameter     => owner.newTypeParameter(name.toTypeName, pos, flags)
         case TypeDef(_, _, _, _)                    => owner.newTypeSymbol(name.toTypeName, pos, flags)
@@ -839,7 +843,7 @@ trait Namers extends MethodSynthesis {
       val parents = typer.parentTypes(templ) map checkParent
       enterSelf(templ.self)
 
-      val decls = new Scope
+      val decls = newScope
       val templateNamer = newNamer(context.make(templ, clazz, decls))
       templateNamer enterSyms templ.body
 
@@ -1300,7 +1304,7 @@ trait Namers extends MethodSynthesis {
         catch typeErrorHandler(tree, ErrorType)
 
       result match {
-        case PolyType(tparams @ (tp :: _), _) if tp.owner.isTerm => typer.deskolemizeTypeParams(tparams)(result)
+        case PolyType(tparams @ (tp :: _), _) if tp.owner.isTerm => deskolemizeTypeParams(tparams)(result)
         case _                                                   => result
       }
     }
@@ -1440,8 +1444,11 @@ trait Namers extends MethodSynthesis {
     private val ownerSym    = owner.symbol
     override val typeParams = tparams map (_.symbol) //@M
     override val tree       = restp.tree
-    if (ownerSym.isTerm)
-      typer skolemizeTypeParams tparams
+
+    if (ownerSym.isTerm) {
+      val skolems = deriveFreshSkolems(tparams map (_.symbol))
+      map2(tparams, skolems)(_ setSymbol _)
+    }
 
     def completeImpl(sym: Symbol) = {
       // @M an abstract type's type parameters are entered.
