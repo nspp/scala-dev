@@ -2702,7 +2702,7 @@ trait Types extends api.Types { self: SymbolTable =>
     def constr_=(c: TypeConstraint) {
       if (isClockOn)
         snapshot0 = TVarConstraintSnapshot(newClockTick(), c, snapshot0)
-      rawconstr = constr
+      rawconstr = c
     }
     
     private[this] var snapshot0: TVarConstraintSnapshot = null
@@ -2771,7 +2771,7 @@ trait Types extends api.Types { self: SymbolTable =>
       assert(tp != this, tp) // implies there is a cycle somewhere (?)
       //println("addLoBound: "+(safeToString, debugString(tp))) //DEBUG
       undoLog record this
-      EV.AddBoundTypeVar(this, tp, isNumericBound, false)
+      EV << EV.AddBoundTypeVar(this, tp, isNumericBound, false)
       constr.addLoBound(tp, isNumericBound)
     }
 
@@ -2779,7 +2779,7 @@ trait Types extends api.Types { self: SymbolTable =>
       // assert(tp != this)
       //println("addHiBound: "+(safeToString, debugString(tp))) //DEBUG
       undoLog record this
-      EV.AddBoundTypeVar(this, tp, isNumericBound, true)
+      EV << EV.AddBoundTypeVar(this, tp, isNumericBound, true)
       constr.addHiBound(tp, isNumericBound)
     }
     // </region>
@@ -2988,10 +2988,6 @@ trait Types extends api.Types { self: SymbolTable =>
       else "?" + levelString + originName
     )
     override def kind = "TypeVar"
-
-    override def cloneInfo(owner: Symbol) = {
-      if (settings.YfullClone.value) cloneInternal else super.cloneInfo(owner)
-    }
 
     def cloneInternal = {
       // cloning a suspended type variable when it's suspended will cause the clone
@@ -3612,10 +3608,7 @@ trait Types extends api.Types { self: SymbolTable =>
 
     def cloneInternal = {
       val tc = new TypeConstraint(lobounds, hibounds, numlo, numhi, avoidWidening)
-      if (settings.YfullClone.value && inst != null)
-        tc.inst = inst.cloneInfo(if (inst.typeSymbol == NoSymbol) NoSymbol else inst.typeSymbol.owner)
-      else
-        tc.inst = inst
+      tc.inst = inst
       tc
     }
 
@@ -6097,7 +6090,7 @@ trait Types extends api.Types { self: SymbolTable =>
         t
       case _ =>
         val ev = EV.CalcLub(ts, NonTrivial)
-        EV <<< EV.CalcLub(ts, NonTrivial) // TODO this will need to be optimized
+        EV <<< ev // TODO this will need to be optimized
         try {
           lub(ts, lubDepth(ts))
         } finally {

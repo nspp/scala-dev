@@ -525,7 +525,7 @@ trait ContextErrors {
 
       def ClassTypeRequiredError(tree: Tree, found: AnyRef) = {
         issueNormalTypeError(tree, "class type required but "+found+" found")
-        cleanErrorTree(tree)
+        infer.setError(tree) // should it duplicate?!? test case for #5529 becomes more specific
       }
 
       // validateParentClasses
@@ -775,7 +775,6 @@ trait ContextErrors {
           (targs, bounds).zipped foreach ((targ, bound) => explainTypes(targ, bound.hi))
           ()
         }
-
         issueNormalTypeError(tree,
                 prefix + "type arguments " + targs.mkString("[", ",", "]") +
                 " do not conform to " + tparams.head.owner + "'s type parameter bounds " +

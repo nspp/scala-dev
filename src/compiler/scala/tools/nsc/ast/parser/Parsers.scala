@@ -2203,8 +2203,10 @@ self =>
       val bounds = List(t.hi, t.lo)
       val anyRange = bounds.filter(_.pos.isRange).map(_.pos)
       val pos = if (anyRange.length > 0 || defaultPos == NoPosition) wrappingPos(bounds) else wrappingPos(defaultPos, bounds, false)
-      //t setPos wrappingPos(List(t.hi, t.lo))
-      t setPos pos
+      val original = wrappingPos(bounds)
+      // FIXME: this needs to be corrected as wrong range positions will be assigned
+      // in the case of range positions
+      t setPos original
     }
 
     def bound(tok: Int, default: TypeName): Tree =

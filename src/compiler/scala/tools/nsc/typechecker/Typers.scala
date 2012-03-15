@@ -2137,7 +2137,7 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
 
       val contextWithTypeBounds = context.nextEnclosing(_.tree.isInstanceOf[CaseDef])
       if (contextWithTypeBounds.savedTypeBounds nonEmpty) {
-        body1.tpe setType (contextWithTypeBounds restoreTypeBounds body1.tpe)
+        body1 setType (contextWithTypeBounds restoreTypeBounds body1.tpe)
 
         // insert a cast if something typechecked under the GADT constraints,
         // but not in real life (i.e., now that's we've reset the method's type skolems'

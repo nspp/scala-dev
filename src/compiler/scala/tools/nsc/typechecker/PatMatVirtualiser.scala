@@ -1034,7 +1034,7 @@ class Foo(x: Other) { x._1 } // no error in this order
         }
         t match {
           case Function(_, _) if t.symbol == NoSymbol =>
-            t.symbol = currentOwner.newAnonymousFunctionValue(t.pos)
+            t setSymbol currentOwner.newAnonymousFunctionValue(t.pos)
             // println("new symbol for "+ (t, t.symbol.ownerChain))
           case Function(_, _) if (t.symbol.owner == NoSymbol) || (t.symbol.owner == origOwner) =>
             // println("fundef: "+ (t, t.symbol.ownerChain, currentOwner.ownerChain))
