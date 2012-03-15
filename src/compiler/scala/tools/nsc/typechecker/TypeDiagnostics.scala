@@ -39,8 +39,6 @@ trait TypeDiagnostics {
   import definitions._
   import global.typer.{ infer, context }
 
-  private def currentUnit = currentRun.currentUnit
-
   /** The common situation of making sure nothing is erroneous could be
    *  nicer if Symbols, Types, and Trees all implemented some common interface
    *  in which isErroneous and similar would be placed.
@@ -369,9 +367,7 @@ trait TypeDiagnostics {
   trait TyperDiagnostics {
     self: Typer =>
 
-    private def contextError(pos: Position, msg: String): Unit = contextError(context, pos, msg)
     private def contextError(context0: Analyzer#Context, pos: Position, msg: String) = context0.error(pos, msg)
-    private def contextError(pos: Position, err: Throwable): Unit = contextError(context, pos, err)
     private def contextError(context0: Analyzer#Context, pos: Position, err: Throwable) = context0.error(pos, err)
     private def contextWarning(pos: Position, msg: String) = context.unit.warning(pos, msg)
 

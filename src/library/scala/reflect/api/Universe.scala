@@ -11,5 +11,6 @@ abstract class Universe extends Symbols
                            with TreePrinters
                            with AnnotationInfos
                            with StandardDefinitions
+                           with StandardNames
                            with Clocks
 
