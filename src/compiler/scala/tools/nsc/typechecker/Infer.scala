@@ -212,9 +212,9 @@ trait Infer {
     def getContext = context
 
     def issue(err: AbsTypeError): Unit = context.issue(err)
-    
-    def isPossiblyMissingArgs(found: Type, req: Type) = (found.resultApprox ne found) && isWeaklyCompatible(found.resultApprox, req) 
-    
+
+    def isPossiblyMissingArgs(found: Type, req: Type) = (found.resultApprox ne found) && isWeaklyCompatible(found.resultApprox, req)
+
     def explainTypes(tp1: Type, tp2: Type) =
       withDisambiguation(List(), tp1, tp2)(global.explainTypes(tp1, tp2))
 
@@ -230,9 +230,9 @@ trait Infer {
       if (sym.isError) {
         tree setSymbol sym setType ErrorType
       } else {
-        val topClass = context.owner.toplevelClass
+        val topClass = context.owner.enclosingTopLevelClass
         if (context.unit.exists)
-          context.unit.depends += sym.toplevelClass
+          context.unit.depends += sym.enclosingTopLevelClass
 
         var sym1 = sym filter (alt => context.isAccessible(alt, pre, site.isInstanceOf[Super]))
         // Console.println("check acc " + (sym, sym1) + ":" + (sym.tpe, sym1.tpe) + " from " + pre);//DEBUG
@@ -486,7 +486,7 @@ trait Infer {
     def adjustTypeArgs(tparams: List[Symbol], tvars: List[TypeVar], targs: List[Type], restpe: Type = WildcardType): AdjustedTypeArgs.Result  = {
       EV << EV.AdjustedTypeArgs(tparams, targs, restpe)
       val buf = AdjustedTypeArgs.Result.newBuilder[Symbol, Option[Type]]
-      
+
       foreach3(tparams, tvars, targs) { (tparam, tvar, targ) =>
         val retract = (
               targ.typeSymbol == NothingClass                                         // only retract Nothings
@@ -662,13 +662,7 @@ trait Infer {
           isApplicable(undetparams, qtpe, argtpes0, pt)
         case MethodType(params, _) =>
           EV << EV.MethodTypeApplicableDebug(ftpe)
-          val formals0 = params map { param =>
-            param.tpe match {
-              case TypeRef(_, sym, List(tpe)) if sym isNonBottomSubClass CodeClass => tpe
-              case tpe => tpe
-            }
-          }
-          val formals = formalTypes(formals0, argtpes0.length)
+          val formals = formalTypes(params map { _.tpe }, argtpes0.length)
 
           def tryTupleApply: Boolean = {
             // if 1 formal, 1 argtpe (a tuple), otherwise unmodified argtpes0
@@ -1088,19 +1082,7 @@ trait Infer {
 
     }
 
-    /** Type with all top-level occurrences of abstract types replaced by their bounds */
-    def widen(tp: Type): Type = tp match { // @M don't normalize here (compiler loops on pos/bug1090.scala )
-      case TypeRef(_, sym, _) if sym.isAbstractType =>
-        widen(tp.bounds.hi)
-      case TypeRef(_, sym, _) if sym.isAliasType =>
-        widen(tp.normalize)
-      case rtp @ RefinedType(parents, decls) =>
-        copyRefinedType(rtp, parents mapConserve widen, decls)
-      case AnnotatedType(_, underlying, _) =>
-        widen(underlying)
-      case _ =>
-        tp
-    }
+    def widen(tp: Type): Type = abstractTypesToBounds(tp)
 
     /** Substitute free type variables <code>undetparams</code> of type constructor
      *  <code>tree</code> in pattern, given prototype <code>pt</code>.
@@ -1110,47 +1092,71 @@ trait Infer {
      *  @param pt          the expected result type of the instance
      */
     def inferConstructorInstance(tree: Tree, undetparams: List[Symbol], pt0: Type) {
-      val pt = widen(pt0)
-      //println("infer constr inst "+tree+"/"+undetparams+"/"+pt0)
-      var restpe = tree.tpe.finalResultType
-      var tvars = undetparams map freshVar
+      val pt       = widen(pt0)
+      val ptparams = freeTypeParamsOfTerms.collect(pt)
+      val ctorTp   = tree.tpe
+      val resTp    = ctorTp.finalResultType
 
-      /** Compute type arguments for undetermined params and substitute them in given tree.
+      debuglog("infer constr inst "+ tree +"/"+ undetparams +"/ pt= "+ pt +" pt0= "+ pt0 +" resTp: "+ resTp)
+
+      /** Compute type arguments for undetermined params
        */
-      def computeArgs =
-        try {
-          val targs = solvedTypes(tvars, undetparams, undetparams map varianceInType(restpe),
-                                  true, lubDepth(List(restpe, pt)))
-//          checkBounds(tree, NoPrefix, NoSymbol, undetparams, targs, "inferred ")
-//          no checkBounds here. If we enable it, test bug602 fails.
-          new TreeTypeSubstituter(undetparams, targs).traverse(tree)
-        } catch ifNoInstance{ msg =>
-          NoConstructorInstanceError(tree, restpe, pt, msg)
+      def inferFor(pt: Type): Option[List[Type]] = {
+        val tvars   = undetparams map freshVar
+        val resTpV  = resTp.instantiateTypeParams(undetparams, tvars)
+
+        if (resTpV <:< pt) {
+          try {
+            // debuglog("TVARS "+ (tvars map (_.constr)))
+            // look at the argument types of the primary constructor corresponding to the pattern
+            val variances  = undetparams map varianceInType(ctorTp.paramTypes.headOption getOrElse ctorTp)
+            val targs      = solvedTypes(tvars, undetparams, variances, true, lubDepth(List(resTp, pt)))
+            // checkBounds(tree, NoPrefix, NoSymbol, undetparams, targs, "inferred ")
+            // no checkBounds here. If we enable it, test bug602 fails.
+            // TODO: reinstate checkBounds, return params that fail to meet their bounds to undetparams
+            Some(targs)
+          } catch ifNoInstance { msg =>
+            debuglog("NO INST "+ (tvars, tvars map (_.constr)))
+            NoConstructorInstanceError(tree, resTp, pt, msg)
+            None
+          }
+        } else {
+          debuglog("not a subtype: "+ resTpV +" </:< "+ pt)
+          None
         }
-      def instError = {
-        if (settings.debug.value) Console.println("ici " + tree + " " + undetparams + " " + pt)
-        if (settings.explaintypes.value) explainTypes(restpe.instantiateTypeParams(undetparams, tvars), pt)
-        ConstrInstantiationError(tree, restpe, pt)
       }
-      if (restpe.instantiateTypeParams(undetparams, tvars) <:< pt) {
-        computeArgs
-      } else if (isFullyDefined(pt)) {
-        debuglog("infer constr " + tree + ":" + restpe + ", pt = " + pt)
-        var ptparams = freeTypeParamsOfTerms.collect(pt)
-        debuglog("free type params = " + ptparams)
-        val ptWithWildcards = pt.instantiateTypeParams(ptparams, ptparams map (ptparam => WildcardType))
-        tvars = undetparams map freshVar
-        if (restpe.instantiateTypeParams(undetparams, tvars) <:< ptWithWildcards) {
-          computeArgs
-          restpe = skipImplicit(tree.tpe.resultType)
-          debuglog("new tree = " + tree + ":" + restpe)
-          val ptvars = ptparams map freshVar
-          val pt1 = pt.instantiateTypeParams(ptparams, ptvars)
-          if (isPopulated(restpe, pt1)) {
-            ptvars foreach instantiateTypeVar
-          } else { if (settings.debug.value) Console.println("no instance: "); instError }
-        } else { if (settings.debug.value) Console.println("not a subtype " + restpe.instantiateTypeParams(undetparams, tvars) + " of " + ptWithWildcards); instError }
-      } else { if (settings.debug.value) Console.println("not fully defined: " + pt); instError }
+
+      def inferForApproxPt =
+        if (isFullyDefined(pt)) {
+          inferFor(pt.instantiateTypeParams(ptparams, ptparams map (x => WildcardType))) flatMap { targs =>
+            val ctorTpInst = tree.tpe.instantiateTypeParams(undetparams, targs)
+            val resTpInst  = skipImplicit(ctorTpInst.finalResultType)
+            val ptvars     =
+              ptparams map {
+                // since instantiateTypeVar wants to modify the skolem that corresponds to the method's type parameter,
+                // and it uses the TypeVar's origin to locate it, deskolemize the existential skolem to the method tparam skolem
+                // (the existential skolem was created by adaptConstrPattern to introduce the type slack necessary to soundly deal with variant type parameters)
+                case skolem if skolem.isExistentialSkolem => freshVar(skolem.deSkolemize.asInstanceOf[TypeSymbol])
+                case p => freshVar(p)
+              }
+
+            val ptV        = pt.instantiateTypeParams(ptparams, ptvars)
+
+            if (isPopulated(resTpInst, ptV)) {
+              ptvars foreach instantiateTypeVar
+              debuglog("isPopulated "+ resTpInst +", "+ ptV +" vars= "+ ptvars)
+              Some(targs)
+            } else None
+          }
+        } else None
+
+      (inferFor(pt) orElse inferForApproxPt) map { targs =>
+        new TreeTypeSubstituter(undetparams, targs).traverse(tree)
+      } getOrElse {
+        debugwarn("failed inferConstructorInstance for "+ tree  +" : "+ tree.tpe +" under "+ undetparams +" pt = "+ pt +(if(isFullyDefined(pt)) " (fully defined)" else " (not fully defined)"))
+        // if (settings.explaintypes.value) explainTypes(resTp.instantiateTypeParams(undetparams, tvars), pt)
+        ConstrInstantiationError(tree, resTp, pt)
+      }
     }
 
     def instBounds(tvar: TypeVar): (Type, Type) = {
@@ -1313,8 +1319,8 @@ trait Infer {
           if (isPopulated(tp, pt1) && isInstantiatable(tvars ++ ptvars) || pattpMatchesPt)
              ptvars foreach instantiateTypeVar
           else {
-            IncompletePatternTypeError(tree0, pattp, pt)
-            ErrorType
+            PatternTypeIncompatibleWithPtError1(tree0, pattp, pt)
+            return ErrorType
           }
         }
         tvars foreach instantiateTypeVar
@@ -1336,7 +1342,7 @@ trait Infer {
         if (pat.tpe <:< pt1)
           ptvars foreach instantiateTypeVar
         else
-          PatternTypeIncompatibleWithPtError(pat, pt1, pt)
+          PatternTypeIncompatibleWithPtError2(pat, pt1, pt)
       }
 
     object toOrigin extends TypeMap {
@@ -1445,10 +1451,11 @@ trait Infer {
               case _ =>
             }
           }
+          // todo: missing test case
           NoBestExprAlternativeError(tree, pt)
         } else if (!competing.isEmpty) {
-          if (secondTry) NoBestExprAlternativeError(tree, pt)
-          else { if (!pt.isErroneous) AmbiguousExprAlternativeError(tree, pre, best, competing.head, pt) }
+          if (secondTry) { NoBestExprAlternativeError(tree, pt); setError(tree) }
+          else if (!pt.isErroneous) AmbiguousExprAlternativeError(tree, pre, best, competing.head, pt)
         } else {
 //          val applicable = alts1 filter (alt =>
 //            global.typer.infer.isWeaklyCompatible(pre.memberType(alt), pt))
@@ -1459,18 +1466,15 @@ trait Infer {
       }
     }
 
-    // TODO: remove once context errors refactoring is done
-    @inline private def wrapTypeError(expr: Typer => Boolean): Boolean =
-      try {
-        val silentContext = context.makeSilent(context.ambiguousErrors)
-        val res = expr(newTyper(silentContext))
-        if (silentContext.hasErrors) false else res
-        //expr
-      }
-      catch { case err: TypeError =>
-        println("TODO: still throwing exceptions " + err)
-        err.printStackTrace()
-        false }
+    @inline private def inSilentMode(context: Context)(expr: => Boolean): Boolean = {
+      val oldState = context.state
+      context.setBufferErrors()
+      val res = expr
+      val contextWithErrors = context.hasErrors
+      context.flushBuffer()
+      context.restoreState(oldState)
+      res && !contextWithErrors
+    }
 
     // Checks against the name of the parameter and also any @deprecatedName.
     private def paramMatchesName(param: Symbol, name: Name) =
@@ -1542,10 +1546,8 @@ trait Infer {
           val applicable = resolveOverloadedMethod(argtpes, {
             alts filter { alt =>
               val funTpe = followApply(pre.memberType(alt))
-              // TODO: rewrite after context errors stabilise.
-              // We wrap this applicability in try/catch because of #4457.
               EV.eventBlockInform[Boolean](EV.VerifyMethodAlternative(alt, funTpe, argtpes, pt, tree), EV.PossiblyValidAlternative(tree, alt, _, _)){
-                wrapTypeError(typer0 => typer0.infer.isApplicable(undetparams, funTpe, argtpes, pt)) &&
+                inSilentMode(context)(isApplicable(undetparams, funTpe, argtpes, pt)) &&
                 (!varArgsOnly || isVarArgsList(alt.tpe.params))
               }
             }
@@ -1563,16 +1565,14 @@ trait Infer {
             if (improves(alt, best)) alt else best)
           val competing = applicable.dropWhile(alt => best == alt || improves(best, alt))
           if (best == NoSymbol) {
-            if (pt == WildcardType)
-              NoBestMethodAlternativeError(tree, argtpes, pt)
-            else
-              EV.eventBlock(EV.NoBestAlternativeTryWithWildcard(competing, applicable, pt, tree), EV.InferDone(_)){
-                inferMethodAlternative(tree, undetparams, argtpes, WildcardType)
-              }
+            if (pt == WildcardType) NoBestMethodAlternativeError(tree, argtpes, pt)
+            else EV.eventBlock(EV.NoBestAlternativeTryWithWildcard(competing, applicable, pt, tree), EV.InferDone(_)) {
+              inferMethodAlternative(tree, undetparams, argtpes, WildcardType)
+            }
           } else if (!competing.isEmpty) {
             if (!(argtpes exists (_.isErroneous)) && !pt.isErroneous)
               AmbiguousMethodAlternativeError(tree, pre, best, competing.head, argtpes, pt)
-            setError(tree)
+            else setError(tree)
             ()
           } else {
 //            checkNotShadowed(tree.pos, pre, best, applicable)
