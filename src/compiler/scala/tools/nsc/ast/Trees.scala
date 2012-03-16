@@ -292,9 +292,11 @@ trait Trees extends reflect.internal.Trees { self: Global =>
             if (tpt.original != null) {
               transform(tpt.original)
             } else {
-              if (tpt.tpe != null && (tpt.wasEmpty || (tpt.tpe exists (tp => locals contains tp.typeSymbol))))
-                tpt.tpe = null
-              tree
+              if (tpt.tpe != null && (tpt.wasEmpty || (tpt.tpe exists (tp => locals contains tp.typeSymbol)))) {
+                val dupl = tpt.duplicate
+                dupl.tpe = null
+                dupl
+              } else tree
             }
           case TypeApply(fn, args) if args map transform exists (_.isEmpty) =>
             transform(fn)
@@ -303,10 +305,11 @@ trait Trees extends reflect.internal.Trees { self: Global =>
           case EmptyTree =>
             tree
           case _ =>
+            val dupl = tree.duplicate
             if (tree.hasSymbol && (!localOnly || (locals contains tree.symbol)))
-              tree.symbol = NoSymbol
-            tree.tpe = null
-            tree
+              dupl.symbol = NoSymbol
+            dupl.tpe = null
+            dupl
         }
       }
     }
