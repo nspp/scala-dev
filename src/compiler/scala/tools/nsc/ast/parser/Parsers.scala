@@ -2205,7 +2205,6 @@ self =>
       val pos = if (anyRange.length > 0 || defaultPos == NoPosition) wrappingPos(bounds) else wrappingPos(defaultPos, bounds, false)
       val original = wrappingPos(bounds)
       // FIXME: this needs to be corrected as wrong range positions will be assigned
-      // in the case of range positions
       t setPos original
     }
 

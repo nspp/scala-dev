@@ -27,7 +27,7 @@ trait Trees { self: Universe =>
                 privateWithin: Name = EmptyTypeName,
                 annotations: List[Tree] = List()): Modifiers
                 
-  abstract class AttributesHistory {
+  sealed abstract class AttributesHistory {
     type T
     def clock: Clock
     def v: T
