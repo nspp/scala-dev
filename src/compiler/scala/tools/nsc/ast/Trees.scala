@@ -293,7 +293,7 @@ trait Trees extends reflect.internal.Trees { self: Global =>
               transform(tpt.original)
             } else {
               if (tpt.tpe != null && (tpt.wasEmpty || (tpt.tpe exists (tp => locals contains tp.typeSymbol)))) {
-                val dupl = tpt.duplicate
+                val dupl = tpt.shallowDuplicate
                 dupl.tpe = null
                 dupl
               } else tree
@@ -305,7 +305,7 @@ trait Trees extends reflect.internal.Trees { self: Global =>
           case EmptyTree =>
             tree
           case _ =>
-            val dupl = tree.duplicate
+            val dupl = tree.shallowDuplicate
             if (tree.hasSymbol && (!localOnly || (locals contains tree.symbol)))
               dupl.symbol = NoSymbol
             dupl.tpe = null
