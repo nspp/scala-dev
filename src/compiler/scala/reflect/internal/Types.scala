@@ -3550,7 +3550,7 @@ trait Types extends api.Types { self: SymbolTable =>
     private var numhi = numhi0
     private var avoidWidening = avoidWidening0
     
-    lazy val init = InitTypeConstraintSnapshot(newClockTick(), lo0, hi0, numlo0, numhi0)
+    lazy val init = InitTypeConstraintSnapshot(lo0, hi0, numlo0, numhi0)
     var constrSnapshot: ConstrChange = null
 
     def loBounds: List[Type] = if (numlo == NoType) lobounds else numlo :: lobounds
@@ -3626,8 +3626,7 @@ trait Types extends api.Types { self: SymbolTable =>
     }
   }
   
-  case class InitTypeConstraintSnapshot(clock: Clock, lo: List[Type], hi: List[Type],
-      numlo: Type, numhi: Type)
+  case class InitTypeConstraintSnapshot(lo: List[Type], hi: List[Type], numlo: Type, numhi: Type)
       
   sealed abstract class ConstrChange {
     def clock: Clock

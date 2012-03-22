@@ -1298,8 +1298,10 @@ class Global(var currentSettings: Settings, var reporter: Reporter) extends Symb
         return
       }
 
-      compileUnits(sources map (new CompilationUnit(_)), firstPhase)
+      compileUnits(sources map (new CompilationUnit(_)))
     }
+    
+    def compileUnits(units: List[CompilationUnit]) { compileUnits(units, firstPhase) }
 
     /** Compile list of units, starting with phase `fromPhase`
      */
