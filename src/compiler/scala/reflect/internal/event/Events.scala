@@ -97,6 +97,12 @@ trait Events {
     case class NewTypeSymbol(sym: TypeSymbol) extends SymEvent {
       def tag = "newTypeSymbol"
     }
+    
+    // used when TargetDebugDone is thrown
+    case class NeutralDoneBlock(originEvent: Int, ex: TargetDebugDone) extends Event with DoneBlock {
+      def tag = "done-block"
+      def participants = List(ex)
+    }
 
     trait ErrorEvent {
       def pos0: Position

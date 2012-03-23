@@ -592,6 +592,9 @@ trait Implicits {
       catch {
         case ex: TypeError =>
           fail(ex.getMessage(), implicitEvent)
+        case ex: EV.TargetDebugDone =>
+          EV >>> EV.PossiblyValidImplicit(implicitEvent.id, tree, info.sym, info.tpe, true)
+          throw ex
       }
     }
 

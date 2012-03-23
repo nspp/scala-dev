@@ -3,6 +3,7 @@ package internal
 package event
 
 import annotation.elidable
+import scala.util.control.ControlThrowable
 
 trait EventsUniverse extends AnyRef
                      with Events
@@ -381,6 +382,8 @@ trait EventsUniverse extends AnyRef
       def apply(f: Event =>? EventResponse): Hook
     }
 
+    class TargetDebugDone(val t: Tree) extends ControlThrowable
+    
     // Normal way of informing about an event
     @elidable(2500)
     @inline
@@ -392,6 +395,8 @@ trait EventsUniverse extends AnyRef
       NoResponse
     }
 
+    // always make sure that blocks are closed
+    // it is recommended to use one of the wrappers below if you can
     @inline
     final def <<<(ev: Event): EventResponse = {
       if (eventsOn) {
@@ -415,6 +420,7 @@ trait EventsUniverse extends AnyRef
       }
       NoResponse
     }
+    
     
     // Note: assigning event within the eventsOn block is used only to
     // avoid creating multiple instances of the same event.
@@ -443,7 +449,6 @@ trait EventsUniverse extends AnyRef
       } else f(NoEvent)
     }
 
-    // TODO: this is a nasty hack to make return statements being handled correctly in blocks
     @inline
     final def eventBlockInform[T](startEvent: => Event, endEvent: => (Int, T) => Event)(f: => T): T = 
       if (eventsOn) {
@@ -452,6 +457,9 @@ trait EventsUniverse extends AnyRef
           case ex: scala.runtime.NonLocalReturnControl[T] =>
             println("[non local return in block]")
             >>>(endEvent(startEvent.id, ex.value))
+            throw ex
+          case ex: TargetDebugDone =>
+            >>>(NeutralDoneBlock(startEvent.id, ex))
             throw ex
         }
         >>>(endEvent(startEvent.id, res))
