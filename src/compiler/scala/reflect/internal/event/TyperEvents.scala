@@ -56,6 +56,10 @@ trait TyperEventsUniverse {
       //override def tag = super.tag + "-tree-sym-init"
       override def tag = "initialize-tree-symbol"
     }
+    
+    case class TyperOmittedStatement(tree: Tree) extends TreeEvent with TyperEvent {
+      override def tag = "targeted-compile-omit-stat"
+    }
 
 
 
@@ -1051,6 +1055,11 @@ trait TyperEventsUniverse {
     self: EventModel =>
 
     trait TyperExplanation
+    
+    // todo: put information into Explanation
+    trait StatementExplanation {
+      def stat: Tree
+    }
 
     // Information
     trait TemplateInfo
@@ -1068,11 +1077,11 @@ trait TyperEventsUniverse {
       extends Explanation with TyperExplanation
 
     case class TypePackageStatement(stat: Tree)
-      extends Explanation with TyperExplanation
+      extends Explanation with TyperExplanation with StatementExplanation
 
     // Template
     case class TypeTemplateStatement(stat: Tree)(implicit info: TemplateInfo)
-      extends Explanation with TyperExplanation {
+      extends Explanation with TyperExplanation with StatementExplanation {
       def templateInfo = info
     }
 
@@ -1144,13 +1153,13 @@ trait TyperEventsUniverse {
 
     //Block
     case class TypeStatementInBlock(stat: Tree)(implicit underlying0: Explanation)
-      extends Explanation with TyperExplanation {
-
+      extends Explanation with TyperExplanation with StatementExplanation {
+      
       override def underlying = underlying0
     }
 
     case class TypeLastStatementInBlock(stat: Tree)(implicit underlying0: Explanation)
-      extends Explanation with TyperExplanation {
+      extends Explanation with TyperExplanation with StatementExplanation {
 
       override def underlying = underlying0
     }
@@ -1225,11 +1234,11 @@ trait TyperEventsUniverse {
       extends Explanation with TyperExplanation
 
     // refinement
-    case class TypeRefinementStatement(tree: Tree)
-      extends Explanation with TyperExplanation
+    case class TypeRefinementStatement(stat: Tree)
+      extends Explanation with TyperExplanation with StatementExplanation
 
-    case class TypeExistentialTypeClause(tree: Tree)
-      extends Explanation with TyperExplanation
+    case class TypeExistentialTypeStatement(stat: Tree)
+      extends Explanation with TyperExplanation with StatementExplanation
 
     // Arg
     case class TypeArgForCorrectArgsNum(arg: Tree)
@@ -1239,8 +1248,8 @@ trait TyperEventsUniverse {
       extends Explanation with TyperExplanation
 
     // Use case?
-    case class TypeUseCaseStatement(tree: Tree)
-      extends Explanation with TyperExplanation
+    case class TypeUseCaseStatement(stat: Tree)
+      extends Explanation with TyperExplanation with StatementExplanation
 
 
     // Other [adapt]

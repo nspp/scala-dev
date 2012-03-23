@@ -2095,10 +2095,25 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
             case _ =>
           }
         }
+
+        
         val stats1 = typedStats(block.stats, context.owner)(s => EV.TypeStatementInBlock(s))
-        val expr1 = typed(block.expr, mode & ~(FUNmode | QUALmode), pt)(EV.TypeLastStatementInBlock(block.expr))
-        treeCopy.Block(block, stats1, expr1)
-          .setType(if (treeInfo.isExprSafeToInline(block)) expr1.tpe else expr1.tpe.deconst)
+        
+        def typeLastStatement() = {
+          val expr1 = typed(block.expr, mode & ~(FUNmode | QUALmode), pt)(EV.TypeLastStatementInBlock(block.expr))
+          treeCopy.Block(block, stats1, expr1)
+            .setType(if (treeInfo.isExprSafeToInline(block)) expr1.tpe else expr1.tpe.deconst)
+        }
+        if ((context.unit.targetPos == NoPosition) || includesTargetPos(block.expr)) {
+          typeLastStatement()
+        } else {
+          EV << EV.TyperOmittedStatement(block.expr)
+          EV.withNoEvents(typeLastStatement()) // is there any other safe way to
+                                               // give a type to a block without involving
+                                               // for example ErrorType or causing
+                                               // spurious error in type debugger
+                                               // use pt to give correct type?
+        }
       } finally {
         // enable escaping privates checking from the outside and recycle
         // transient flag
@@ -2273,11 +2288,12 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
           }
         }
     }
+    
+    def includesTargetPos(tree: Tree) = 
+      tree.pos.isRange && context.unit.exists && (tree.pos includes context.unit.targetPos)
 
     def typedStats(stats: List[Tree], exprOwner: Symbol)(implicit ev: Tree => EV.Explanation): List[Tree] = {
       val inBlock = exprOwner == context.owner
-      def includesTargetPos(tree: Tree) =
-        tree.pos.isRange && context.unit.exists && (tree.pos includes context.unit.targetPos)
       val localTarget = stats exists includesTargetPos
       val statsErrors = scala.collection.mutable.LinkedHashSet[AbsTypeError]()
       def typedStat(stat: Tree)(implicit ev: EV.Explanation): Tree = {
@@ -2293,8 +2309,10 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
               if (localTarget && !includesTargetPos(stat)) {
                 // skip typechecking of statements in a sequence where some other statement includes
                 // the targetposition
+                EV << EV.TyperOmittedStatement(stat)
                 stat
               } else {
+                val posss  = context.unit.targetPos
                 val localTyper = if (inBlock || (stat.isDef && !stat.isInstanceOf[LabelDef])) {
                   context.flushBuffer()
                   this
@@ -3248,7 +3266,7 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
       for (wc <- tree.whereClauses)
         if (wc.symbol == NoSymbol) { namer.enterSym(wc); wc.symbol setFlag EXISTENTIAL }
         else context.scope enter wc.symbol
-      val whereClauses1 = typedStats(tree.whereClauses, context.owner)(EV.TypeExistentialTypeClause)
+      val whereClauses1 = typedStats(tree.whereClauses, context.owner)(EV.TypeExistentialTypeStatement)
       for (vd @ ValDef(_, _, _, _) <- tree.whereClauses)
         if (vd.symbol.tpe.isVolatile)
           AbstractionFromVolatileTypeError(vd)
