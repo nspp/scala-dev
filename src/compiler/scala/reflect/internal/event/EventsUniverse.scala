@@ -46,7 +46,13 @@ trait EventsUniverse extends AnyRef
     type CompilationUnit <: {
       def source: Any
     }
+    
+    type AbstractScalaFile <: {
+      def file: java.io.File
+    }
+    
     def currentUnit: CompilationUnit
+    def currentFile: Option[AbstractScalaFile]
     def currentPos: Position
 
     type =>?[-T, +R]  = PartialFunction[T, R]
@@ -120,8 +126,9 @@ trait EventsUniverse extends AnyRef
       val time = currentClock()
 
       // record the phase and unit at creation
-      val phase: Phase          = currentPhase
-      val unit: CompilationUnit = currentUnit
+      val phase: Phase                    = currentPhase
+      val unit: CompilationUnit           = currentUnit
+      val file: Option[AbstractScalaFile] = currentFile
 
 
       // Sometimes it is necessary to force the actual string representation

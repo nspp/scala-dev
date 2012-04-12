@@ -51,6 +51,7 @@ trait EventUniverseStub {
     type EventResponse = Unit
     type CompilationUnit = NoCompilationUnit.type
     type Phase = internal.Phase
+    type AbstractScalaFile = NoAbstractType.type
 
     val Filter: FilterCompanion = null
     val Hook: HookCompanion = null
@@ -65,6 +66,7 @@ trait EventUniverseStub {
     def currentPhase = phase
     def currentPos: outer.Position = outer.NoPosition
     def currentUnit: CompilationUnit = NoCompilationUnit
+    def currentFile: Option[AbstractScalaFile] = None
     def eventsOn: Boolean = false
     def flagsString(flags: Long): String = internal.Flags.flagsToString(flags)
     def posString(pos: outer.Position): String = ""
@@ -75,6 +77,10 @@ trait EventUniverseStub {
 
     object NoCompilationUnit {
       def source: Any = null
+    }
+    
+    object NoAbstractType {
+      def file: java.io.File = null
     }
   }
 }

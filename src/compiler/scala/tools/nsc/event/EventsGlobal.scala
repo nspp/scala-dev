@@ -23,9 +23,11 @@ trait EventsGlobal extends EventsSymbolTable {
     type Context         = global.analyzer.Context
     type ImportInfo      = global.analyzer.ImportInfo
     type CompilationUnit = global.CompilationUnit
+    type AbstractScalaFile   = io.AbstractFile
 
     def currentRun       = global.currentRun
     def currentUnit      = if (currentRun == null) null else currentRun.currentUnit
+    def currentFile      = if (currentUnit == null) None else Some(currentUnit.source.file)
     def currentPos: Position =
       if (!isInitialized || !posOK) NoPosition
       else Option(global.posAssigner.pos) getOrElse NoPosition
@@ -69,7 +71,7 @@ trait EventsGlobal extends EventsSymbolTable {
       def tag = "newContext"
       protected def participants: List[Any] = List(context)
     }
-    case class LoadedClassFile(file: AbstractFile, sym: Symbol) extends SymEvent {
+    case class LoadedClassFile(loadedFile: AbstractFile, sym: Symbol) extends SymEvent {
       def tag = "loadedClassFile"
     }
   }

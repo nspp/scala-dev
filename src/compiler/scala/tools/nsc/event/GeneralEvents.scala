@@ -24,6 +24,20 @@ trait GeneralEvents {
       def tag = "newBaseTypeSeq"
       protected def participants: List[Any] = List(bts)
     }
+    
+    trait CompilationUnitEvent
+    case class NamerApplyPhase() extends Event with CompilationUnitEvent {
+      def tag = "namerapplyphase"
+      protected def participants: List[Any] = List(unit.source)
+    }
+    case class TyperApplyPhase() extends Event with CompilationUnitEvent{
+      def tag = "typerapplyphase"
+      protected def participants: List[Any] = List(unit.source)
+    }
+    case class UnitApplyDone(originEvent: Int) extends Event with CompilationUnitEvent with DoneBlock {
+      def tag = "applyunitdone"
+      protected def participants: List[Any] = List(unit.source)
+    }
   }
 
   trait ErrorEvents {
