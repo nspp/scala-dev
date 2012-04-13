@@ -20,6 +20,11 @@ trait ImplicitEventsUniverse {
       def tree = origTree
       def coercion = optTree
       def references = if (coercion.symbol != NoSymbol) List(coercion.symbol) else List()
+      def coercionFound = coercion match {
+        case EmptyTree      => false
+        case t if t.isEmpty => false
+        case _              => true
+      }
     }
 
     case class InferImplicit(tree: Tree, pt: Type, reportAmbiguous: Boolean,
@@ -72,6 +77,7 @@ trait ImplicitEventsUniverse {
     case class DivergentImplicitEvent() extends Event with ImplicitEvent with SoftErrorEvent {
       def participants = List()
       override def tag = "divergent-implicit"
+      def errPos = NoPosition
     }
 
     case class SearchContextImplicits(tree0: Tree, allImplicits: List[List[ImplicitInfo]])(implicit e: Explanation)
@@ -157,6 +163,7 @@ trait ImplicitEventsUniverse {
       override def tag = super.tag + "-ambiguous-implicits"
       override def participants = List(info1Sym, info2Sym)
       def references = List(info1Sym, info2Sym)
+      def errPos = tree.pos
     }
 
     case class PossiblyValidImplicit(originEvent: Int, origTree: Tree, sym: Symbol, tpe: Type, result: Boolean)
@@ -172,6 +179,7 @@ trait ImplicitEventsUniverse {
       extends Event with ImplicitEvent with SymbolReferencesEvent with SoftErrorEvent {
       def participants = List(info)
       def references = List(info.sym)
+      def errPos = info.sym.pos
     }
   }
 }

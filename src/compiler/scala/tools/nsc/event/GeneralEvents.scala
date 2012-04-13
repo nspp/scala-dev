@@ -48,10 +48,12 @@ trait GeneralEvents {
       val Soft, Hard = Value
     }
 
-    trait ContextTypeError {
+    trait ContextTypeError extends ErrorEventInfo {
       def err: Analyzer#AbsTypeError
       def participants: List[Any] = List(err)
       def errType: ErrorLevel.Value
+      def errPos = err.errPos
+      override def errMsg = err.errMsg
     }
 
     case class ContextAmbiguousTypeErrorEvent(err: Analyzer#AbsTypeError, errType: ErrorLevel.Value)

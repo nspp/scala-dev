@@ -558,7 +558,10 @@ trait Infer {
 
         // Note that isCompatible side-effects: subtype checks involving typevars
         // are recorded in the typevar's bounds (see TypeConstraint)
-        if (!isCompatible(tp1, pt1)) {
+        val compRes = EV.eventBlock(EV.IsArgCompatibleWithFormalMethInfer(tp1, pt1), EV.InferDone(_)) { 
+            isCompatible(tp1, pt1)
+        }
+        if (!compRes) {
           throw new DeferredNoInstance(() =>
             "argument expression's type is not compatible with formal parameter type" + foundReqMsg(tp1, pt1))
         }
@@ -984,7 +987,7 @@ trait Infer {
           "pt"      -> pt
         )
       )
-      EV.eventBlock(EV.InferExprInstance(tree, tparams, pt), EV.InferInstanceDone(_, tree)){
+      EV.eventBlockInform[List[Symbol]](EV.InferExprInstance(tree, tparams, pt), EV.InferInstanceDone(_, tree, _)){
       val (targs, tvars) = exprTypeArgs(tparams, treeTp, pt, useWeaklyCompatible)((_, _) => EV.InferExprInstanceCheckCompat(tree))
 
       if (keepNothings || (targs eq null)) { //@M: adjustTypeArgs fails if targs==null, neg/t0226
@@ -1058,6 +1061,7 @@ trait Infer {
 
           val res = if (checkBounds(fn, NoPrefix, NoSymbol, undetparams, allargs, "inferred ")) {
             val treeSubst = new TreeTypeSubstituter(okparams, okargs)
+            EV << EV.SimpleTreeTypeSubstitution(okparams, okargs)
             treeSubst traverseTrees fn :: args
 
             leftUndet match {
@@ -1071,7 +1075,7 @@ trait Infer {
                 xs1
             }
           } else Nil
-          EV << EV.InferredMethodInstance(fn, args)
+          EV << EV.InferredMethodInstance(fn, args, res)
           res
         }
         catch ifNoInstance { msg =>

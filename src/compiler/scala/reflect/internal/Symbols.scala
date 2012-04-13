@@ -2132,6 +2132,8 @@ trait Symbols extends api.Symbols { self: SymbolTable =>
             case TypeBounds(lo, hi) =>
               (if (lo.typeSymbol == NothingClass) "" else " >: " + lo) +
               (if (hi.typeSymbol == AnyClass) "" else " <: " + hi)
+            case NoType =>
+              ""
             case rtp =>
               "<: " + rtp
           }

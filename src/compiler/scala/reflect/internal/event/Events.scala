@@ -104,16 +104,13 @@ trait Events {
       def participants = List(ex)
     }
 
-    trait ErrorEvent {
-      def pos0: Position
-      def msg: String
-      def participants: List[Any] = List(msg)
-      protected def standardMsg = "[Error at " + pos0 + "] " + msg
-      def tag = "error"
+    trait ErrorEventInfo {
+      def errPos: Position
+      def errMsg: String = ""
     }
 
-    trait SoftErrorEvent
-    trait HardErrorEvent
+    trait SoftErrorEvent extends ErrorEventInfo
+    trait HardErrorEvent extends ErrorEventInfo
   }
 
   trait UtilEvents {

@@ -29,18 +29,19 @@ trait TyperEventsUniverse {
       override def status = status0
     }
 
-    case class TyperTyped(tree: Tree, pt: Type)(implicit val expl: Explanation)
-      extends TreeEvent with TypingBlockEvent with SymbolReferencesEvent {
-      def tag = "typecheck-tree"
+    case class TyperTyped(tree: Tree, res0: Tree, pt: Type)(implicit val expl: Explanation)
+      extends TreeEvent with TypingBlockEvent with SymbolReferencesEvent with TyperEvent {
+      override def tag = "typecheck-tree"
       def references = expl match {
         case sRefs: SymRefsInfo =>
           sRefs.refs
         case _ => List()
       }
+      var resTree: (Tree, Clock) = (res0, time) // update-able, make it a def
     }
     case class TyperTypedDone(tree: Tree, originEvent: Int)
-      extends TreeEvent with TypingBlockEvent with DoneBlock {
-      def tag = "typecheck-done"
+      extends TreeEvent with TypingBlockEvent with DoneBlock with TyperEvent {
+      override def tag = "typecheck-done"
     }
 
     case class TyperTyped1(tree: Tree, pt: Type) extends TreeEvent with TyperEvent {
@@ -293,11 +294,6 @@ trait TyperEventsUniverse {
       override def eventString = eventStringRep
     }
 
-    case class AssignLeftTyper(tree: Tree, tpe: Type, treeSym: Symbol)
-      extends TreeTypeEventUnary with AssignTyperEvent {
-      override def tag = super.tag + "-left"
-    }
-
     case class AssignGetterTyper(tree: Tree, tpe: Type) extends TreeEvent
       with AssignTyperEvent {
       override def tag = super.tag + "-getter"
@@ -474,6 +470,7 @@ trait TyperEventsUniverse {
     case class FailedSecondTryTypedApplyTyper(fun: Tree, args1: List[Tree], pt: Type) extends TreeEvent with TryTypedApplyEvent with HardErrorEvent {
       def tree = fun
       override def tag = "failed-adapting-qualifier-to-arguments"
+      def errPos = fun.pos
     }
 
     case class FailedTryTypedApplyTyper(fun: Tree, args: List[Tree], pt: Type) extends Event
@@ -481,6 +478,7 @@ trait TyperEventsUniverse {
       def tree = fun
       override def tag = super.tag + "-failed-try"
       protected def participants: List[Any] = List(fun, args, pt)
+      def errPos = fun.pos
     }
 
     // Start typed Typed with wildcard
@@ -512,11 +510,24 @@ trait TyperEventsUniverse {
       override def tag = super.tag + "-type-apply"
     }
 
-    // TODO: positions
     case class TypeApplyTyper(fun: Tree, args: List[Tree], pt: Type)
       extends Event with TypeApplyTyperEvent {
-      protected def participants: List[Any] = List(fun, args, pt)
+      protected def participants: List[Any] = List(fun, pt) ++ args
       override def tag = "type-type-application"
+    }
+    
+    // this is different from TypeApplyTyper because fun and type arguments
+    // were already typechecked in this case
+    case class VerifyTypeApplicationTyper(fun: Tree, args: List[Tree])
+      extends Event with TypeApplyTyperEvent {
+      protected def participants = List(fun) ++ args
+      override def tag = "type-type-application-for-checked-args"
+    }
+    
+    case class VerifyTypeApplicationTyperResult(tpe: Type)
+      extends Event with TypeApplyTyperEvent {
+      protected def participants = List(tpe)
+      override def tag = "type-type-application-for-checked-args-done"
     }
     
     // Start typed Apply
@@ -872,11 +883,13 @@ trait TyperEventsUniverse {
       extends TreeEvent with AdaptToMemberEvent
       with SoftErrorEvent with DoneBlock {
       override def tag = super.tag + "-failed"
+      def errPos = tree.pos
     }
 
     case class IsNotAdaptableTyper(tree: Tree, tpe: Type)
       extends TreeEvent with AdaptToMemberEvent with SoftErrorEvent {
       override def tag = super.tag + "-unaddaptable"
+      def errPos = tree.pos
     }
 
     case class InferViewAdaptToMemberTyper(value1: Type, value2: Type)
@@ -921,9 +934,10 @@ trait TyperEventsUniverse {
       override def tag = super.tag + "-overloadedSym-applicable"
     }
 
-    case class FilteredDoTypedApply(tree: Tree, funSym: Symbol, originEvent: Int)
-      extends TreeEvent with DoTypedApplyEvent with DoneBlock {
+    case class FilteredDoTypedApply(tree: Tree, originEvent: Int)
+      extends TreeEvent with DoTypedApplyEvent with DoneBlock with SymbolReferencesEvent {
       override def tag = "filtered-out-alternatives"
+      def references = List(tree.symbol)
     }
 
     case class OverloadedTpeDoTypedApply(fun: Tree, pre: Type, alts: List[Symbol])

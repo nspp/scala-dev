@@ -39,14 +39,14 @@ trait Trees { self: Universe =>
     type T = Symbol
     def v = sym
     def m = SymbolManifest
-    override def toString() = "SymbolChangeInTree[" + clock + "](" + sym + ")"
+    override def toString() = "TypeChangeInTree[" + clock + "](" + sym + ")" + (if (prev != null) ("," + prev.toString) else ".")
   }
   
   case class TreeTpeChange(clock: Clock, tpe: Type, prev: AttributesHistory) extends AttributesHistory {
     type T = Type
     def v = tpe
     def m = TypeManifest
-    override def toString() = "SymbolChangeInTree[" + clock + "](" + tpe + ")"
+    override def toString() = "SymbolChangeInTree[" + clock + "](" + tpe + ")" + (if (prev != null) ("," + prev.toString) else ".")
   }
   
   /** Tree is the basis for scala's abstract syntax. The nodes are
@@ -109,14 +109,16 @@ trait Trees { self: Universe =>
     
     @inline
     def logType(tp: Type) {
-      if (isClockOn && tpe != null)
-        attrHistory = TreeTpeChange(newClockTick(), tpe, attrHistory)
+      if (isClockOn && tp != null) {
+        attrHistory = TreeTpeChange(newClockTick(), tp, attrHistory)
+      }
     }
     
     @inline
     def logSymbol(sym: Symbol) {
-      if (isClockOn && symbol != null)
+      if (isClockOn && sym != null) {
         attrHistory = TreeSymChange(newClockTick(), sym, attrHistory)
+      }
     }
 
     def tpe = rawtpe

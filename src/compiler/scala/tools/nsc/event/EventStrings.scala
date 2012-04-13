@@ -48,7 +48,7 @@ trait EventStrings {
         else anyStringInternal(x)
       )
       catch {
-        case x @ (_: AssertionError | _: Exception) => "<error: " + x.getMessage + ">"
+        case x @ (_: AssertionError) => "<error: " + x.getMessage + ">"
         //case x @ (_: CyclicReference) => "? (cyclic ref)" // TODO still necessary?
       }
     }

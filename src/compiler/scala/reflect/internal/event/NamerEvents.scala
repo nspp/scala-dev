@@ -40,6 +40,7 @@ trait NamerEventsUniverse {
     case class MissingParameterType(tree: Tree)
       extends TreeEvent with NamerEvent with HardErrorEvent {    
       override def tag = "missing-parameter-type"
+      def errPos = tree.pos
     }
 
     // can't clone symbols as it causes cyclic references

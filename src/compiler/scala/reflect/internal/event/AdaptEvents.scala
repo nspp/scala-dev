@@ -15,6 +15,7 @@ trait AdaptEventsUniverse {
 
     case class AdaptStart(tree: Tree, pt: Type)
       extends TreeEvent with AdaptEvent {
+      var resTree: (Tree, Clock) = (tree, time) // update-able, make it a def
     }
 
     case class AdaptDone(originEvent: Int, status0: Boolean = true)
@@ -22,6 +23,11 @@ trait AdaptEventsUniverse {
       override def tag = super.tag + "-done"
       override def participants: List[Any] = List()
       override def status = status0
+    }
+    
+    case class MainAdaptDone(originEvent: Int, resTree: Tree) extends Event with AdaptEvent with DoneBlock {
+      override def tag = super.tag + "-tree-adapt-done"
+      def participants: List[Any] = List()
     }
 
     case class AdaptAnnotationsAdapt(tree: Tree)
@@ -42,9 +48,9 @@ trait AdaptEventsUniverse {
       override def tag = super.tag + "-overloaded"
     }
 
-    case class PolyTpeEmptyAdapt(tpe: Type)
+    case class NullaryMethodTypeAdapt(tpe: Type, undetTParams: List[Symbol])
       extends TypeEvent with AdaptEvent {
-      override def tag = super.tag + "-emptyPolyTpe"
+      override def tag = super.tag + "-nullaryMethTpe"
     }
 
     case class ByNameParamClassAdapt(tpe: Type)
@@ -63,7 +69,7 @@ trait AdaptEventsUniverse {
     }
 
     case class PolyTpeAdapt(tree: Tree, tparams: List[Symbol],
-      tpe: Type, typeTree: Tree, undetTParams: List[Symbol])
+      restpe: Type, typeTree: Tree, undetTParams: List[Symbol])
       extends TreeEvent with AdaptEvent {
       override def tag = super.tag + "-poly-type"
     }
@@ -98,6 +104,7 @@ trait AdaptEventsUniverse {
       extends Event with ImplicitMethodTpeAdaptEvent with HardErrorEvent {
       override def tag = "implicit-value-not-found"
       def participants = List(param)
+      def errPos = param.pos
     }
 
 
@@ -105,6 +112,7 @@ trait AdaptEventsUniverse {
       extends Event with ImplicitMethodTpeAdaptEvent with HardErrorEvent {
       override def tag = "implicit-value-not-found"
       def participants = List(param)
+      def errPos = param.pos
     }
 
     case class InferredImplicitAdapt(originEvent: Int)
@@ -136,6 +144,7 @@ trait AdaptEventsUniverse {
     case class InferExprFailed(tree: Tree, pt: Type, e: String)
       extends TreeEvent with MethodTpeAdaptEvent with SoftErrorEvent {
       override def tag = "failed-to-infer-expr-instance"
+      def errPos = tree.pos
     }
 
     case class ApplyNullaryMethodAdapt(tree: Tree, methTpe: Type)
@@ -265,5 +274,8 @@ trait AdaptEventsUniverse {
       extends Explanation with TreeInfo with SymRefsInfo with AdaptExplanation {
       def refs = List(coercion.symbol)
     }
+    
+    case class TypeApplyAdapt(tree: Tree)
+      extends Explanation with AdaptExplanation
   }
 }

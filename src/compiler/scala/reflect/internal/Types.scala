@@ -3590,11 +3590,12 @@ trait Types extends api.Types { self: SymbolTable =>
       else hibounds ::= tp
     }
 
-    def isWithinBounds(tp: Type): Boolean =
+    def isWithinBounds(tp: Type): Boolean = EV.eventBlock(EV.IsWithinBounds(tp, this), EV.TypesDone(_)) {
       lobounds.forall(_ <:< tp) &&
       hibounds.forall(tp <:< _) &&
       (numlo == NoType || (numlo weak_<:< tp)) &&
       (numhi == NoType || (tp weak_<:< numhi))
+    }
 
     private var rawinst: Type = NoType // @M reduce visibility?
     def inst: Type = rawinst

@@ -37,6 +37,11 @@ trait TypesEventsUniverse {
       override def tag = super.tag + "-subTypeCheck-arg"
       def participants = List()
     }
+    
+    case class IsWithinBounds(tp: Type, tconstr: TypeConstraint) extends Event with TypesEvent {
+      override def tag = super.tag + "-istype-within-bounds"
+      def participants = List(tconstr)
+    }
 
     
     object Side extends Enumeration {

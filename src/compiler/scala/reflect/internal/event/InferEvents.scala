@@ -26,7 +26,7 @@ trait InferEventsUniverse {
       override def status = status0
     }
 
-    case class InferInstanceDone(originEvent: Int, tree: Tree)
+    case class InferInstanceDone(originEvent: Int, tree: Tree, stillUndet: List[Symbol])
       extends TreeEvent with InferEvent with DoneBlock {
       override def tag = super.tag + "-done"
     }
@@ -123,7 +123,7 @@ trait InferEventsUniverse {
       def references = args
     }
 
-    case class InferredMethodInstance(fn: Tree, args: List[Tree])
+    case class InferredMethodInstance(fn: Tree, args: List[Tree], stillUndet: List[Symbol])
       extends TreeEvent with InferEvent {
       def tree = fn
       override def tag = "infer-method-instance"
@@ -132,7 +132,14 @@ trait InferEventsUniverse {
     case class NoInstanceForMethodTypeParameters(fn: Tree, args: List[Tree], exMsg: String)
       extends TreeEvent with InferEvent with SoftErrorEvent {
       def tree = fn
+      def errPos = fn.pos
       override def tag = "no-type-parameter-instance-to-infer-method"
+    }
+    
+    case class IsArgCompatibleWithFormalMethInfer(lhs: Type, rhs: Type)
+      extends Event with InferEvent {
+      override def tag = "arg-vs-formal-compatibility"
+      def participants = List(lhs, rhs)
     }
 
     case class MethTypeArgsSolve(tparams: List[Symbol])
@@ -148,12 +155,14 @@ trait InferEventsUniverse {
     case class InferMethodInstanceTypeError(fn: Tree, args: List[Tree], exMsg: String)
       extends TreeEvent with InferEvent with SoftErrorEvent {
       def tree = fn
+      def errPos = fn.pos
       override def tag = "type-error-instance-to-infer-method"
     }
 
     case class FailedTypeCompatibilityInInferExprTypeArgs(tpe: Type, pt: Type)
       extends Event with InferEvent with SoftErrorEvent {
       override def tag = "infer-fail-type-compatibility"
+      def errPos = NoPosition
       def participants = List()
     }
 
@@ -166,12 +175,19 @@ trait InferEventsUniverse {
     case class PolyTypeInstantiationError(tree: Tree,
       tparams: List[Symbol], polytype: Type, pt: Type)
       extends TreeEvent with InferEvent with HardErrorEvent {
+      def errPos = tree.pos
       override def tag = "polymorphic-instantiation-error"
     }
 
     case class TreeTypeSubstitution(undet: List[Symbol], targs: List[Type], adjusted: Boolean, tree: Tree)
       extends TreeEvent with InferEvent {
       override def tag = "type-substitution-for-inferred-instance"
+    }
+    
+    case class SimpleTreeTypeSubstitution(tparams: List[Symbol], targs: List[Type])
+      extends Event with InferEvent {
+      override def tag = "simple-tree-type-substitution"
+      def participants = tparams
     }
 
     case class IsApplicableInfer(undet: List[Symbol], ftpe: Type, pt: Type)
@@ -212,6 +228,7 @@ trait InferEventsUniverse {
         competing: List[Symbol], best: Symbol, tree: Tree)
       extends TreeEvent with InferEvent with HardErrorEvent with SymbolReferencesEvent {
       override def tag = "ambiguous-alternatives-for-method"
+      def errPos = tree.pos
       def references = best::competing
     }
 

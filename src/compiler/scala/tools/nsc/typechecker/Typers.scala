@@ -106,7 +106,6 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
         def mkPositionalArg(argTree: Tree, paramName: Name) = argTree
         def mkNamedArg(argTree: Tree, paramName: Name) = atPos(argTree.pos)(new AssignOrNamedArg(Ident(paramName), (argTree)))
         var mkArg: (Tree, Name) => Tree = mkPositionalArg
-        var failed = false
 
         // DEPMETTODO: instantiate type vars that depend on earlier implicit args (see adapt (4.1))
         //
@@ -157,9 +156,8 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
           for (arg <- args) ar.subst traverse arg
         }
 
-        // TODO can be replaced by trunk failure flag
         val res = new ApplyToImplicitArgs(fun, args) setPos fun.pos
-        if (failed) res setType ErrorType else res
+        if (paramFailed) res setType ErrorType else res
 
       case ErrorType =>
         fun
@@ -812,7 +810,7 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
             if (typer1.context.hasErrors || withImplicitArgs.isErrorTyped) {
               setError(duplicateTree(tree))
             } else {
-              typer1.typed(withImplicitArgs)
+              typer1.typed(withImplicitArgs)(EV.FirstTryTypeTreeWithAppliedImplicitArgs(tree, pt))
             }
           }
         }
@@ -998,7 +996,7 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
           inferExprAlternative(tree, pt)
           adapt(tree, mode, pt, original)
         case NullaryMethodType(restpe) => // (2)
-          EV << EV.PolyTpeEmptyAdapt(restpe)
+          EV << EV.NullaryMethodTypeAdapt(restpe, context.undetparams)
           adapt(tree setType restpe, mode, pt, original)
         case TypeRef(_, ByNameParamClass, List(arg)) if ((mode & EXPRmode) != 0) => // (2)
           EV << EV.ByNameParamClassAdapt(arg)
@@ -1080,7 +1078,7 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
                 return tree
             }
             val tree1 = constfold(tree, pt) // (10) (11)
-            if (tree1.tpe <:< pt)
+            if (tree1.tpe <:< pt) // todo: could potentially first check (tree neq tree1) && ....
               EV.eventBlock(EV.ConstantFoldSubTypeAdapt(tree1, tree1.tpe, pt), EV.AdaptDone(_)) {
                 adapt(tree1, mode, pt, original)
               }
@@ -2517,7 +2515,7 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
         val argtypes = args map shapeType
         val pre = fun.symbol.tpe.prefix
 
-        EV.eventBlock(EV.OverloadedSymDoTypedApply(fun, fun.symbol, argtypes, pre), EV.FilteredDoTypedApply(fun, fun.symbol, _)){
+        EV.eventBlock(EV.OverloadedSymDoTypedApply(fun, fun.symbol, argtypes, pre), EV.FilteredDoTypedApply(fun, _)){
         var sym = fun.symbol filter { alt =>
           // must use pt as expected type, not WildcardType (a tempting quick fix to #2665)
           // now fixed by using isWeaklyCompatible in exprTypeArgs
@@ -2576,7 +2574,7 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
               inferMethodAlternative(fun, undetparams, argtpes.toList, pt, varArgsOnly = treeInfo.isWildcardStarArgList(args))
             }
 
-            val adaptFirst = EV.eventBlock(EV.AdaptInferredMethodAlternativeDoTypedApply(fun), EV.TyperDone(_)){
+            val adaptFirst = if (fun.isErrorTyped) fun else EV.eventBlock(EV.AdaptInferredMethodAlternativeDoTypedApply(fun), EV.TyperDone(_)){
               adapt(fun, forFunMode(mode), WildcardType)
             }
             EV.eventBlock(EV.InferredMethodDoTypedApply(fun), EV.TyperDone(_)){
@@ -3277,24 +3275,23 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
     }
 
     // lifted out of typed1 because it's needed in typedImplicit0
-    protected def typedTypeApply(tree: Tree, mode: Int, fun: Tree, args: List[Tree]): Tree = fun.tpe match {
+    protected def typedTypeApply(tree: Tree, mode: Int, fun: Tree, args: List[Tree]): Tree = EV.eventBlock(EV.VerifyTypeApplicationTyper(fun, args), EV.TyperDone(_)) { fun.tpe match {
       case OverloadedType(pre, alts) =>
         inferPolyAlternatives(fun, args map (_.tpe))
         val tparams = fun.symbol.typeParams //@M TODO: fun.symbol.info.typeParams ? (as in typedAppliedTypeTree)
-        val args1 = if (sameLength(args, tparams)) {
+        if (sameLength(args, tparams)) {
           //@M: in case TypeApply we can't check the kind-arities of the type arguments,
           // as we don't know which alternative to choose... here we do
-          map2Conserve(args, tparams) {
+          val args1 = map2Conserve(args, tparams) {
             //@M! the polytype denotes the expected kind
             (arg, tparam) => typedHigherKindedType(arg, mode, polyType(tparam.typeParams, AnyClass.tpe))(EV.TypeHigherKindedTypeApplyOverloaded(arg))
           }
+          typedTypeApply(tree, mode, fun, args1)
         } else // @M: there's probably something wrong when args.length != tparams.length... (triggered by bug #320)
          // Martin, I'm using fake trees, because, if you use args or arg.map(typedType),
          // inferPolyAlternatives loops...  -- I have no idea why :-(
          // ...actually this was looping anyway, see bug #278.
-          return TypedApplyWrongNumberOfTpeParametersError(fun, fun)
-
-        typedTypeApply(tree, mode, fun, args1)
+         TypedApplyWrongNumberOfTpeParametersError(fun, fun)
       case SingleType(_, _) =>
         typedTypeApply(tree, mode, fun setType fun.tpe.widen, args)
       case PolyType(tparams, restpe) if tparams.nonEmpty =>
@@ -3313,6 +3310,7 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
             //          this must preserve m's type argument, so that we end up with List[Int], and not List[a]
             //@M related bug: #1438
             //println("instantiating type params "+restpe+" "+tparams+" "+targs+" = "+resultpe)
+            EV << EV.VerifyTypeApplicationTyperResult(resultpe)
             treeCopy.TypeApply(tree, fun, args) setType resultpe
           }
         } else {
@@ -3322,7 +3320,7 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
         setError(treeCopy.TypeApply(tree, fun, args))
       case _ =>
         TypedApplyDoesNotTakeTpeParametersError(tree, fun)
-    }
+    }}
 
     @inline final def deindentTyping() = context.typingIndentLevel -= 2
     @inline final def indentTyping() = context.typingIndentLevel += 2
@@ -4806,7 +4804,8 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
       indentTyping()
 
       var alreadyTyped = false
-      val ev = EV <<< EV.TyperTyped(tree, pt)
+      var result: Tree = tree
+      val ev = EV <<< EV.TyperTyped(tree, result, pt)
       try {
         if (Statistics.enabled) {
           val t = currentTime()
@@ -4823,7 +4822,7 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
         }
 
         alreadyTyped = tree.tpe ne null
-        var tree1: Tree = if (alreadyTyped) {
+        val tree1: Tree =  if (alreadyTyped) {
           EV << EV.TyperTypeSet(tree)
           tree
          } else {
@@ -4845,7 +4844,7 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
         }
 
         tree1 setType addAnnotations(tree1, tree1.tpe)
-        val result = EV.eventBlock(EV.AdaptStart(tree1, pt), EV.AdaptDone(_)) {
+        result = EV.eventBlockInform[Tree](EV.AdaptStart(tree1, pt), EV.MainAdaptDone(_, _)) {
           if (tree1.isEmpty) tree1 else adapt(tree1, mode, pt, tree)(expl.underlying)
         }
         if (!alreadyTyped) {
@@ -4877,7 +4876,7 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
           throw ex
       }
       finally {
-        EV >>> EV.TyperTypedDone(tree, ev.id)
+        EV >>> EV.TyperTypedDone(result, ev.id)
         deindentTyping()
 
         if (Statistics.enabled) {
