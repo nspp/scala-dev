@@ -565,11 +565,11 @@ trait Contexts { self: Analyzer =>
         (e ne null) && (e.owner == scope)
       })
 
-    private def collectImplicits(syms: List[Symbol], pre: Type, imported: Boolean = false): List[ImplicitInfo] =
+    private def collectImplicits(syms: List[Symbol], pre: Type, imported: Boolean = false)(implicit s: ImplicitInfoSource): List[ImplicitInfo] =
       for (sym <- syms if isQualifyingImplicit(sym, pre, imported)) yield
-        new ImplicitInfo(sym.name, pre, sym)
+        ImplicitInfo(sym.name, pre, sym)
 
-    private def collectImplicitImports(imp: ImportInfo): List[ImplicitInfo] = {
+    private def collectImplicitImports(imp: ImportInfo)(implicit s: ImplicitInfoSource): List[ImplicitInfo] = {
       val pre = imp.qual.tpe
       def collect(sels: List[ImportSelector]): List[ImplicitInfo] = sels match {
         case List() =>
@@ -581,7 +581,7 @@ trait Contexts { self: Analyzer =>
           if (to != nme.WILDCARD) {
             for (sym <- imp.importedSymbol(to).alternatives)
               if (isQualifyingImplicit(sym, pre, imported = true))
-                impls = new ImplicitInfo(to, pre, sym) :: impls
+                impls = ImplicitInfo(to, pre, sym) :: impls
           }
           impls
       }
@@ -599,18 +599,18 @@ trait Contexts { self: Analyzer =>
             // debuglog("collect member implicits " + owner + ", implicit members = " + owner.thisType.implicitMembers)//DEBUG
             val savedEnclClass = enclClass
             this.enclClass = this
-            val res = collectImplicits(owner.thisType.implicitMembers, owner.thisType)
+            val res = collectImplicits(owner.thisType.implicitMembers, owner.thisType)(MemberS)
             this.enclClass = savedEnclClass
             res
           } else if (scope != nextOuter.scope && !owner.isPackageClass) {
             debuglog("collect local implicits " + scope.toList)//DEBUG
-            collectImplicits(scope.toList, NoPrefix)
+            collectImplicits(scope.toList, NoPrefix)(LocalS)
           } else if (imports != nextOuter.imports) {
             assert(imports.tail == nextOuter.imports, (imports, nextOuter.imports))
-            collectImplicitImports(imports.head)
+            collectImplicitImports(imports.head)(ImportS)
           } else if (owner.isPackageClass) {
             // the corresponding package object may contain implicit members.
-            collectImplicits(owner.tpe.implicitMembers, owner.tpe)
+            collectImplicits(owner.tpe.implicitMembers, owner.tpe)(PackageObjectS)
           } else List()
         implicitsCache = if (newImplicits.isEmpty) nextOuter.implicitss
                          else newImplicits :: nextOuter.implicitss

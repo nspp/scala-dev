@@ -133,6 +133,7 @@ trait Implicits {
     // overriding the equals here seems cleaner and benchmarks show no difference in performance
     override def equals(other: Any) = other match { case that: AnyRef => that eq this  case _ => false }
     override def hashCode = 1
+    def sourceInfo = UnknownS
   }
 
   /** A constructor for types ?{ name: tp }, used in infer view to member
@@ -698,21 +699,20 @@ trait Implicits {
       /** Sorted list of eligible implicits.
        */
       val eligible = {
-        
         val matches = EV.eventBlockInform[List[ImplicitInfo]](EV.AllEligibleImplicits(pt), EV.AllEligibleImplicitsDone(pt, _, _)) { 
-          
           iss flatMap { is =>
-          val result = is filter (info =>
-            EV.eventBlockInform[Boolean](EV.InfoEligibleTest(info), EV.InfoEligibleTestDone(info, _, _)) { 
-              checkValid(info.sym) && survives(info)
-            })
-          if (shadowed ne null)
-            shadowed addEntries (is map (_.name))
-
-          result
+            val result = {
+              EV << EV.CategorizeImplicits
+              is filter (info =>
+              EV.eventBlockInform[Boolean](EV.InfoEligibleTest(info), EV.InfoEligibleTestDone(info, _, _)) { 
+                checkValid(info.sym) && survives(info)
+              })
+            }
+            if (shadowed ne null)
+              shadowed addEntries (is map (_.name))
+            result
+          }
         }
-        }
-
         // most frequent one first
         matches sortBy (x => if (isView) -x.useCountView else -x.useCountArg)
       }
@@ -833,7 +833,7 @@ trait Implicits {
       if (implicitInfoss.forall(_.isEmpty)) SearchFailure
       else new ImplicitComputation(implicitInfoss, if (isLocal) util.HashSet[Name](128) else null) findBest()
 
-    /** Produce an implicict info map, i.e. a map from the class symbols C of all parts of this type to
+    /** Produce an implicit info map, i.e. a map from the class symbols C of all parts of this type to
      *  the implicit infos in the companion objects of these class symbols C.
      * The parts of a type is the smallest set of types that contains
      *    - the type itself
@@ -864,7 +864,7 @@ trait Implicits {
                 companion.moduleClass match {
                   case mc: ModuleClassSymbol =>
                     val infos =
-                      for (im <- mc.implicitMembers) yield new ImplicitInfo(im.name, singleType(pre, companion), im)
+                      for (im <- mc.implicitMembers) yield ImplicitInfo(im.name, singleType(pre, companion), im)(MemberS)
                     if (infos.nonEmpty)
                       infoMap += (sym -> infos)
                   case _ =>

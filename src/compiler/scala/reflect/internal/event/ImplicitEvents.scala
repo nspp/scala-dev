@@ -118,6 +118,11 @@ trait ImplicitEventsUniverse {
       def references = infos.map(_.sym)
     }
     
+    case object CategorizeImplicits extends Event with ImplicitEvent with ImplicitsEligibility {
+      override def tag = super.tag + "-outer-delimiter"
+      def participants = List()
+    }
+    
     case class InfoEligibleTest(info: ImplicitInfo)
       extends Event with ImplicitEvent with SymbolReferencesEvent with ImplicitsEligibility {
       override def tag = super.tag + "-eligible-info"
