@@ -39,6 +39,6 @@ abstract class Tester {
    */
   def test(in: String) {
     Console.println("\nin : "+in)
-    Console.println(syntactic.phrase[Any](parser)(new syntactic.lexical.Scanner(in)))
+    Console.println(syntactic.phrase[Any](parser)(debugging.NoParserLocation)(new syntactic.lexical.Scanner(in)))
   }
 }

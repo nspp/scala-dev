@@ -14,6 +14,8 @@ import scala.annotation.tailrec
 import annotation.migration
 import language.implicitConversions
 
+import debugging.{ParserLocation, NoParserLocation}
+
 // TODO: better error handling (labelling like parsec's <?>)
 
 /** `Parsers` is a component that ''provides'' generic parser combinators.
@@ -72,7 +74,7 @@ import language.implicitConversions
  *  @author Iulian Dragos
  *  @author Adriaan Moors
  */
-trait Parsers {
+trait Parsers extends AnyRef with debugging.DebugableParsers {
   /** the type of input elements the provided parsers consume (When consuming
    *  invidual characters, a parser is typically called a ''scanner'', which
    *  produces ''tokens'' that are consumed by what is normally called a ''parser''.
@@ -210,22 +212,50 @@ trait Parsers {
     def append[U >: Nothing](a: => ParseResult[U]): ParseResult[U] = this
   }
 
-  def Parser[T](f: Input => ParseResult[T]): Parser[T]
-    = new Parser[T]{ def apply(in: Input) = f(in) }
+  object Parser {
+    def apply[T](f: Input => ParseResult[T]): Parser[T] = new Parser[T] with NoLocationParser[T] { def consume(in: Input) = {
+       //enter()
+       f(in) }
+    }
+    def apply[T](f: Input => ParseResult[T], loc0: debugging.ParserLocation): Parser[T]
+      = new Parser[T] {
+          def consume(in: Input) = { 
+            //enter()
+            f(in) }
+          val location: ParserLocation = loc0
+        }
+    def apply[T](f: Input => ParseResult[T], loc0: debugging.ParserLocation, ps0: => List[Parser[T]]): Parser[T]
+      = new Parser[T] {
+          def consume(in: Input) = { 
+            //enter()
+            f(in) }
+          val location: ParserLocation = loc0
+          override def ps: List[Parser[T]] = ps0
+        }
+  }
+  //def Parser[T](f: Input => ParseResult[T]): Parser[T]
+  //  = new Parser[T]{ def apply(in: Input) = f(in) }
 
   def OnceParser[T](f: Input => ParseResult[T]): Parser[T] with OnceParser[T]
-    = new Parser[T] with OnceParser[T] { def apply(in: Input) = f(in) }
+    = new Parser[T] with OnceParser[T] with NoLocationParser[T] {def consume(in: Input) = f(in)}
 
   /** The root class of parsers.
    *  Parsers are functions from the Input type to ParseResult.
    */
-  abstract class Parser[+T] extends (Input => ParseResult[T]) {
-    private var name: String = ""
+  abstract class Parser[+T] extends (Input => ParseResult[T]) with DebugableParser[T] {
+    protected var name: String = ""
     def named(n: String): this.type = {name=n; this}
     override def toString() = "Parser ("+ name +")"
 
     /** An unspecified method that defines the behaviour of this parser. */
-    def apply(in: Input): ParseResult[T]
+    def consume(in: Input): ParseResult[T]
+    
+    def apply(in: Input): ParseResult[T] = {
+      enterRes()
+      val res = consume(in)
+      exitRes(res)
+      res
+    }
 
     def flatMap[U](f: T => Parser[U]): Parser[U]
       = Parser{ in => this(in) flatMapWithNext(f)}
@@ -241,9 +271,10 @@ trait Parsers {
 
     // no filter yet, dealing with zero is tricky!
 
+    // todo: should loc be implicit?
     @migration("The call-by-name argument is evaluated at most once per constructed Parser object, instead of on every need that arises during parsing.", "2.9.0")
-    def append[U >: T](p0: => Parser[U]): Parser[U] = { lazy val p = p0 // lazy argument
-      Parser{ in => this(in) append p(in)}
+    def append[U >: T](p0: => Parser[U])(loc: ParserLocation): Parser[U] = { lazy val p = p0 // lazy argument
+      Parser({ in => this(in) append p(in)}, loc, List(this, p0))
     }
 
     // the operator formerly known as +++, ++, &, but now, behold the venerable ~
@@ -322,9 +353,8 @@ trait Parsers {
      *         - `p` succeeds, ''or''
      *         - if `p` fails allowing back-tracking and `q` succeeds.
      */
-    def | [U >: T](q: => Parser[U]): Parser[U] = append(q).named("|")
+    def | [U >: T](q: => Parser[U])(implicit loc: ParserLocation): Parser[U] = append(q)(loc).named("|")
 
-    // TODO
     /** A parser combinator for alternative with longest match composition.
      *
      *  `p ||| q` succeeds if `p` succeeds or `q` succeeds.
@@ -334,9 +364,9 @@ trait Parsers {
      * @return a `Parser` that returns the result of the parser consuming the most characters (out of `p` and `q`).
      */
     @migration("The call-by-name argument is evaluated at most once per constructed Parser object, instead of on every need that arises during parsing.", "2.9.0")
-    def ||| [U >: T](q0: => Parser[U]): Parser[U] = new Parser[U] {
+    def ||| [U >: T](q0: => Parser[U]): Parser[U] = new Parser[U] with NoLocationParser[U] {
       lazy val q = q0 // lazy argument
-      def apply(in: Input) = {
+      def consume(in: Input) = {
         val res1 = Parser.this(in)
         val res2 = q(in)
 
@@ -369,9 +399,9 @@ trait Parsers {
      * @return a parser that has the same behaviour as the current parser, but whose successful result is `v`
      */
     @migration("The call-by-name argument is evaluated at most once per constructed Parser object, instead of on every need that arises during parsing.", "2.9.0")
-    def ^^^ [U](v: => U): Parser[U] =  new Parser[U] {
+    def ^^^ [U](v: => U): Parser[U] =  new Parser[U] with NoLocationParser[U] {
       lazy val v0 = v // lazy argument
-      def apply(in: Input) = Parser.this(in) map (x => v0)
+      def consume(in: Input) = Parser.this(in) map (x => v0)
     }.named(toString+"^^^")
 
     /** A parser combinator for partial function application.
@@ -435,7 +465,7 @@ trait Parsers {
      *
      *  @return rep(this)
      */
-    def * = rep(this)
+    def * = rep(this)(NoParserLocation)
 
     /** Returns a parser that repeatedly parses what this parser parses,
      *  interleaved with the `sep` parser. The `sep` parser specifies how
@@ -457,7 +487,7 @@ trait Parsers {
      *
      *  @return opt(this)
      */
-    def ? = opt(this)
+    def ? = opt(this)(NoParserLocation)
 
     /** Changes the failure message produced by a parser.
      *
@@ -540,7 +570,7 @@ trait Parsers {
    *  @param  p      A predicate that determines which elements match.
    *  @return
    */
-  def elem(kind: String, p: Elem => Boolean) = acceptIf(p)(inEl => kind+" expected")
+  def elem(kind: String, p: Elem => Boolean) = acceptIf(p)(inEl => kind+" expected")(NoParserLocation)
 
   /** A parser that matches only the given element `e`.
    *
@@ -549,7 +579,7 @@ trait Parsers {
    *  @param e the `Elem` that must be the next piece of input for the returned parser to succeed
    *  @return a `Parser` that succeeds if `e` is the next available input (and returns it).
    */
-  def elem(e: Elem): Parser[Elem] = accept(e)
+  def elem(e: Elem): Parser[Elem] = accept(e)(NoParserLocation)
 
   /** A parser that matches only the given element `e`.
    *
@@ -561,7 +591,7 @@ trait Parsers {
    *  @return a `tParser` that succeeds if `e` is the next available input.
    */
 
-  implicit def accept(e: Elem): Parser[Elem] = acceptIf(_ == e)("`"+e+"' expected but " + _ + " found")
+  implicit def accept(e: Elem)(implicit loc: ParserLocation): Parser[Elem] = acceptIf(_ == e)("`"+e+"' expected but " + _ + " found")(loc)
 
   /** A parser that matches only the given list of element `es`.
    *
@@ -595,10 +625,10 @@ trait Parsers {
    *  @param  p      A predicate that determines which elements match.
    *  @return        A parser for elements satisfying p(e).
    */
-  def acceptIf(p: Elem => Boolean)(err: Elem => String): Parser[Elem] = Parser { in =>
+  def acceptIf(p: Elem => Boolean)(err: Elem => String)(loc: ParserLocation): Parser[Elem] = Parser ({ in =>
     if (p(in.first)) Success(in.first, in.rest)
     else Failure(err(in.first), in)
-  }
+  }, loc)
 
   /** The parser that matches an element in the domain of the partial function `f`.
    *
@@ -626,7 +656,7 @@ trait Parsers {
    *  @return a Parser that recognizes a specified list of elements
    */
   def acceptSeq[ES <% Iterable[Elem]](es: ES): Parser[List[Elem]] =
-    es.foldRight[Parser[List[Elem]]](success(Nil)){(x, pxs) => accept(x) ~ pxs ^^ mkList}
+    es.foldRight[Parser[List[Elem]]](success(Nil)){(x, pxs) => accept(x)(NoParserLocation) ~ pxs ^^ mkList}
 
   /** A parser that always fails.
    *
@@ -668,7 +698,7 @@ trait Parsers {
    * @param p a `Parser` that is to be applied successively to the input
    * @return A parser that returns a list of results produced by repeatedly applying `p` to the input.
    */
-  def rep[T](p: => Parser[T]): Parser[List[T]] = rep1(p) | success(List())
+  def rep[T](p: => Parser[T])(implicit loc: ParserLocation): Parser[List[T]] = rep1(p) | success(List())
 
   /** A parser generator for interleaved repetitions.
    *
@@ -682,7 +712,7 @@ trait Parsers {
    * @return A parser that returns a list of results produced by repeatedly applying `p` (interleaved with `q`) to the input.
    *         The results of `p` are collected in a list. The results of `q` are discarded.
    */
-  def repsep[T](p: => Parser[T], q: => Parser[Any]): Parser[List[T]] =
+  def repsep[T](p: => Parser[T], q: => Parser[Any])(implicit loc: ParserLocation): Parser[List[T]] =
     rep1sep(p, q) | success(List())
 
   /** A parser generator for non-empty repetitions.
@@ -767,7 +797,7 @@ trait Parsers {
    *         The results of `p` are collected in a list. The results of `q` are discarded.
    */
   def rep1sep[T](p : => Parser[T], q : => Parser[Any]): Parser[List[T]] =
-    p ~ rep(q ~> p) ^^ {case x~y => x::y}
+    p ~ rep(q ~> p)(NoParserLocation) ^^ {case x~y => x::y}
 
   /** A parser generator that, roughly, generalises the rep1sep generator so
    *  that `q`, which parses the separator, produces a left-associative
@@ -794,7 +824,7 @@ trait Parsers {
    *          into one
    */
   def chainl1[T, U](first: => Parser[T], p: => Parser[U], q: => Parser[(T, U) => T]): Parser[T]
-    = first ~ rep(q ~ p) ^^ {
+    = first ~ rep(q ~ p)(NoParserLocation) ^^ {
         case x ~ xs => xs.foldLeft(x: T){case (a, f ~ b) => f(a, b)} // x's type annotation is needed to deal with changed type inference due to SI-5189
       }
 
@@ -812,7 +842,7 @@ trait Parsers {
    * @param first   the "first" (right-most) element to be combined
    */
   def chainr1[T, U](p: => Parser[T], q: => Parser[(T, U) => U], combine: (T, U) => U, first: U): Parser[U]
-    = p ~ rep(q ~ p) ^^ {
+    = p ~ rep(q ~ p)(NoParserLocation) ^^ {
         case x ~ xs => (new ~(combine, x) :: xs).foldRight(first){case (f ~ a, b) => f(a, b)}
       }
 
@@ -824,7 +854,7 @@ trait Parsers {
    * @return a `Parser` that always succeeds: either with the result provided by `p` or
    *         with the empty result
    */
-  def opt[T](p: => Parser[T]): Parser[Option[T]] =
+  def opt[T](p: => Parser[T])(implicit loc: ParserLocation): Parser[Option[T]] =
     p ^^ (x => Some(x)) | success(None)
 
   /** Wrap a parser so that its failures and errors become success and
@@ -876,9 +906,9 @@ trait Parsers {
    *  @return  a parser that has the same result as `p`, but that only succeeds
    *           if `p` consumed all the input.
    */
-  def phrase[T](p: Parser[T]) = new Parser[T] {
+  def phrase[T](p: Parser[T])(implicit loc: ParserLocation) = new Parser[T] {
     lastNoSuccess = null
-    def apply(in: Input) = p(in) match {
+    def consume(in: Input) = p(in) match {
       case s @ Success(out, in1) =>
         if (in1.atEnd)
           s
@@ -888,6 +918,8 @@ trait Parsers {
           lastNoSuccess
       case _ => lastNoSuccess
     }
+    
+    val location: ParserLocation = loc
   }
 
   /** Given a concatenation with a repetition (list), move the concatenated element into the list */

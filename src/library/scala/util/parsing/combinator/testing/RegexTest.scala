@@ -5,11 +5,15 @@ import scala.util.parsing.combinator._
 import scala.util.parsing.input._
 import language.postfixOps
 
+import debugging.{ParserLocation, NoParserLocation}
+
 case class Ident(s: String)
 case class Number(n: Int)
 case class Str(s: String)
 
 object RegexTest extends RegexParsers {
+  implicit val loc: ParserLocation = NoParserLocation
+  
   val ident: Parser[Any] = """[a-zA-Z_]\w*""".r ^^ (s => Ident(s))
   val number: Parser[Any] = """\d\d*""".r ^^ (s => Number(s.toInt))
   val string: Parser[Any] = "\".*\"".r ^^ (s => Str(s.substring(1, s.length - 1)))
@@ -18,6 +22,6 @@ object RegexTest extends RegexParsers {
   def main(args: Array[String]) = {
     val in = args mkString " "
     println("\nin : "+in)
-    println(phrase[Any](parser)(new CharSequenceReader(in)))
+    println(phrase[Any](parser)(NoParserLocation)(new CharSequenceReader(in)))
   }
 }

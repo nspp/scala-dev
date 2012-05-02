@@ -15,6 +15,8 @@ import scala.util.parsing.input._
 import scala.collection.immutable.PagedSeq
 import language.implicitConversions
 
+import debugging.{ParserLocation, NoParserLocation}
+
 /** The ''most important'' differences between `RegexParsers` and
  *  [[scala.util.parsing.combinator.Parsers]] are:
  *
@@ -80,8 +82,8 @@ trait RegexParsers extends Parsers {
       offset
 
   /** A parser that matches a literal string */
-  implicit def literal(s: String): Parser[String] = new Parser[String] {
-    def apply(in: Input) = {
+  implicit def literal(s: String): Parser[String] = new Parser[String] with NoLocationParser[String] {
+    def consume(in: Input) = {
       val source = in.source
       val offset = in.offset
       val start = handleWhiteSpace(source, offset)
@@ -101,8 +103,8 @@ trait RegexParsers extends Parsers {
   }
 
   /** A parser that matches a regex string */
-  implicit def regex(r: Regex): Parser[String] = new Parser[String] {
-    def apply(in: Input) = {
+  implicit def regex(r: Regex): Parser[String] = new Parser[String] with NoLocationParser[String] {
+    def consume(in: Input) = {
       val source = in.source
       val offset = in.offset
       val start = handleWhiteSpace(source, offset)
@@ -127,8 +129,8 @@ trait RegexParsers extends Parsers {
    */
   override def positioned[T <: Positional](p: => Parser[T]): Parser[T] = {
     val pp = super.positioned(p)
-    new Parser[T] {
-      def apply(in: Input) = {
+    new Parser[T] with NoLocationParser[T] {
+      def consume(in: Input) = {
         val offset = in.offset
         val start = handleWhiteSpace(in.source, offset)
         pp(in.drop (start - offset))
@@ -136,7 +138,7 @@ trait RegexParsers extends Parsers {
     }
   }
 
-  override def phrase[T](p: Parser[T]): Parser[T] =
+  override def phrase[T](p: Parser[T])(implicit loc: ParserLocation): Parser[T] =
     super.phrase(p <~ opt("""\z""".r))
 
   /** Parse some prefix of reader `in` with parser `p`. */
@@ -153,13 +155,13 @@ trait RegexParsers extends Parsers {
 
   /** Parse all of reader `in` with parser `p`. */
   def parseAll[T](p: Parser[T], in: Reader[Char]): ParseResult[T] =
-    parse(phrase(p), in)
+    parse(phrase(p)(NoParserLocation), in)
 
   /** Parse all of reader `in` with parser `p`. */
   def parseAll[T](p: Parser[T], in: java.io.Reader): ParseResult[T] =
-    parse(phrase(p), in)
+    parse(phrase(p)(NoParserLocation), in)
 
   /** Parse all of character sequence `in` with parser `p`. */
   def parseAll[T](p: Parser[T], in: java.lang.CharSequence): ParseResult[T] =
-    parse(phrase(p), in)
+    parse(phrase(p)(NoParserLocation), in)
 }

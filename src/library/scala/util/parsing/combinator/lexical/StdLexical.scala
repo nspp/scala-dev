@@ -33,6 +33,8 @@ import scala.collection.mutable
  * @author Adriaan Moors
  */
 class StdLexical extends Lexical with StdTokens {
+  private implicit val noloc: debugging.ParserLocation = debugging.NoParserLocation // fix with macros
+  
   // see `token` in `Scanners`
   def token: Parser[Token] =
     ( identChar ~ rep( identChar | digit )              ^^ { case first ~ rest => processIdent(first :: rest mkString "") }
