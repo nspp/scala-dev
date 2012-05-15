@@ -11,6 +11,8 @@ import scala.util.parsing.combinator._
 import scala.util.parsing.combinator.syntactical._
 import scala.util.parsing.combinator.lexical._
 
+import scala.util.parsing.combinator.debugging.NoParserLocation
+
 /**
  * This object provides a simple interface to the JSON parser class.
  * The default conversion for numerics is into a double. If you wish to
@@ -51,7 +53,7 @@ object JSON extends Parser {
    * @return      an optional `JSONType` element.
    */
   def parseRaw(input : String) : Option[JSONType] =
-    phrase(root)(new lexical.Scanner(input)) match {
+    phrase(root)(NoParserLocation)(new lexical.Scanner(input)) match {
       case Success(result, _) => Some(result)
       case _ => None
     }

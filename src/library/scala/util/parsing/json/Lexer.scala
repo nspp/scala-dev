@@ -15,10 +15,13 @@ import scala.util.parsing.combinator.syntactical._
 import scala.util.parsing.combinator.lexical._
 import scala.util.parsing.input.CharArrayReader.EofCh
 
+import scala.util.parsing.combinator.debugging.NoParserLocation
+
 /**
  *  @author Derek Chen-Becker <"java"+@+"chen-becker"+"."+"org">
  */
 class Lexer extends StdLexical with ImplicitConversions {
+  implicit val noloc = NoParserLocation
 
   override def token: Parser[Token] =
     //( '\"' ~ rep(charSeq | letter) ~ '\"' ^^ lift(StringLit)

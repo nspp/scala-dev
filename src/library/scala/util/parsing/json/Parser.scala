@@ -130,6 +130,8 @@ class Parser extends StdTokenParsers with ImplicitConversions {
     override def initialValue() = defaultNumberParser
   }
 
+  implicit val noloc = scala.util.parsing.combinator.debugging.NoParserLocation
+  
   // Define the grammar
   def root       = jsonObj | jsonArray
   def jsonObj    = "{" ~> repsep(objEntry, ",") <~ "}" ^^ { case vals : List[_] => JSONObject(Map(vals : _*)) }
