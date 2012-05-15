@@ -10,6 +10,7 @@ import scala.util.parsing.combinator._
 import scala.util.parsing.input.{ Reader }
 import scala.util.parsing.input.CharArrayReader.EofCh
 import scala.collection.mutable.ListBuffer
+import scala.util.parsing.combinator.debugging.NoParserLocation
 
 /** A simple command line parser to replace the several different
  *  simple ones spread around trunk.
@@ -114,6 +115,8 @@ case class CommandLine(
 
 object CommandLineParser extends RegexParsers with ParserUtil {
   override def skipWhitespace = false
+  
+  private implicit val noloc = NoParserLocation
 
   def elemExcept(xs: Elem*): Parser[Elem] = elem("elemExcept", x => x != EofCh && !(xs contains x))
   def elemOf(xs: Elem*): Parser[Elem]     = elem("elemOf", xs contains _)

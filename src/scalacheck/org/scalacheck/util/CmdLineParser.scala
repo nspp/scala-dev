@@ -15,7 +15,11 @@ import scala.util.parsing.input.Position
 import scala.collection.Set
 import org.scalacheck.Test
 
+import scala.util.parsing.combinator.debugging.NoParserLocation
+
 trait CmdLineParser extends Parsers {
+  
+  implicit val noloc = NoParserLocation
 
   type Elem = String
 
@@ -90,5 +94,5 @@ trait CmdLineParser extends Parsers {
   }
 
   def parseArgs[T](args: Array[String])(f: OptMap => T) =
-    phrase(options map f)(new ArgsReader(args,0))
+    phrase(options map f)(NoParserLocation)(new ArgsReader(args,0))
 }

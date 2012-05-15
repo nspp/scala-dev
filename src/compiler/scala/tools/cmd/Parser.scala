@@ -8,6 +8,7 @@ package cmd
 
 import scala.util.parsing.combinator._
 import scala.util.parsing.input.CharArrayReader.EofCh
+import scala.util.parsing.combinator.debugging.NoParserLocation
 
 /** A simple (overly so) command line parser.
  *  !!! This needs a thorough test suite to make sure quoting is
@@ -23,6 +24,7 @@ trait ParserUtil extends Parsers {
 
 object Parser extends RegexParsers with ParserUtil {
   override def skipWhitespace = false
+  private implicit val noloc = NoParserLocation
 
   def elemExcept(xs: Elem*): Parser[Elem] = elem("elemExcept", x => x != EofCh && !(xs contains x))
   def elemOf(xs: Elem*): Parser[Elem]     = elem("elemOf", xs contains _)
