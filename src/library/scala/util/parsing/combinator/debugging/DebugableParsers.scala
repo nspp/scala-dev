@@ -52,10 +52,10 @@ trait DebugableParsers {
         println("[Name] " + name)
         println("[Location] " + location.line + ":" + location.offset)
         println("[File] " + location.fileName)
-        println("[Method] " + location.outerMethod)
+        println("[Method] " + printMethod(location))
       }
     }
-    
+
     def exitRes[U >: T](res: ParseResult[U]): Unit = {
       if (debug && location != NoParserLocation) {
         // main access point for instrumenting the compiler
@@ -72,6 +72,12 @@ trait DebugableParsers {
         println("---------------")
       }
     }
+
+    private def printMethod(loc : ParserLocation): String = loc.outer match {
+      case null     => location.outerMethod
+      case method   => location.outerMethod + " > " + printMethod(loc.outer)
+    }
+    
   }
 }
 
