@@ -10,7 +10,7 @@ import language.implicitConversions
 trait DebugableParsers {
   self: Parsers =>
     
-  val debug: Boolean = false//(sys.props.getOrElse("parser.combinators.debug", "false") == "true")
+  val debug: Boolean = true//(sys.props.getOrElse("parser.combinators.debug", "false") == "true")
   
   trait NoLocationParser[+T] {
     selfP: Parser[T] =>
@@ -52,6 +52,7 @@ trait DebugableParsers {
         println("[Name] " + name)
         println("[Location] " + location.line + ":" + location.offset)
         println("[File] " + location.fileName)
+        println("[Method] " + location.outerMethod)
       }
     }
     
