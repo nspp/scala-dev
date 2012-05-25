@@ -43,8 +43,9 @@ trait DebugableParsers {
       }
     }
     
-    def enterRes(): Unit = {
+    def enterRes(in: Input): Unit = {
       if (debug && location != NoParserLocation) {
+        println("Input: " + in.toString)
         // main access point for instrumenting the compiler
         // for now just print statements
 
