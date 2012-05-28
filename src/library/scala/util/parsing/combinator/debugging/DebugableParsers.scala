@@ -11,7 +11,7 @@ trait DebugableParsers {
   self: Parsers =>
     
   val debug: Boolean = true//(sys.props.getOrElse("parser.combinators.debug", "false") == "true")
-  val init : Boolean = true;
+  var init : Boolean = true;
   
   trait NoLocationParser[+T] {
     selfP: Parser[T] =>
@@ -28,16 +28,17 @@ trait DebugableParsers {
 
   object Controller {
 
-    var lastAction : Action = Step
+    // Store the user's last action
+    var lastAction : Action = Step()
 
     def input : Action = {
       // Print empty line and Ask for user input
       println("\n>> ")
       Console.readChar match {
-        case 'j'    => Step
-        case 'l'    => StepIn
-        case 'h'    => StepOut
-        case 'q'    => Quit
+        case 'j'    => Step()
+        case 'l'    => StepIn()
+        case 'h'    => StepOut()
+        case 'q'    => Quit()
       }
     }
 
@@ -50,12 +51,12 @@ trait DebugableParsers {
     }
 
     // Decides what to do based on last action and current parser
-    def step(name : String, loc: debugging.ParserLocation) : Unit = lastStep match {
+    def step(name : String, loc: debugging.ParserLocation) : Unit = lastAction match {
       // Step isn't right, since it would stop at every '|' and not just the ones in the current scope
-      case Step     => if (name == "|") lastAction = input else () // If input is '|' in the same scope, then stop
-      case StepIn   => () // we need the parents to work for this
-      case StepOut  => () // also need the parent
-      case Quit     => exit(0) // Should be somewhere else
+      case Step()       => if (name == "|") lastAction = input else () // If input is '|' in the same scope, then stop
+      case StepIn()     => () // we need the parents to work for this
+      case StepOut()    => () // also need the parent
+      case Quit()       => exit(0) // Should be somewhere else
     }
   
   }
@@ -93,7 +94,7 @@ trait DebugableParsers {
 
         // Simple check to see if we want to do an init message
         if (init) {
-          Controller.init();
+          Controller.init;
           init = false;
         }
 
