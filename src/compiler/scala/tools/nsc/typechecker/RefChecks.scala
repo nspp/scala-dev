@@ -386,8 +386,9 @@ abstract class RefChecks extends InfoTransform with reflect.internal.transform.R
             overrideError("cannot be used here - classes can only override abstract types");
           } else if (other.isEffectivelyFinal) { // (1.2)
             overrideError("cannot override final member");
-            // synthetic exclusion needed for (at least) default getters.
-          } else if (!other.isDeferred && !member.isAnyOverride && !member.isSynthetic) {
+          } else if (!other.isDeferred && !member.isAnyOverride && !member.isSynthetic) { // (*)
+            // (*) Synthetic exclusion for (at least) default getters, fixes SI-5178. We cannot assign the OVERRIDE flag to
+            // the default getter: one default getter might sometimes override, sometimes not. Example in comment on ticket.
               if (isNeitherInClass && !(other.owner isSubClass member.owner))
                 emitOverrideError(
                   clazz + " inherits conflicting members:\n  "
@@ -1058,7 +1059,7 @@ abstract class RefChecks extends InfoTransform with reflect.internal.transform.R
         def typesString = normalizeAll(qual.tpe.widen)+" and "+normalizeAll(args.head.tpe.widen)
 
         /** Symbols which limit the warnings we can issue since they may be value types */
-        val isMaybeValue = Set(AnyClass, AnyRefClass, AnyValClass, ObjectClass, ComparableClass, JavaSerializableClass)
+        val isMaybeValue = Set[Symbol](AnyClass, AnyRefClass, AnyValClass, ObjectClass, ComparableClass, JavaSerializableClass)
 
         // Whether def equals(other: Any) has known behavior: it is the default
         // inherited from java.lang.Object, or it is a synthetically generated
@@ -1278,6 +1279,15 @@ abstract class RefChecks extends InfoTransform with reflect.internal.transform.R
     }
 
     def transformStat(tree: Tree, index: Int): List[Tree] = tree match {
+      case t if treeInfo.isSelfConstrCall(t) =>
+        assert(index == 0, index)
+        val t = transform(tree)
+        if (currentLevel.maxindex > 0) {
+          // An implementation restriction to avoid VerifyErrors and lazyvals mishaps; see SI-4717
+          debuglog("refsym = " + currentLevel.refsym)
+          unit.error(currentLevel.refpos, "forward reference not allowed from self constructor invocation")
+        }
+        List(t)
       case ModuleDef(_, _, _) => eliminateModuleDefs(tree)
       case ValDef(_, _, _, _) =>
         val tree1 @ ValDef(_, _, _, rhs) = transform(tree) // important to do before forward reference check
@@ -1458,6 +1468,7 @@ abstract class RefChecks extends InfoTransform with reflect.internal.transform.R
           analyzer.ImplicitNotFoundMsg.check(sym) foreach { warn =>
             unit.warning(tree.pos, "Invalid implicitNotFound message for %s%s:\n%s".format(sym, sym.locationString, warn))
           }
+
         case tpt@TypeTree() =>
           if(tpt.original != null) {
             tpt.original foreach {
@@ -1477,8 +1488,23 @@ abstract class RefChecks extends InfoTransform with reflect.internal.transform.R
 
     private def transformCaseApply(tree: Tree, ifNot: => Unit) = {
       val sym = tree.symbol
+          
+      def isClassTypeAccessible(tree: Tree): Boolean = tree match {
+        case TypeApply(fun, targs) =>
+          isClassTypeAccessible(fun)
+        case Select(module, apply) =>
+          // Fixes SI-5626. Classes in refinement types cannot be constructed with `new`. In this case,
+          // the companion class is actually not a ClassSymbol, but a reference to an abstract type.
+          module.symbol.companionClass.isClass
+      }
+      
+      val doTransform =
+        sym.isSourceMethod &&
+        sym.isCase &&
+        sym.name == nme.apply &&
+        isClassTypeAccessible(tree)
 
-      if (sym.isSourceMethod && sym.isCase && sym.name == nme.apply)
+      if (doTransform)
         toConstructor(tree.pos, tree.tpe)
       else {
         ifNot

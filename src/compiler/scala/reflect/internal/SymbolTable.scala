@@ -13,9 +13,7 @@ import scala.tools.nsc.util.WeakHashSet
 abstract class SymbolTable extends api.Universe
                               with Collections
                               with Names
-                              with SymbolCreations
                               with Symbols
-                              with SymbolFlags
                               with FreeVars
                               with Types
                               with Kinds
@@ -50,14 +48,18 @@ abstract class SymbolTable extends api.Universe
   /** Override with final implementation for inlining. */
   def debuglog(msg:  => String): Unit = if (settings.debug.value) log(msg)
   def debugwarn(msg: => String): Unit = if (settings.debug.value) Console.err.println(msg)
+  def throwableAsString(t: Throwable): String = "" + t
+
+  /** Prints a stack trace if -Ydebug or equivalent was given, otherwise does nothing. */
+  def debugStack(t: Throwable): Unit  = debugwarn(throwableAsString(t))
 
   /** Overridden when we know more about what was happening during a failure. */
   def supplementErrorMessage(msg: String): String = msg
 
   private[scala] def printCaller[T](msg: String)(result: T) = {
-    Console.err.println(msg + ": " + result)
-    Console.err.println("Called from:")
-    (new Throwable).getStackTrace.drop(2).take(15).foreach(Console.err.println)
+    Console.err.println("%s: %s\nCalled from: %s".format(msg, result,
+      (new Throwable).getStackTrace.drop(2).take(15).mkString("\n")))
+
     result
   }
 
@@ -280,33 +282,11 @@ abstract class SymbolTable extends api.Universe
   object perRunCaches {
     import java.lang.ref.WeakReference
     import scala.runtime.ScalaRunTime.stringOf
+    import scala.collection.generic.Clearable
 
-    import language.reflectiveCalls
-
-    // We can allow ourselves a structural type, these methods
-    // amount to a few calls per run at most.  This does suggest
-    // a "Clearable" trait may be useful.
-    private type Clearable = {
-      def size: Int
-      def clear(): Unit
-    }
     // Weak references so the garbage collector will take care of
     // letting us know when a cache is really out of commission.
     private val caches = mutable.HashSet[WeakReference[Clearable]]()
-
-    private def dumpCaches() {
-      println(caches.size + " structures are in perRunCaches.")
-      caches.zipWithIndex foreach { case (ref, index) =>
-        val cache = ref.get()
-        println("(" + index + ")" + (
-          if (cache == null) " has been collected."
-          else " has " + cache.size + " entries:\n" + stringOf(cache)
-        ))
-      }
-    }
-    // if (settings.debug.value) {
-    //   println(Signallable("dump compiler caches")(dumpCaches()))
-    // }
 
     def recordCache[T <: Clearable](cache: T): T = {
       caches += new WeakReference(cache)
@@ -314,10 +294,8 @@ abstract class SymbolTable extends api.Universe
     }
 
     def clearAll() = {
-      if (settings.debug.value) {
-        val size = caches flatMap (ref => Option(ref.get)) map (_.size) sum;
-        log("Clearing " + caches.size + " caches totalling " + size + " entries.")
-      }
+      debuglog("Clearing " + caches.size + " caches.")
+
       caches foreach { ref =>
         val cache = ref.get()
         if (cache == null)
@@ -332,11 +310,6 @@ abstract class SymbolTable extends api.Universe
     def newSet[K]()               = recordCache(mutable.HashSet[K]())
     def newWeakSet[K <: AnyRef]() = recordCache(new WeakHashSet[K]())
   }
-
-  /** Break into repl debugger if assertion is true. */
-  // def breakIf(assertion: => Boolean, args: Any*): Unit =
-  //   if (assertion)
-  //     ILoop.break(args.toList)
 
   /** The set of all installed infotransformers. */
   var infoTransformers = new InfoTransformer {

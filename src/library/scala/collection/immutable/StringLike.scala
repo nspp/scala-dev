@@ -33,7 +33,7 @@ import StringLike._
  *  @tparam Repr   The type of the actual collection inheriting `StringLike`.
  *
  *  @since 2.8
- *  @define Coll String
+ *  @define Coll `String`
  *  @define coll string
  *  @define orderDependent
  *  @define orderDependentFold
@@ -274,7 +274,7 @@ self =>
    *    `scala.BigDecimal`) are unwrapped to pass a type which `Formatter`
    *    understands.
    *
-   *  @param locale an instance of `java.util.Locale`
+   *  @param l    an instance of `java.util.Locale`
    *  @param args the arguments used to instantiating the pattern.
    *  @throws `java.lang.IllegalArgumentException`
    */
