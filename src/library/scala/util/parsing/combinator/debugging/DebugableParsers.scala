@@ -138,8 +138,8 @@ trait DebugableParsers {
     }
 
     private def printMethod(loc : ParserLocation): String = loc.outer match {
-      case null     => location.outerMethod
-      case method   => location.outerMethod + " > " + printMethod(loc.outer)
+      case null     => loc.outerMethod
+      case method   => loc.outerMethod + " > " + printMethod(loc.outer)
     }
     
   }

@@ -249,7 +249,7 @@ trait Parsers extends AnyRef with debugging.DebugableParsers {
 
     /** An unspecified method that defines the behaviour of this parser. */
     def consume(in: Input): ParseResult[T]
-    
+
     def apply(in: Input): ParseResult[T] = {
       enterRes(in)
       val res = consume(in)
