@@ -46,7 +46,6 @@ object Controller {
     case StepOut()    => () // also need the parent
     case Quit()       => exit(0) // Should be somewhere else
   }
-
 }
 
 
