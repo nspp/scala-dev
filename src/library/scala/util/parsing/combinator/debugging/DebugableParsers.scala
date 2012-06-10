@@ -6,6 +6,7 @@ import scala.collection.mutable.ListBuffer
 import scala.annotation.tailrec
 import annotation.migration
 import language.implicitConversions
+import debugging.parseTree
 
 // A controller deciding what to do given the user input and parser
 object Controller {
@@ -60,43 +61,24 @@ case class Quit extends Action        // Terminate the debugger
 
 trait DebugableParsers {
   self: Parsers =>
-    
+
   val debug: Boolean = true//(sys.props.getOrElse("parser.combinators.debug", "false") == "true")
-  
+
   trait NoLocationParser[+T] {
     selfP: Parser[T] =>
     val location: ParserLocation = NoParserLocation
   }
 
-  
+
   trait DebugableParser[+T] {
     selfP: Parser[T] =>
-      
+
     val location: debugging.ParserLocation
     def ps: List[Parser[T]] = List() // TODO must respect the order
     def ls: List[debugging.ParserLocation] = List()
-      
-    
-    // TODO inline, or macro 
-    def enter(): Unit = {
-      if (debug && location != NoParserLocation) {
 
-        // main access point for instrumenting the compiler
-        // for now just print statements
-        println("Enter parser")
-        println("[Name] " + name)
-      }
-    }
-    
-    def exit(): Unit = {
-      if (debug && location != NoParserLocation) {
-        // main access point for instrumenting the compiler
-        // for now just print statements
-        println("Exit parser")
-        println("[Name] " + name)
-      }
-    }
-    
+
+
     def enterRes(in: Input): Unit = {
       if (debug && location != NoParserLocation) {
 
