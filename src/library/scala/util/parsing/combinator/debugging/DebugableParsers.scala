@@ -6,7 +6,7 @@ import scala.collection.mutable.ListBuffer
 import scala.annotation.tailrec
 import annotation.migration
 import language.implicitConversions
-import debugging.parseTree
+import debugging.{parseTree, ParserLocation}
 
 // A controller deciding what to do given the user input and parser
 object Controller {
@@ -40,12 +40,53 @@ object Controller {
   }
 
   // Decides what to do based on last action and current parser
-  def step(name : String, loc: debugging.ParserLocation) : Unit = lastAction match {
+  def step(name : String, loc: ParserLocation) : Unit = lastAction match {
     // Step isn't right, since it would stop at every '|' and not just the ones in the current scope
     case Step()       => if (name == "|") lastAction = input else () // If input is '|' in the same scope, then stop
     case StepIn()     => () // we need the parents to work for this
     case StepOut()    => () // also need the parent
     case Quit()       => exit(0) // Should be somewhere else
+  }
+}
+
+object Builder {
+
+  var z : ParseTree.Zipper  = ParseTree.root(NoParserLocation)
+  var initialized : Boolean = false;
+  var level : Int           = 0
+
+  // Initializes to the root position
+  def init(loc : ParserLocation) : Unit = {
+    if (initialized == false) z = ParseTree.root(loc)
+    initialized = true;
+  }
+
+  def stepEnter(name : String, loc: ParserLocation) : Unit = (getLevel(loc), name) match {
+    case (l, "|") if (l == level)   => next(loc)
+    case (l, "|") if (l > level)    => in(loc)
+  }
+
+  // Add new element to list of branches
+  def next(loc : ParserLocation) : Unit = { z = ParseTree.addLoc(z)(loc) }
+
+  // Add an element to 
+  def in(loc : ParserLocation) : Unit = {
+    // Add element
+    var tempZipper  = ParseTree.moveDown(ParseTree.moveLeft(z).get).get
+    z               = ParseTree.addLoc(tempZipper)(loc)
+    level           = getLevel(loc)
+  }
+
+  // TODO: make into two functions. one that takes success and one that takes failure
+  // def stepExit[U](res: ParseResult[U], loc : ParserLocation) : Unit = res match {
+  //   case Success(res0, next)        => 
+  //   case NoSuccess(msg, next)       => println("Failed: " + msg)
+  // 
+  // }
+
+  def getLevel(loc : ParserLocation) : Int = loc.outer match {
+    case null     => 0
+    case method   => getLevel(loc.outer) + 1;
   }
 }
 
@@ -82,22 +123,35 @@ trait DebugableParsers {
     def enterRes(in: Input): Unit = {
       if (debug && location != NoParserLocation) {
 
+        // Redefine name for easier reading
+        if (name == "") name = "Undefined"
+
+        println("name:\t" + name)
+        println("Level:\t" + getLevel(location))
+        println("")
+
         // Simple check to see if we want to do an init message
-        Controller.initMsg;
+        // Controller.initMsg;
 
         // Leave control flow to the controller
-        Controller.step(name, location)
+        // Controller.step(name, location)
 
+        // Simple check to make sure we are initialized
+        // Builder.init(loc)
 
-        println(in.pos.longString)
+        // let the builder build a parseTree
+        // Builder.stepEnter(name, location)
+
+        // println(in.pos.longString)
         // main access point for instrumenting the compiler
         // for now just print statements
 
-        println("Try to consume token")
-        println("[Name] " + name)
-        println("[Location] " + location.line + ":" + location.offset)
-        println("[File] " + location.fileName)
-        println("[Method] " + printMethod(location) + "\n")
+        // println("Try to consume token")
+        // println("[Name] " + name)
+        // println("[Location] " + location.line + ":" + location.offset)
+        //println("[File] " + location.fileName)
+        // println("[Method] " + printMethod(location) + "\n")
+        // println("")
       }
     }
 
@@ -105,24 +159,33 @@ trait DebugableParsers {
       if (debug && location != NoParserLocation) {
         // main access point for instrumenting the compiler
         // for now just print statements
-        println("Result of consuming the token")
-        println("[Name] " + name)
-        println("[Location] " + location.line + ":" + location.offset)
+        // println("Result of consuming the token")
+        // println("[Name] " + name)
+        // println("[Location] " + location.line + ":" + location.offset)
+
+        // Call builder on exit
+        // Builder.stepExit(res, location)
+
         res match {
           case Success(res0, next) =>
             println("Matched: " + res)
           case NoSuccess(msg, next) =>
             println("Failed: " + msg)
         }
-        println("---------------")
+        println("")
       }
     }
 
     private def printMethod(loc : ParserLocation): String = loc.outer match {
       case null     => loc.outerMethod
-      case method   => loc.outerMethod + " > " + printMethod(loc.outer)
+      case method   => printMethod(loc.outer) + " > " + loc.outerMethod
     }
-    
+
+    private def getLevel(loc : ParserLocation) : Int = loc.outer match {
+      case null     => 0
+      case method   => getLevel(loc.outer) + 1;
+    }
+
   }
 }
 

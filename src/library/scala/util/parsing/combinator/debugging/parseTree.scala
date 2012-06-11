@@ -44,7 +44,7 @@ object ParseTree {
   case class Or(elems : List[And], leaf : Leaf) extends Tree
 
   // The data class for the Leaf. For now it just contains the position
-  case class Leaf(pos : ParserLocation)
+  case class Leaf(loc : ParserLocation)
 
   // A Zipper for the Tree
   case class Zipper(tree: Tree, breadCrumbs: List[Focus])
@@ -60,6 +60,9 @@ object ParseTree {
   case object R extends Direction
   case object D extends Direction
   case object U extends Direction
+
+  // Creates the root zipper to start out with
+  def root(loc : ParserLocation) : Zipper = Zipper(Or(Nil, Leaf(loc)), Nil)
 
   // Move by specifying a direction
   def move(from : Zipper)(dir : Direction) : Option[Zipper] = dir match {
@@ -104,6 +107,6 @@ object ParseTree {
     case Zipper( e, fs)                             => Zipper(e, Right(elem)::fs)
   }
 
-  def addEmpty(at : Zipper)(pos : ParserLocation) : Zipper = add(at)(And(Nil, Leaf(pos)))
+  def addLoc(at : Zipper)(loc : ParserLocation) : Zipper = add(at)(And(Nil, Leaf(loc)))
 
 }
