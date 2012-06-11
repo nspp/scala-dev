@@ -897,7 +897,7 @@ trait Parsers extends AnyRef with debugging.DebugableParsers {
     }
   }
 
-  /** A parser generator delimiting whole phrases (i.e. programs).
+  /** A parser generatorcharselimiting whole phrases (i.e. programs).
    *
    *  `phrase(p)` succeeds if `p` succeeds and no input is left over after `p`.
    *
