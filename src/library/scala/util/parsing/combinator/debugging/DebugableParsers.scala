@@ -6,7 +6,7 @@ import scala.collection.mutable.ListBuffer
 import scala.annotation.tailrec
 import annotation.migration
 import language.implicitConversions
-import debugging.{parseTree, ParserLocation}
+import debugging.{ParseTree, ParserLocation}
 
 // A controller deciding what to do given the user input and parser
 object Controller {
@@ -115,8 +115,37 @@ trait DebugableParsers {
     selfP: Parser[T] =>
 
     val location: debugging.ParserLocation
+    var z : Zipper
+    var dispatch = defaultDispatch
     def ps: List[Parser[T]] = List() // TODO must respect the order
     def ls: List[debugging.ParserLocation] = List()
+
+
+    def defaultDispatch(in : Input, lvl : Int) : ParseTree.Zipper = (in, lvl) match {
+      case ('|',n)          => setOrDispatch(2,n)
+      case ('~',n)          => setAndDispatch(2,n)
+      case otherwise        => Builder.word
+    }
+
+    def orDispatch(k : Int, initlvl : Int)(in : Input, curlvl : Int) = (in, curlvl) match {
+      case ('|',n) if (n == lvl)        => setDispatch(k + 1,n, "or")
+      case ('|',n)                      => Builder.or(k); setDispatch(2,n, "or")
+      case ('~',n)                      => Builder.or(k); setDispatch(2,n, "and")
+      case otherwise                    => Builder.or(k); setDispatch(0,0,"default"); Builder.word
+    }
+
+    def andDispatch(k : Int, initlvl : Int)(in : Input, curlvl : Int) = (in, curlvl) match {
+      case ('|',n) if (n == lvl)        => setDispatch(k + 1,n, "and")
+      case ('|',n)                      => Builder.and(k); setDispatch(2,n, "or")
+      case ('~',n)                      => Builder.and(k); setDispatch(2,n, "and")
+      case otherwise                    => Builder.and(k); setDispatch(0,0,"default"); Builder.word
+    }
+
+    def setDispatch(n : Int, lvl : Int, which : String) : Unit = which match {
+      case "or"         => dispatch = orDispatch(n,lvl)
+      case "and"        => dispatch = andDispatch(n,lvl)
+      case otherwise    => dispatch = defaultDispatch
+    }
 
 
 
@@ -125,6 +154,12 @@ trait DebugableParsers {
 
         // Redefine name for easier reading
         if (name == "") name = "Undefined"
+
+        // Get level
+        level = getLevel(location)
+
+        // Call the dispatcher with name and level
+        dispatch(in, level)
 
         println("name:\t" + name)
         println("Level:\t" + getLevel(location))
