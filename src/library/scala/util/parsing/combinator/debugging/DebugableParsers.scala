@@ -50,7 +50,7 @@ object Controller {
 
 object Builder {
 
-  var z : ParseTree.Zipper  = ParseTree.root(NoParserLocation)
+  var z : AndOrZipper  = AndOrZipper.root
   var initialized : Boolean = false;
 
   // Initializes to the root position
@@ -60,57 +60,33 @@ object Builder {
   }
 
   def word(loc : ParserLocation) : Unit = {
+    // Construct new Item
+    var item = Word(Leaf(loc))
+
     // Add word to zipper
+    z = z.nextHead.replaceHead(item).get
 
+    // Now move to the next word (or else we'll keep replacing this word)
+    z = z.right.get
 
-    // Move to next open position. If no more, move a level up
-  
-  
   }
 
-  def and(k: Int, loc: PArserLocation) : Unit = z match {
-    case Zipper(And(es, l), fs)
-    // add k empty ors within an and: Or( And([]), ... , And([]) )
-    
-
-    // Move to beginning of list
-  
+  // Replace first element of list with Or( Word(), Word(), ... , Word() );
+  def or(k: Int, loc: ParserLocation) : Unit = {
+  . // Construct new item
+    var item = Or( AndOrTree.emptyList(k), Leaf(loc))
+    // Now replace head with new item and enter
+    z = z.nextHead.replaceHead(item).get.down.get
   }
 
-  def or(k: Int, loc: PArserLocation) : Unit = {
-    // add k empty ors within an and: And( Or([]), ... , Or([]) )
-
-    // Move to beginning of list
-  
+  // Replace first element of list with And( Word(), Word(), ... , Word() );
+  def and(k: Int, loc: ParserLocation) : Unit = {
+  . // Construct new item
+    var item = And( AndOrTree.emptyList(k), Leaf(loc))
+    // Now replace head with new item and enter
+    z = (z.nextHead.replaceHead(item).get.down.get
   }
 
-  def stepEnter(name : String, loc: ParserLocation) : Unit = (getLevel(loc), name) match {
-    case (l, "|") if (l == level)   => next(loc)
-    case (l, "|") if (l > level)    => in(loc)
-  }
-
-  // Add new element to list of branches
-  def next(loc : ParserLocation) : Unit = { z = ParseTree.addLoc(z)(loc) }
-
-  // Add an element to 
-  def in(loc : ParserLocation) : Unit = {
-    // Add element
-    var tempZipper  = ParseTree.moveDown(ParseTree.moveLeft(z).get).get
-    z               = ParseTree.addLoc(tempZipper)(loc)
-    level           = getLevel(loc)
-  }
-
-  // TODO: make into two functions. one that takes success and one that takes failure
-  // def stepExit[U](res: ParseResult[U], loc : ParserLocation) : Unit = res match {
-  //   case Success(res0, next)        => 
-  //   case NoSuccess(msg, next)       => println("Failed: " + msg)
-  // 
-  // }
-
-  def getLevel(loc : ParserLocation) : Int = loc.outer match {
-    case null     => 0
-    case method   => getLevel(loc.outer) + 1;
-  }
 }
 
 
@@ -139,9 +115,6 @@ trait DebugableParsers {
 
     val location: debugging.ParserLocation
     var dispatch = defaultDispatch
-    // def ps: List[Parser[T]] = List() // TODO must respect the order
-    // def ls: List[debugging.ParserLocation] = List()
-
 
     def defaultDispatch(in : Input, lvl : Int) : ParseTree.Zipper = (in, lvl) match {
       case ('|',n)          => setDispatch(2,n, "or")
@@ -151,20 +124,20 @@ trait DebugableParsers {
 
     def orDispatch(k : Int, initlvl : Int)(in : Input, curlvl : Int) = (in, curlvl) match {
       case ('|',n) if (n == lvl)        => setDispatch(k + 1,n, "or")
-      case ('|',n)                      => Builder.or(k, location); setDispatch(2,n, "or")
+      case ('|',n)                      => Builder.or(k, location); Builder.and(1, NoParserLocation); setDispatch(2,n, "or")
       case ('~',n)                      => Builder.or(k, location); setDispatch(2,n, "and")
       case otherwise                    => Builder.or(k, location); setDispatch(0,0,"default"); Builder.word
     }
 
     // If we recieve a
     // ~ and the level is the same, then add one to the count and continue
-    // ~ and the level is different, then build the final and, and start a new count
+    // ~ and the level is different, then build the final and, build a single or cell and start a new count
     // | then build the final and and start a new count for or
     //   else return to the default dispatch
     def andDispatch(k : Int, initlvl : Int)(in : Input, curlvl : Int) = (in, curlvl) match {
       case ('~',n) if (n == lvl)        => setDispatch(k + 1,n, "and")
       case ('|',n)                      => Builder.and(k, location); setDispatch(2,n, "or")
-      case ('~',n)                      => Builder.and(k, location); setDispatch(2,n, "and")
+      case ('~',n)                      => Builder.and(k, location); Builder.or(1, NoParserLocation); setDispatch(2,n, "and")
       case otherwise                    => Builder.and(k, location); setDispatch(0,0,"default"); Builder.word
     }
 

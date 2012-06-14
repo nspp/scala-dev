@@ -1,71 +1,95 @@
 package scala.util.parsing.combinator
 package debugging
 
-object Zipper {
+object AndOrZipper {
 
   // Creates the root zipper to start out with
-  def root(loc : ParserLocation) : Zipper = Zipper(AndOrTree.empty, [])
+  def root(loc : ParserLocation) : AndOrZipper = AndOrZipper(Or(Nil, Leaf(NoParserLocation)), Nil)
 
 }
 
 
 // Breadcrumbs for the zipper
-abstract class AndOrPos
-case class Right(past: AndOrTree) extends AndOrPos
-case class Down(leaf : Leaf, rest : List[AndOrTree]) extends AndOrPos
+abstract class AndOrFocus
+case class Right(past: AndOrTree) extends AndOrFocus
+case class Down(leaf : Leaf, rest : List[AndOrTree]) extends AndOrFocus
 
 
-// A Zipper for the AndOrTree
-case class Zipper(tree: AndOrTree, breadCrumbs: List[Focus]) {
+// A AndOrZipper for the AndOrTree
+case class AndOrZipper(tree: AndOrTree, breadCrumbs: List[AndOrFocus]) {
 
-  z =>
+  z : AndOrZipper =>
 
   // Movement for the zipper class
-  def right : Option[Zipper] = z match {
-    case Zipper( And(e::es, l), fs)                 => Some( Zipper( And(es, l), Right(e)::fs) )
-    case Zipper( Or(e::es, l), fs)                  => Some( Zipper( Or(es, l), Right(e)::fs) )
-    case Zipper( And(Nil, _), _)                    => None
-    case Zipper( Or(Nil, _), _)                     => None
+  def right : Option[AndOrZipper] = z match {
+    case AndOrZipper( And(e::es, l), fs)                 => Some( AndOrZipper( And(es, l), Right(e)::fs) )
+    case AndOrZipper( Or(e::es, l), fs)                  => Some( AndOrZipper( Or(es, l), Right(e)::fs) )
+    case AndOrZipper( And(Nil, _), _)                    => None
+    case AndOrZipper( Or(Nil, _), _)                     => None
   }
 
-  def down : Option[Zipper] = z match {
-    case Zipper( And(e::es, l), fs)                 => Some( Zipper( e, Down(l, es)::fs) )
-    case Zipper( Or(e::es, l), fs)                  => Some( Zipper( e, Down(l, es)::fs) )
-    case Zipper( And(Nil, _), _)                    => None
-    case Zipper( Or(Nil, _), _)                     => None
+  def down : Option[AndOrZipper] = z match {
+    case AndOrZipper( And(e::es, l), fs)                 => Some( AndOrZipper( e, Down(l, es)::fs) )
+    case AndOrZipper( Or(e::es, l), fs)                  => Some( AndOrZipper( e, Down(l, es)::fs) )
+    case AndOrZipper( And(Nil, _), _)                    => None
+    case AndOrZipper( Or(Nil, _), _)                     => None
   }
 
-  def left : Option[Zipper] = z match {
-    case Zipper( And(es, l), Right(p:Or)::fs)       => Some( Zipper( And(p::es, l), fs))
-    case Zipper( Or(es, l), Right(p:And)::fs)       => Some( Zipper( Or(p::es, l), fs))
-    case Zipper( _, Down(_,_)::_)                   => None
-    case Zipper( _, Nil)                            => None
+  def left : Option[AndOrZipper] = z match {
+    case AndOrZipper( And(es, l), Right(p:Or)::fs)       => Some( AndOrZipper( And(p::es, l), fs))
+    case AndOrZipper( Or(es, l), Right(p:And)::fs)       => Some( AndOrZipper( Or(p::es, l), fs))
+    case AndOrZipper( _, Down(_,_)::_)                   => None
+    case AndOrZipper( _, Nil)                            => None
   }
 
-  def up : Option[Zipper] = z match {
-    case Zipper( e:And, Down(l, r:List[And])::fs)   => Some( Zipper( Or(e::r, l), fs) )
-    case Zipper( e:Or, Down(l, r:List[Or])::fs)     => Some( Zipper( And(e::r, l), fs) )
-    case Zipper( And(es, l), Right(p:Or)::fs)       => Zipper( And(p::es, l), fs) ).up
-    case Zipper( Or(es, l), Right(p:And)::fs)       => Zipper( Or(p::es, l), fs) ).up
-    case Zipper( _, Nil)                            => None
+  def up : Option[AndOrZipper] = z match {
+    case AndOrZipper( e:And, Down(l, r:List[And])::fs)   => Some( AndOrZipper( Or(e::r, l), fs) )
+    case AndOrZipper( e:Or, Down(l, r:List[Or])::fs)     => Some( AndOrZipper( And(e::r, l), fs) )
+    case AndOrZipper( And(es, l), Right(p:Or)::fs)       => AndOrZipper( And(p::es, l), fs).up
+    case AndOrZipper( Or(es, l), Right(p:And)::fs)       => AndOrZipper( Or(p::es, l), fs).up
+    case AndOrZipper( _, Nil)                            => None
   }
 
-  def leftMost : Zipper = z.left match {
+  def leftMost : AndOrZipper = z.left match {
     case None                                       => z
-    case Some(z_new)                                => z_new.leftmost
+    case Some(z_new)                                => z_new.leftMost
   }
 
   // Add an And to an Or tree and moves the zipper to the new position
-  def add(elem : AndOrTree) : Zipper = z.add([elem])
-    case Zipper( e, fs)                             => Zipper(e, Right(elem)::fs)
+  def add(elem : AndOrTree) : AndOrZipper = z match {
+    case AndOrZipper(e, fs)                             => AndOrZipper(e, Right(elem)::fs)
   }
 
   // Add list moving to the end of the list
   // This can be done better with a fold, but I'm not sure how
-  def addList(elems : List[AndOrTree]) : Zipper = {
-    case Zipper( e, fs)                             => Zipper(e, elems.map(e => Right(e)):::fs)
+  def addList(elems : List[AndOrTree]) : AndOrZipper = z match{
+    case AndOrZipper(e, fs)                             => AndOrZipper(e, elems.reverse.map(e => Right(e)):::fs)
   }
 
-  def addLoc(at : Zipper)(loc : ParserLocation) : Zipper = add(at)(And(Nil, Leaf(loc)))
+  def replaceHead(elem : AndOrTree) : Option[AndOrZipper] = z match {
+    case AndOrZipper(And(e::es, l), fs)                 => Some( AndOrZipper(And(elem::es, l), fs) )
+    case AndOrZipper(Or(e::es, l), fs)                  => Some( AndOrZipper(Or(elem::es, l), fs) )
+    case AndOrZipper(Word(l), fs)                       => AndOrZipper(elem, fs)
+    case otherwise                                      => None
+  }
+
+  def atEnd : Boolean = z match {
+    case AndOrZipper(And(Nil, l), fs)                   => true
+    case AndOrZipper(Or(Nil, l), fs)                    => true
+    case otherwise                                      => false
+  }
+
+  def nextHead : AndOrZipper = (z.atEnd, z.up) match {
+    case (true, None)                                   => Error("There is no more elements to fill")
+    case (false, _)                                     => z
+    case (true, zup)                                    => zup.nextHead
+  }
+
+
+  // Updates the information about the current active node
+  def setLeaf(leaf : Leaf) : AndOrZipper = z match {
+    case AndOrZipper( And(elems, _), fs)                => AndOrZipper( And(elems, leaf), fs);
+    case AndOrZipper( Or(elems, _), fs)                 => AndOrZipper( Or(elems, leaf), fs);
+  }
 
 }

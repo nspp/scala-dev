@@ -39,6 +39,7 @@ object AndOrTree {
   
   def empty : AndOrTree = Word(Leaf(NoParserLocation))
   def word(loc : ParserLocation) = Word(Leaf(loc))
+  def emptyList(n : Int) : List[AndOrTree] = (1 to n).map(i => empty).toList
 
 }
 
