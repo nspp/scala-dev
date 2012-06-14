@@ -47,7 +47,6 @@ abstract class AndOrTree
 
 case class And(elems : List[Or], leaf : Leaf) extends AndOrTree
 case class Or(elems : List[And], leaf : Leaf) extends AndOrTree
-case class Word(leaf : Leaf) extends AndOrTree
 
 // The data class for the Leaf. For now it just contains the position
 case class Leaf(loc : ParserLocation)

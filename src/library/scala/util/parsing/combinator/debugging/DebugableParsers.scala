@@ -73,7 +73,7 @@ object Builder {
 
   // Replace first element of list with Or( Word(), Word(), ... , Word() );
   def or(k: Int, loc: ParserLocation) : Unit = {
-  . // Construct new item
+    // Construct new item
     var item = Or( AndOrTree.emptyList(k), Leaf(loc))
     // Now replace head with new item and enter
     z = z.nextHead.replaceHead(item).get.down.get
@@ -81,10 +81,10 @@ object Builder {
 
   // Replace first element of list with And( Word(), Word(), ... , Word() );
   def and(k: Int, loc: ParserLocation) : Unit = {
-  . // Construct new item
+    // Construct new item
     var item = And( AndOrTree.emptyList(k), Leaf(loc))
     // Now replace head with new item and enter
-    z = (z.nextHead.replaceHead(item).get.down.get
+    z = z.nextHead.replaceHead(item).get.down.get
   }
 
 }
