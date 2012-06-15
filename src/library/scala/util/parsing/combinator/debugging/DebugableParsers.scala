@@ -109,6 +109,8 @@ trait DebugableParsers {
     selfP: Parser[T] =>
 
     val location: debugging.ParserLocation
+    def ps: List[Parser[T]] = List() // TODO must respect the order
+    def ls: List[debugging.ParserLocation] = List()
     var dispatch = defaultDispatch(_,_)
 
     def defaultDispatch(name : String, lvl : Int) : Unit = (name, lvl) match {
