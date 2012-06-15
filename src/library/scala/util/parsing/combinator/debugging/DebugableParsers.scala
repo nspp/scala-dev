@@ -79,6 +79,9 @@ object Builder {
     z = z.nextHead.replaceHead(item).get.down.get
   }
 
+  // Mostly for debugging
+  def print : Unit = println(z.toString)
+
 }
 
 
@@ -133,6 +136,7 @@ trait DebugableParsers {
       case otherwise                    => Builder.and(k, location); setDispatch(0,0,"default"); Builder.word(location)
     }
 
+    // Assigns the next dispatch function to the dispatch variable with appropriate parameters
     def setDispatch(n : Int, lvl : Int, which : String) : Unit = which match {
       case "or"         => dispatch = orDispatch(n,lvl)(_,_)
       case "and"        => dispatch = andDispatch(n,lvl)(_,_)
@@ -153,6 +157,10 @@ trait DebugableParsers {
 
         println("name:\t" + name)
         println("Level:\t" + getLevel(location))
+        println("")
+
+        Builder.print
+        println("")
         println("")
 
         // Simple check to see if we want to do an init message
