@@ -53,25 +53,16 @@ object Builder {
   var z : AndOrZipper  = AndOrZipper.root
   var initialized : Boolean = false;
 
-  // Initializes to the root position
-  def init(loc : ParserLocation) : Unit = {
-    if (initialized == false) z = ParseTree.root(loc)
-    initialized = true;
-  }
-
+  // Add a word such as "blup" to the parse tree
   def word(loc : ParserLocation) : Unit = {
     // Construct new Item
     var item = Word(Leaf(loc))
-
-    // Add word to zipper
+    // Move to next position and Add word to zipper
     z = z.nextHead.replaceHead(item).get
-
-    // Now move to the next word (or else we'll keep replacing this word)
-    z = z.right.get
-
   }
 
   // Replace first element of list with Or( Word(), Word(), ... , Word() );
+  // k is the number of Words
   def or(k: Int, loc: ParserLocation) : Unit = {
     // Construct new item
     var item = Or( AndOrTree.emptyList(k), Leaf(loc))
@@ -80,6 +71,7 @@ object Builder {
   }
 
   // Replace first element of list with And( Word(), Word(), ... , Word() );
+  // k is th enumber of Words
   def and(k: Int, loc: ParserLocation) : Unit = {
     // Construct new item
     var item = And( AndOrTree.emptyList(k), Leaf(loc))
@@ -114,19 +106,19 @@ trait DebugableParsers {
     selfP: Parser[T] =>
 
     val location: debugging.ParserLocation
-    var dispatch = defaultDispatch
+    var dispatch = defaultDispatch(_,_)
 
-    def defaultDispatch(in : Input, lvl : Int) : ParseTree.Zipper = (in, lvl) match {
-      case ('|',n)          => setDispatch(2,n, "or")
-      case ('~',n)          => setDispatch(2,n, "and")
+    def defaultDispatch(name : String, lvl : Int) : Unit = (name, lvl) match {
+      case ("|",n)          => setDispatch(2,n, "or")
+      case ("~",n)          => setDispatch(2,n, "and")
       case otherwise        => Builder.word(location)
     }
 
-    def orDispatch(k : Int, initlvl : Int)(in : Input, curlvl : Int) = (in, curlvl) match {
-      case ('|',n) if (n == lvl)        => setDispatch(k + 1,n, "or")
-      case ('|',n)                      => Builder.or(k, location); Builder.and(1, NoParserLocation); setDispatch(2,n, "or")
-      case ('~',n)                      => Builder.or(k, location); setDispatch(2,n, "and")
-      case otherwise                    => Builder.or(k, location); setDispatch(0,0,"default"); Builder.word
+    def orDispatch(k : Int, initlvl : Int)(name : String, curlvl : Int) : Unit = (name, curlvl) match {
+      case ("|",n) if (n == initlvl)    => setDispatch(k + 1,n, "or")
+      case ("|",n)                      => Builder.or(k, location); setDispatch(2, n, "or")
+      case ("~",n)                      => Builder.or(k, location); setDispatch(2,n, "and")
+      case otherwise                    => Builder.or(k, location); setDispatch(0,0,"default"); Builder.word(location)
     }
 
     // If we recieve a
@@ -134,17 +126,17 @@ trait DebugableParsers {
     // ~ and the level is different, then build the final and, build a single or cell and start a new count
     // | then build the final and and start a new count for or
     //   else return to the default dispatch
-    def andDispatch(k : Int, initlvl : Int)(in : Input, curlvl : Int) = (in, curlvl) match {
-      case ('~',n) if (n == lvl)        => setDispatch(k + 1,n, "and")
-      case ('|',n)                      => Builder.and(k, location); setDispatch(2,n, "or")
-      case ('~',n)                      => Builder.and(k, location); Builder.or(1, NoParserLocation); setDispatch(2,n, "and")
-      case otherwise                    => Builder.and(k, location); setDispatch(0,0,"default"); Builder.word
+    def andDispatch(k : Int, initlvl : Int)(name : String, curlvl : Int) : Unit = (name, curlvl) match {
+      case ("~",n) if (n == initlvl)    => setDispatch(k + 1,n, "and")
+      case ("|",n)                      => Builder.and(k, location); setDispatch(2,n, "or")
+      case ("~",n)                      => Builder.and(k, location); setDispatch(2,n, "and")
+      case otherwise                    => Builder.and(k, location); setDispatch(0,0,"default"); Builder.word(location)
     }
 
     def setDispatch(n : Int, lvl : Int, which : String) : Unit = which match {
-      case "or"         => dispatch = orDispatch(n,lvl)
-      case "and"        => dispatch = andDispatch(n,lvl)
-      case otherwise    => dispatch = defaultDispatch
+      case "or"         => dispatch = orDispatch(n,lvl)(_,_)
+      case "and"        => dispatch = andDispatch(n,lvl)(_,_)
+      case otherwise    => dispatch = defaultDispatch(_,_)
     }
 
     def enterRes(in: Input): Unit = {
@@ -153,14 +145,11 @@ trait DebugableParsers {
         // Redefine name for easier reading
         if (name == "") name = "Undefined"
 
-        // Simple check to make sure we are initialized
-        Builder.init(loc)
-
         // Get level
-        level = getLevel(location)
+        var level = getLevel(location)
 
         // Call the dispatcher with name and level
-        dispatch(in, level)
+        dispatch(name, level)
 
         println("name:\t" + name)
         println("Level:\t" + getLevel(location))

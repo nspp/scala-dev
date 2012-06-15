@@ -37,16 +37,42 @@ package debugging
 
 object AndOrTree {
   
-  def empty : AndOrTree = Word(Leaf(NoParserLocation))
-  def word(loc : ParserLocation) = Word(Leaf(loc))
-  def emptyList(n : Int) : List[AndOrTree] = (1 to n).map(i => empty).toList
+  def empty : Word = Word(Leaf(NoParserLocation))
+  def emptyList(n : Int)() : List[Word] = (1 to n).map(i => empty).toList
 
 }
 
+// The whole tree
 abstract class AndOrTree
 
-case class And(elems : List[Or], leaf : Leaf) extends AndOrTree
-case class Or(elems : List[And], leaf : Leaf) extends AndOrTree
+// Super class for all branches
+abstract class AndOrBranch extends AndOrTree {
+
+  // A method for inserting a branch in front of all other branches
+  def insert(e : AndOrTree) : AndOrBranch
+
+  // A method for returning the first branch
+  def head : Option[AndOrTree]
+
+  // A method for dropping the first branch
+  def drop : AndOrBranch
+}
+
+// The And class, used for elements separated by a ~
+case class And(elems : List[AndOrTree], leaf : Leaf) extends AndOrBranch {
+  override def insert(e : AndOrTree) : AndOrBranch = And(e::elems, leaf)
+  override def head : Option[AndOrTree] = elems.headOption
+  override def drop : AndOrBranch = And(elems.drop(1), leaf)
+}
+
+// The Or class, used for elements separated by a |
+case class Or(elems : List[AndOrTree], leaf : Leaf) extends AndOrBranch {
+  override def insert(e : AndOrTree) : AndOrBranch = And(e::elems, leaf)
+  override def head : Option[AndOrTree] = elems.headOption
+  override def drop : AndOrBranch = Or(elems.drop(1), leaf)
+}
+
+case class Word(leaf : Leaf) extends AndOrTree
 
 // The data class for the Leaf. For now it just contains the position
 case class Leaf(loc : ParserLocation)
