@@ -154,6 +154,10 @@ trait DebugableParsers {
         // Get level
         var level = getLevel(location)
 
+        Builder.print
+        println("")
+        println("")
+
         // Call the dispatcher with name and level
         dispatch(name, level)
 
@@ -161,9 +165,6 @@ trait DebugableParsers {
         println("Level:\t" + getLevel(location))
         println("")
 
-        Builder.print
-        println("")
-        println("")
 
         // Simple check to see if we want to do an init message
         // Controller.initMsg;

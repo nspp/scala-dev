@@ -89,7 +89,7 @@ case class AndOrZipper(tree: AndOrTree, breadCrumbs: List[AndOrFocus]) {
   def atEnd : Boolean = z match {
     case AndOrZipper(And(Nil, l), fs)                   => true
     case AndOrZipper(Or(Nil, l), fs)                    => true
-    case AndOrZipper(Word(_), fs)                       => true
+    //case AndOrZipper(Word(_), fs)                       => true
     case otherwise                                      => false
   }
 
