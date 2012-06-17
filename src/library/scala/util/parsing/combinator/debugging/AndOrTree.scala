@@ -70,7 +70,7 @@ case class And(elems : List[AndOrTree], leaf : Leaf) extends AndOrBranch {
 
   // Pretty Print for debugging use
   def print(indent : String) : String = {
-    var s : String = indent + "And\n"
+    var s : String = indent + "And: " + leaf.name + "\n"
     elems.foreach{e => s = s + e.print(indent + "  ") + "\n"}
     s
   }
@@ -84,7 +84,7 @@ case class Or(elems : List[AndOrTree], leaf : Leaf) extends AndOrBranch {
 
   // Pretty Print for debugging use
   def print(indent : String) : String = {
-    var s : String = indent + "Or\n"
+    var s : String = indent + "Or: " + leaf.name + "\n"
     elems.foreach{ e => (s = s + e.print(indent + "  ") + "\n") }
     s
   }
@@ -92,7 +92,7 @@ case class Or(elems : List[AndOrTree], leaf : Leaf) extends AndOrBranch {
 
 case class Word(leaf : Leaf) extends AndOrTree {
   // Pretty Print for debugging use
-  def print(indent : String) : String = indent + "Word(" + leaf + ")"
+  def print(indent : String) : String = indent + "Word: "  + leaf
 }
 
 // The data class for the Leaf. For now it just contains the position

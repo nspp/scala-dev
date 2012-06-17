@@ -108,6 +108,6 @@ case class AndOrZipper(tree: AndOrTree, breadCrumbs: List[AndOrFocus]) {
     case otherwise                                      => false
   }
 
-  override def toString : String = z.changeLeaf({case Leaf(pos, name) => Leaf(pos, "> " + name + " <")}).topMost.tree.toString
+  override def toString : String = z.changeLeaf({case Leaf(pos, name) => Leaf(pos, name + " <<")}).topMost.tree.toString
 
 }
