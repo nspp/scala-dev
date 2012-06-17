@@ -29,7 +29,7 @@ case class AndOrZipper(tree: AndOrTree, breadCrumbs: List[AndOrFocus]) {
     case AndOrZipper( Word(_), _)                       => None
   }
 
-  def down : Option[AndOrZipper] = zOrmatch {
+  def down : Option[AndOrZipper] = z match {
     case AndOrZipper( And(e::es, l), fs)                => Some( AndOrZipper( e, Down(And(es, l))::fs) )
     case AndOrZipper( Or(e::es, l), fs)                 => Some( AndOrZipper( e, Down(Or(es, l))::fs) )
     case AndOrZipper( And(Nil, _), _)                   => None
@@ -50,6 +50,11 @@ case class AndOrZipper(tree: AndOrTree, breadCrumbs: List[AndOrFocus]) {
     case AndOrZipper( e:AndOrBranch, Right(p) :: fs)    => AndOrZipper( e.insert(p), fs).up
     case AndOrZipper( Word(_), _)                       => None
     case AndOrZipper( _, Nil)                           => None
+  }
+
+  def safeMove(move : AndOrZipper => Option[AndOrZipper]) : AndOrZipper = move(z) match {
+    case None                                           => z
+    case z_new @ Some(_)                                => z_new.get
   }
 
   // Go as much left as possible
@@ -73,10 +78,11 @@ case class AndOrZipper(tree: AndOrTree, breadCrumbs: List[AndOrFocus]) {
   }
 
   // Returns the next head, even if we need to go up to get it. If there aren't any left we throw an error
-  def next : AndOrZipper = ((z.atEnd && !z.isRoot), z.up) match {
-    case (true, None)                                   => sys.error("There are no more elements to fill")
-    case (true, zup)                                    => zup.get.next
-    case (false, _)                                     => z
+  def next : AndOrZipper = (z.atEnd, z.isRoot, z.up) match {
+    case (true, false, None)                            => sys.error("There are no more elements to fill")
+    case (true, true, zup)                              => println("Next: at end and is root"); z
+    case (true, false, zup)                             => println("Next: at end but isn't root"); zup.get.next
+    case (false, _, _)                                  => println("Not at end"); z.right.get
   }
 
   // Updates the information about the current active node
@@ -97,8 +103,8 @@ case class AndOrZipper(tree: AndOrTree, breadCrumbs: List[AndOrFocus]) {
 
   // Checks if we are at the end of a branch
   def atEnd : Boolean = z.tree match {
-    case And(Nil, l)                                    => true
-    case Or(Nil, l)                                     => true
+    case And(e::Nil, l)                                 => true
+    case Or(e::Nil, l)                                  => true
     case Word(_)                                        => true
     case otherwise                                      => false
   }
@@ -108,6 +114,6 @@ case class AndOrZipper(tree: AndOrTree, breadCrumbs: List[AndOrFocus]) {
     case otherwise                                      => false
   }
 
-  override def toString : String = z.changeLeaf({case Leaf(pos, name) => Leaf(pos, name + " <<")}).topMost.tree.toString
+  override def toString : String = z.safeMove(_.down).changeLeaf({case Leaf(pos, name) => Leaf(pos, name + "\t <<")}).topMost.tree.toString
 
 }

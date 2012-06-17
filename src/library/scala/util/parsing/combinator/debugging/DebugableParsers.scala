@@ -58,7 +58,7 @@ object Builder {
     // Construct new Item
     var item = Word(Leaf(loc, name))
     // Move to next position and Add word to zipper
-    z = z.next.replaceHead(item).get
+    z = z.replaceHead(item).get.next
 
     Builder.print
     println("")
@@ -71,7 +71,7 @@ object Builder {
     // Construct new item
     var item = Or( AndOrTree.emptyList(k), Leaf(loc, name))
     // Now replace head with new item and enter
-    z = z.next.replaceHead(item).get.down.get
+    z = z.replaceHead(item).get.down.get
 
     Builder.print
     println("")
@@ -84,7 +84,7 @@ object Builder {
     // Construct new item
     var item = And( AndOrTree.emptyList(k), Leaf(loc, name))
     // Now replace head with new item and enter
-    z = z.next.replaceHead(item).get.down.get
+    z = z.replaceHead(item).get.down.get
 
     Builder.print
     println("")
