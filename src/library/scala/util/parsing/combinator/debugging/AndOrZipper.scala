@@ -29,7 +29,7 @@ case class AndOrZipper(tree: AndOrTree, breadCrumbs: List[AndOrFocus]) {
     case AndOrZipper( Word(_), _)                       => None
   }
 
-  def down : Option[AndOrZipper] = z match {
+  def down : Option[AndOrZipper] = zOrmatch {
     case AndOrZipper( And(e::es, l), fs)                => Some( AndOrZipper( e, Down(And(es, l))::fs) )
     case AndOrZipper( Or(e::es, l), fs)                 => Some( AndOrZipper( e, Down(Or(es, l))::fs) )
     case AndOrZipper( And(Nil, _), _)                   => None

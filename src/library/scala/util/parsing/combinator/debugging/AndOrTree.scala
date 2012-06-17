@@ -78,7 +78,7 @@ case class And(elems : List[AndOrTree], leaf : Leaf) extends AndOrBranch {
 
 // The Or class, used for elements separated by a |
 case class Or(elems : List[AndOrTree], leaf : Leaf) extends AndOrBranch {
-  override def insert(e : AndOrTree) : AndOrBranch = And(e::elems, leaf)
+  override def insert(e : AndOrTree) : AndOrBranch = Or(e::elems, leaf)
   override def head : Option[AndOrTree] = elems.headOption
   override def drop : AndOrBranch = Or(elems.drop(1), leaf)
 
