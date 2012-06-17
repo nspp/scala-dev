@@ -37,13 +37,17 @@ package debugging
 
 object AndOrTree {
   
-  def empty : Word = Word(Leaf(NoParserLocation))
+  def empty : Word = Word(Leaf(NoParserLocation,""))
   def emptyList(n : Int)() : List[Word] = (1 to n).map(i => empty).toList
 
 }
 
 // The whole tree
-abstract class AndOrTree
+abstract class AndOrTree {
+  override def toString : String = print("")
+  // Pretty Print for debugging use
+  def print(indent : String) : String
+}
 
 // Super class for all branches
 abstract class AndOrBranch extends AndOrTree {
@@ -63,6 +67,13 @@ case class And(elems : List[AndOrTree], leaf : Leaf) extends AndOrBranch {
   override def insert(e : AndOrTree) : AndOrBranch = And(e::elems, leaf)
   override def head : Option[AndOrTree] = elems.headOption
   override def drop : AndOrBranch = And(elems.drop(1), leaf)
+
+  // Pretty Print for debugging use
+  def print(indent : String) : String = {
+    var s : String = indent + "And\n"
+    elems.foreach{e => s = s + e.print(indent + "  ") + "\n"}
+    s
+  }
 }
 
 // The Or class, used for elements separated by a |
@@ -70,9 +81,21 @@ case class Or(elems : List[AndOrTree], leaf : Leaf) extends AndOrBranch {
   override def insert(e : AndOrTree) : AndOrBranch = And(e::elems, leaf)
   override def head : Option[AndOrTree] = elems.headOption
   override def drop : AndOrBranch = Or(elems.drop(1), leaf)
+
+  // Pretty Print for debugging use
+  def print(indent : String) : String = {
+    var s : String = indent + "Or\n"
+    elems.foreach{ e => (s = s + e.print(indent + "  ") + "\n") }
+    s
+  }
 }
 
-case class Word(leaf : Leaf) extends AndOrTree
+case class Word(leaf : Leaf) extends AndOrTree {
+  // Pretty Print for debugging use
+  def print(indent : String) : String = indent + "Word(" + leaf + ")"
+}
 
 // The data class for the Leaf. For now it just contains the position
-case class Leaf(loc : ParserLocation)
+case class Leaf(loc : ParserLocation, name : String) {
+  override def toString : String = name
+}

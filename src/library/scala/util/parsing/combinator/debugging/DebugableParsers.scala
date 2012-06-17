@@ -54,38 +54,38 @@ object Builder {
   var initialized : Boolean = false;
 
   // Add a word such as "blup" to the parse tree
-  def word(loc : ParserLocation) : Unit = {
+  def word(loc : ParserLocation, name : String) : Unit = {
     // Construct new Item
     println("Constructing a Word")
-    var item = Word(Leaf(loc))
+    var item = Word(Leaf(loc, name))
     println(item)
     println("")
     // Move to next position and Add word to zipper
-    z = z.nextHead.replaceHead(item).get
+    z = z.next.replaceHead(item).get
   }
 
   // Replace first element of list with Or( Word(), Word(), ... , Word() );
   // k is the number of Words
-  def or(k: Int, loc: ParserLocation) : Unit = {
+  def or(k: Int, loc: ParserLocation, name : String) : Unit = {
     println("Constructing an Or Tree")
     // Construct new item
-    var item = Or( AndOrTree.emptyList(k), Leaf(loc))
+    var item = Or( AndOrTree.emptyList(k), Leaf(loc, name))
     println(item)
     println("")
     // Now replace head with new item and enter
-    z = z.nextHead.replaceHead(item).get.down.get
+    z = z.next.replaceHead(item).get.down.get
   }
 
   // Replace first element of list with And( Word(), Word(), ... , Word() );
   // k is th enumber of Words
-  def and(k: Int, loc: ParserLocation) : Unit = {
+  def and(k: Int, loc: ParserLocation, name : String) : Unit = {
     println("Constructing an And Tree")
     // Construct new item
-    var item = And( AndOrTree.emptyList(k), Leaf(loc))
+    var item = And( AndOrTree.emptyList(k), Leaf(loc, name))
     println(item)
     println("")
     // Now replace head with new item and enter
-    z = z.nextHead.replaceHead(item).get.down.get
+    z = z.next.replaceHead(item).get.down.get
   }
 
   // Mostly for debugging
@@ -95,48 +95,50 @@ object Builder {
 
 object Dispatcher {
 
-    var go = default(_,_,_)
+  var go = default(_,_,_)
+  //val andNames : List[String] = List("~","phrase")
 
-    // If we recieve a
-    // ~ Then change dispatcher to And
-    // | Then change dispatcher to Or
-    //   else create a Word from the current location and continue with default dispatch
-    def default(name : String, lvl : Int, loc : ParserLocation) : Unit = (name, lvl) match {
-      case ("|",n)          => set(2,n, "or")
-      case ("~",n)          => set(2,n, "and")
-      case otherwise        => Builder.word(loc)
-    }
+  // If we recieve a
+  // ~ Then change dispatcher to And
+  // | Then change dispatcher to Or
+  //   else create a Word from the current location and continue with default dispatch
+  def default(name : String, lvl : Int, loc : ParserLocation) : Unit = (name, lvl) match {
+    case ("|",n)          => set(2, n, "or")
+    case ("~",n)          => set(2, n, "and")
+    case ("phrase",n)     => Builder.and(1, loc, name)
+    case otherwise        => Builder.word(loc, name)
+  }
 
-    // If we recieve a
-    // | and the level is the same, then add one to the count and continue
-    // | and the level is different, then build the final 'or', and start a new count
-    // ~ then build the final 'or' and start a new count for 'and'
-    //   else return to the default dispatch
-    def or(k : Int, initlvl : Int)(name : String, curlvl : Int, loc : ParserLocation) : Unit = (name, curlvl) match {
-      case ("|",n) if (n == initlvl)    => set(k + 1,n, "or")
-      case ("|",n)                      => Builder.or(k, loc); set(2, n, "or")
-      case ("~",n)                      => Builder.or(k, loc); set(2,n, "and")
-      case otherwise                    => Builder.or(k, loc); set(0,0,"default"); Builder.word(loc)
-    }
+  // If we recieve a
+  // | and the level is the same, then add one to the count and continue
+  // | and the level is different, then build the final 'or', and start a new count
+  // ~ then build the final 'or' and start a new count for 'and'
+  //   else return to the default dispatch
+  def or(k : Int, initlvl : Int)(name : String, curlvl : Int, loc : ParserLocation) : Unit = (name, curlvl) match {
+    case ("|",n) if (n == initlvl)    => set(k + 1,n, "or")
+    case ("|",n)                      => Builder.or(k, loc, name); set(2, n, "or")
+    case ("~",n)                      => Builder.or(k, loc, name); set(2,n, "and")
+    case otherwise                    => Builder.or(k, loc, name); set(0,0,"default"); Builder.word(loc, name)
+  }
 
-    // If we recieve a
-    // ~ and the level is the same, then add one to the count and continue
-    // ~ and the level is different, then build the final 'and' and start a new count
-    // | then build the final and and start a new count for 'or'
-    //   else return to the default dispatch
-    def and(k : Int, initlvl : Int)(name : String, curlvl : Int, loc : ParserLocation) : Unit = (name, curlvl) match {
-      case ("~",n) if (n == initlvl)    => set(k + 1,n, "and")
-      case ("|",n)                      => Builder.and(k, loc); set(2,n, "or")
-      case ("~",n)                      => Builder.and(k, loc); set(2,n, "and")
-      case otherwise                    => Builder.and(k, loc); set(0,0,"default"); Builder.word(loc)
-    }
+  // If we recieve a
+  // ~ and the level is the same, then add one to the count and continue
+  // ~ and the level is different, then build the final 'and' and start a new count
+  // | then build the final and and start a new count for 'or'
+  //   else return to the default dispatch
+  def and(k : Int, initlvl : Int)(name : String, curlvl : Int, loc : ParserLocation) : Unit = (name, curlvl) match {
+    case ("~",n) if (n == initlvl)    => set(k + 1,n, "and")
+    case ("|",n)                      => Builder.and(k, loc, name); set(2,n, "or")
+    case ("~",n)                      => Builder.and(k, loc, name); set(2,n, "and")
+    case otherwise                    => Builder.and(k, loc, name); set(0,0,"default"); Builder.word(loc, name)
+  }
 
-    // Assigns the next dispatch function to the dispatch variable with appropriate parameters
-    def set(n : Int, lvl : Int, which : String) : Unit = which match {
-      case "or"         => go = or(n,lvl)(_,_,_)
-      case "and"        => go = and(n,lvl)(_,_,_)
-      case otherwise    => go = default(_,_,_)
-    }
+  // Assigns the next dispatch function to the dispatch variable with appropriate parameters
+  def set(n : Int, lvl : Int, which : String) : Unit = which match {
+    case "or"         => go = or(n,lvl)(_,_,_)
+    case "and"        => go = and(n,lvl)(_,_,_)
+    case otherwise    => go = default(_,_,_)
+  }
 
 }
 
