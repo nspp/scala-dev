@@ -49,7 +49,7 @@ trait DebugableParsers {
         // for now just print statements
 
         println("Try to consume the token")
-        println("[Name] " + name)
+        println("[Name] '" + name + "' ||> " + location.rawLocation)
         println("[Location] " + location.line + ":" + location.offset)
         println("[File] " + location.fileName)
         println("[Method] " + printMethod(location))
@@ -66,7 +66,7 @@ trait DebugableParsers {
         // main access point for instrumenting the compiler
         // for now just print statements
         println("Result of consuming the token")
-        println("[Name] " + name)
+        println("[Name] '" + name + "' real location " + location.rawLocation)
         println("[Location] " + location.line + ":" + location.offset)
         res match {
           case Success(res0, next) =>

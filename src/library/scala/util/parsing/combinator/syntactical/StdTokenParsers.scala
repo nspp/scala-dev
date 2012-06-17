@@ -33,7 +33,7 @@ trait StdTokenParsers extends TokenParsers {
    */
 //  implicit def keyword(chars: String): Parser[String] = accept(Keyword(chars)) ^^ (_.chars)
   implicit def keyword(chars: String)(implicit loc: debugging.ParserLocation): Parser[String] =
-    keywordCache.getOrElseUpdate(chars, accept(Keyword(chars))(loc) ^^ (_.chars))
+    keywordCache.getOrElseUpdate(chars, accept(Keyword(chars))(loc) ^^ (_.chars, loc))
 
   /** A parser which matches a numeric literal */
   def numericLit: Parser[String] =

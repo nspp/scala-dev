@@ -260,10 +260,10 @@ trait Parsers extends AnyRef with debugging.DebugableParsers {
     }
 
     def flatMap[U](f: T => Parser[U])(implicit loc: ParserLocation): Parser[U]
-      = Parser( {in => this(in) flatMapWithNext(f)}, loc)
+      = Parser( {in => this(in) flatMapWithNext(f)}, loc).named("parser-flatmap-" + name)
 
     def map[U](f: T => U)(implicit loc: ParserLocation): Parser[U] //= flatMap{x => success(f(x))}
-      = Parser( {in => this(in) map(f)}, loc)
+      = Parser( {in => this(in) map(f)}, loc).named("parser-map-" + name)
 
     def filter(p: T => Boolean): Parser[T]
       = withFilter(p)
@@ -397,10 +397,12 @@ trait Parsers extends AnyRef with debugging.DebugableParsers {
      * @return a parser that has the same behaviour as the current parser, but whose result is
      *         transformed by `f`.
      */
-    def ^^ [U](f: T => U): Parser[U] = {
-      implicit val noloc = NoParserLocation
-      map(f).named(toString+"^^")
+    def ^^ [U](f: T => U, loc0: ParserLocation): Parser[U] = {
+      //implicit val noloc = NoParserLocation
+      map(f)(loc0).named(toString+"^^")
     }
+    
+    def ^^[U](f: T => U): Parser[U] = ^^(f, NoParserLocation)
 
     /** A parser combinator that changes a successful result into the specified value.
      *
@@ -410,7 +412,8 @@ trait Parsers extends AnyRef with debugging.DebugableParsers {
      * @return a parser that has the same behaviour as the current parser, but whose successful result is `v`
      */
     @migration("The call-by-name argument is evaluated at most once per constructed Parser object, instead of on every need that arises during parsing.", "2.9.0")
-    def ^^^ [U](v: => U): Parser[U] =  new Parser[U] with NoLocationParser[U] {
+    def ^^^ [U](v: => U)(implicit loc0: ParserLocation): Parser[U] =  new Parser[U] {
+      val location: ParserLocation = loc0
       lazy val v0 = v // lazy argument
       def consume(in: Input) = Parser.this(in) map (x => v0)
     }.named(toString+"^^^")
@@ -584,7 +587,7 @@ trait Parsers extends AnyRef with debugging.DebugableParsers {
    *  @param  p      A predicate that determines which elements match.
    *  @return
    */
-  def elem(kind: String, p: Elem => Boolean) = acceptIf(p)(inEl => kind+" expected")(NoParserLocation)
+  def elem(kind: String, p: Elem => Boolean) = acceptIf(p)(inEl => kind+" expected")(None)(NoParserLocation)
 
   /** A parser that matches only the given element `e`.
    *
@@ -605,7 +608,7 @@ trait Parsers extends AnyRef with debugging.DebugableParsers {
    *  @return a `tParser` that succeeds if `e` is the next available input.
    */
 
-  implicit def accept(e: Elem)(implicit loc: ParserLocation): Parser[Elem] = acceptIf(_ == e)("`"+e+"' expected but " + _ + " found")(loc)
+  implicit def accept(e: Elem)(implicit loc: ParserLocation): Parser[Elem] = acceptIf(_ == e)("`"+e+"' expected but " + _ + " found")(Some(e))(loc)
 
   /** A parser that matches only the given list of element `es`.
    *
@@ -639,11 +642,11 @@ trait Parsers extends AnyRef with debugging.DebugableParsers {
    *  @param  p      A predicate that determines which elements match.
    *  @return        A parser for elements satisfying p(e).
    */
-  def acceptIf(p: Elem => Boolean)(err: Elem => String)(loc: ParserLocation): Parser[Elem] = Parser ({ in =>
+  def acceptIf(p: Elem => Boolean)(err: Elem => String)(stringRep: Option[Elem])(loc: ParserLocation): Parser[Elem] = Parser ({ in =>
     if (in.atEnd) Failure("end of input", in)
     else if (p(in.first)) Success(in.first, in.rest)
     else Failure(err(in.first), in)
-  }, loc)
+  }, loc).named(stringRep match { case Some(elem) => elem.toString; case None => "<none>" })
 
   /** The parser that matches an element in the domain of the partial function `f`.
    *
@@ -945,7 +948,7 @@ trait Parsers extends AnyRef with debugging.DebugableParsers {
     }
     
     val location: ParserLocation = loc
-  }
+  }.named("phrase") // should be substituted by the 'real' name of the parser location
 
   /** Given a concatenation with a repetition (list), move the concatenated element into the list */
   def mkList[T] = (_: ~[T, List[T]]) match { case x ~ xs => x :: xs }
