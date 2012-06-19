@@ -80,9 +80,9 @@ case class AndOrZipper(tree: AndOrTree, breadCrumbs: List[AndOrFocus]) {
   // Returns the next head, even if we need to go up to get it. If there aren't any left we throw an error
   def next : AndOrZipper = (z.atEnd, z.isRoot, z.up) match {
     case (true, false, None)                            => sys.error("There are no more elements to fill")
-    case (true, true, zup)                              => println("Next: at end and is root"); z
-    case (true, false, zup)                             => println("Next: at end but isn't root"); zup.get.next
-    case (false, _, _)                                  => println("Not at end"); z.right.get
+    case (true, true, zup)                              => z
+    case (true, false, zup)                             => zup.get.next
+    case (false, _, _)                                  => z.right.get
   }
 
   // Updates the information about the current active node

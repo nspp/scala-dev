@@ -106,10 +106,11 @@ object Dispatcher {
   // | Then change dispatcher to Or
   //   else create a Word from the current location and continue with default dispatch
   def default(name : String, lvl : Int, loc : ParserLocation) : Unit = (name, lvl) match {
-    case ("|",n)          => set(2, n, "or")
-    case ("~",n)          => set(2, n, "and")
-    case ("phrase",n)     => Builder.and(1, loc, "phrase")
-    case otherwise        => Builder.word(loc, name)
+    case ("|",n)                        => set(2, n, "or")
+    case ("~",n)                        => set(2, n, "and")
+    case ("phrase",n)                   => Builder.and(1, loc, "phrase")
+    case (s, n) if(ignore(s))           => println("Ignoring " + s)
+    case otherwise                      => Builder.word(loc, name)
   }
 
   // If we recieve a
@@ -118,10 +119,10 @@ object Dispatcher {
   // ~ then build the final 'or' and start a new count for 'and'
   //   else return to the default dispatch
   def or(k : Int, initlvl : Int)(name : String, curlvl : Int, loc : ParserLocation) : Unit = (name, curlvl) match {
-    case ("|",n) if (n == initlvl)    => set(k + 1,n, "or")
-    case ("|",n)                      => Builder.or(k, loc, "|"); set(2, n, "or")
-    case ("~",n)                      => Builder.or(k, loc, "|"); set(2,n, "and")
-    case otherwise                    => Builder.or(k, loc, "|"); set(0,0,"default"); Builder.word(loc, name)
+    case ("|",n) if (n == initlvl)      => set(k + 1,n, "or")
+    case ("|",n)                        => Builder.or(k, loc, "|"); set(2, n, "or")
+    case ("~",n)                        => Builder.or(k, loc, "|"); set(2,n, "and")
+    case otherwise                      => Builder.or(k, loc, "|"); set(0,0,"default"); Builder.word(loc, name)
   }
 
   // If we recieve a
@@ -130,10 +131,10 @@ object Dispatcher {
   // | then build the final and and start a new count for 'or'
   //   else return to the default dispatch
   def and(k : Int, initlvl : Int)(name : String, curlvl : Int, loc : ParserLocation) : Unit = (name, curlvl) match {
-    case ("~",n) if (n == initlvl)    => set(k + 1,n, "and")
-    case ("|",n)                      => Builder.and(k, loc, "~"); set(2,n, "or")
-    case ("~",n)                      => Builder.and(k, loc, "~"); set(2,n, "and")
-    case otherwise                    => Builder.and(k, loc, "~"); set(0,0,"default"); Builder.word(loc, name)
+    case ("~",n) if (n == initlvl)      => set(k + 1,n, "and")
+    case ("|",n)                        => Builder.and(k, loc, "~"); set(2,n, "or")
+    case ("~",n)                        => Builder.and(k, loc, "~"); set(2,n, "and")
+    case otherwise                      => Builder.and(k, loc, "~"); set(0,0,"default"); Builder.word(loc, name)
   }
 
   // Assigns the next dispatch function to the dispatch variable with appropriate parameters
@@ -141,6 +142,12 @@ object Dispatcher {
     case "or"         => go = or(n,lvl)(_,_,_)
     case "and"        => go = and(n,lvl)(_,_,_)
     case otherwise    => go = default(_,_,_)
+  }
+
+  def ignore(s : String) : Boolean = s match {
+    case s if(s.indexOf("Parser") >= 0)         => true
+    case s if(s.indexOf("parser-map-") >= 0)    => true
+    case otherwise                              => false
   }
 
 }
@@ -186,7 +193,7 @@ trait DebugableParsers {
         // Call the dispatcher with name and level
         Dispatcher.go(name, level, location)
 
-        println("name:\t" + name)
+        println("[Name] '" + name)
         println("Level:\t" + getLevel(location))
         println("")
 
@@ -207,7 +214,7 @@ trait DebugableParsers {
         // println("Try to consume token")
         // println("[Name] " + name)
         // println("[Location] " + location.line + ":" + location.offset)
-        //println("[File] " + location.fileName)
+        // println("[File] " + location.fileName)
         // println("[Method] " + printMethod(location) + "\n")
         // println("")
       }
