@@ -122,6 +122,7 @@ object Dispatcher {
     case ("|",n) if (n == initlvl)      => set(k + 1,n, "or")
     case ("|",n)                        => Builder.or(k, loc, "|"); set(2, n, "or")
     case ("~",n)                        => Builder.or(k, loc, "|"); set(2,n, "and")
+    case (s, n) if (ignore(s))          => Builder.or(k, loc, "|"); set(0,0,"default");
     case otherwise                      => Builder.or(k, loc, "|"); set(0,0,"default"); Builder.word(loc, name)
   }
 
@@ -134,6 +135,7 @@ object Dispatcher {
     case ("~",n) if (n == initlvl)      => set(k + 1,n, "and")
     case ("|",n)                        => Builder.and(k, loc, "~"); set(2,n, "or")
     case ("~",n)                        => Builder.and(k, loc, "~"); set(2,n, "and")
+    case (s, n) if (ignore(s))          => Builder.and(k, loc, "~"); set(0,0,"default");
     case otherwise                      => Builder.and(k, loc, "~"); set(0,0,"default"); Builder.word(loc, name)
   }
 
@@ -147,7 +149,7 @@ object Dispatcher {
   def ignore(s : String) : Boolean = s match {
     case s if(s.indexOf("Parser") >= 0)         => true
     case s if(s.indexOf("parser-map-") >= 0)    => true
-    case otherwise                              => false
+    case otherwise                              => println(">> " + s + " <<"); false
   }
 
 }
@@ -193,7 +195,7 @@ trait DebugableParsers {
         // Call the dispatcher with name and level
         Dispatcher.go(name, level, location)
 
-        println("[Name] '" + name)
+        println("[Name] " + name)
         println("Level:\t" + getLevel(location))
         println("")
 
