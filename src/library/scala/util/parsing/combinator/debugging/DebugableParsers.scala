@@ -55,10 +55,21 @@ object Builder {
 
   // Add a word such as "blup" to the parse tree
   def word(loc : ParserLocation, name : String) : Unit = {
+    // If item before exists and we are in an And, set the status to parsed
+    z.left.map(z => 
+      if z.isAnd {
+        z.replaceHead(e => 
+          e.changeLeaf({ case Leaf(loc, name, _) => 
+            Leaf(loc, name, Parsed)
+          })
+        )
+      }
+    )
+
     // Construct new Item
-    var item = Word(Leaf(loc, name))
+    var item = Word(Leaf(loc, name, Unparsed))
     // Move to next position and Add word to zipper
-    z = z.replaceHead(item).get.next
+    z = z.replaceHeadWith(item).get.next
 
     Builder.print
     println("")
@@ -69,9 +80,9 @@ object Builder {
   // k is the number of Words
   def or(k: Int, loc: ParserLocation, name : String) : Unit = {
     // Construct new item
-    var item = Or( AndOrTree.emptyList(k), Leaf(loc, name))
+    var item = Or( AndOrTree.emptyList(k), Leaf(loc, name, Unparsed))
     // Now replace head with new item and enter
-    z = z.replaceHead(item).get.down.get
+    z = z.replaceHeadWith(item).get.down.get
 
     Builder.print
     println("")
@@ -82,13 +93,21 @@ object Builder {
   // k is th enumber of Words
   def and(k: Int, loc: ParserLocation, name : String) : Unit = {
     // Construct new item
-    var item = And( AndOrTree.emptyList(k), Leaf(loc, name))
+    var item = And( AndOrTree.emptyList(k), Leaf(loc, name, Unparsed))
     // Now replace head with new item and enter
-    z = z.replaceHead(item).get.down.get
+    z = z.replaceHeadWith(item).get.down.get
 
     Builder.print
     println("")
     println("")
+  }
+
+  // If an element of an And tree failed, we mark it as failed and go up
+  def exit(loc: ParserLocation) : Unit = {
+    // Mark current position as failed and go up
+    z.down.get
+     .changeLeaf({ case Leaf(loc, name, state) => Leaf(loc, name, Failed)})
+     .up.up
   }
 
   // Mostly for debugging
@@ -109,6 +128,7 @@ object Dispatcher {
     case ("|",n)                        => set(2, n, "or")
     case ("~",n)                        => set(2, n, "and")
     case ("phrase",n)                   => Builder.and(1, loc, "phrase")
+    case ("failed",_)                   => Builder.exit(loc)
     case (s, n) if(ignore(s))           => println("Ignoring " + s)
     case otherwise                      => Builder.word(loc, name)
   }
@@ -122,6 +142,7 @@ object Dispatcher {
     case ("|",n) if (n == initlvl)      => set(k + 1,n, "or")
     case ("|",n)                        => Builder.or(k, loc, "|"); set(2, n, "or")
     case ("~",n)                        => Builder.or(k, loc, "|"); set(2,n, "and")
+    case ("failed",_)                   => {} // What to do here?
     case (s, n) if (ignore(s))          => Builder.or(k, loc, "|"); set(0,0,"default");
     case otherwise                      => Builder.or(k, loc, "|"); set(0,0,"default"); Builder.word(loc, name)
   }
@@ -135,6 +156,7 @@ object Dispatcher {
     case ("~",n) if (n == initlvl)      => set(k + 1,n, "and")
     case ("|",n)                        => Builder.and(k, loc, "~"); set(2,n, "or")
     case ("~",n)                        => Builder.and(k, loc, "~"); set(2,n, "and")
+    case ("failed",_)                   => {} // What to do here?
     case (s, n) if (ignore(s))          => Builder.and(k, loc, "~"); set(0,0,"default");
     case otherwise                      => Builder.and(k, loc, "~"); set(0,0,"default"); Builder.word(loc, name)
   }
@@ -199,20 +221,6 @@ trait DebugableParsers {
         println("Level:\t" + getLevel(location))
         println("")
 
-
-        // Simple check to see if we want to do an init message
-        // Controller.initMsg;
-
-        // Leave control flow to the controller
-        // Controller.step(name, location)
-
-        // let the builder build a parseTree
-        // Builder.stepEnter(name, location)
-
-        // println(in.pos.longString)
-        // main access point for instrumenting the compiler
-        // for now just print statements
-
         // println("Try to consume token")
         // println("[Name] " + name)
         // println("[Location] " + location.line + ":" + location.offset)
@@ -236,8 +244,11 @@ trait DebugableParsers {
         res match {
           case Success(res0, next) =>
             println("Matched: " + res)
-          case NoSuccess(msg, next) =>
+          case NoSuccess(msg, next) => {
+            var level = getLevel(location)
+            Dispatcher.go("failed", level, location)
             println("Failed: " + msg)
+          }
         }
         println("")
       }

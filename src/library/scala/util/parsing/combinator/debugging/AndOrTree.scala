@@ -42,6 +42,12 @@ object AndOrTree {
 
 }
 
+abstract class ParseState
+
+case object Parsed extends ParseState
+case object Failed extends ParseState
+case object Unparsed extends ParseState
+
 // The whole tree
 abstract class AndOrTree {
   override def toString : String = print("")
@@ -95,7 +101,7 @@ case class Word(leaf : Leaf) extends AndOrTree {
   def print(indent : String) : String = indent + "Word: "  + leaf
 }
 
-// The data class for the Leaf. For now it just contains the position
-case class Leaf(loc : ParserLocation, name : String) {
+// The data class for the Leaf.
+case class Leaf(loc : ParserLocation, name : String, state : ParseState) {
   override def toString : String = name
 }

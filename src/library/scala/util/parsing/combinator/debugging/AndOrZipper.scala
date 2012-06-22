@@ -69,13 +69,15 @@ case class AndOrZipper(tree: AndOrTree, breadCrumbs: List[AndOrFocus]) {
     case Some(z_new)                                    => z_new.topMost
   }
 
-  // Replaces the head of the list of trees in the current element
-  def replaceHead(elem : AndOrTree) : Option[AndOrZipper] = z match {
-    case AndOrZipper(And(e::es, l), fs)                 => Some( AndOrZipper(And(elem::es, l), fs) )
-    case AndOrZipper(Or(e::es, l), fs)                  => Some( AndOrZipper(Or(elem::es, l), fs) )
-    case AndOrZipper(Word(_), fs)                       => Some( AndOrZipper(elem, fs) )
+  def replaceHead(f : AndOrTree => AndOrTree) : Option[AndOrZipper] = z match {
+    case AndOrZipper(And(e::es, l), fs)                 => Some( AndOrZipper(And(f(e)::es, l), fs) )
+    case AndOrZipper(Or(e::es, l), fs)                  => Some( AndOrZipper(Or(f(e)::es, l), fs) )
+    case AndOrZipper(w @ Word(_), fs)                   => Some( AndOrZipper(f(w), fs) )
     case otherwise                                      => None
   }
+
+  // Replaces the head of the list of trees in the current element
+  def replaceHeadWith(elem : AndOrTree) : Option[AndOrZipper] = replaceHead(_ => elem)
 
   // Returns the next head, even if we need to go up to get it. If there aren't any left we throw an error
   def next : AndOrZipper = (z.atEnd, z.isRoot, z.up) match {
@@ -101,6 +103,23 @@ case class AndOrZipper(tree: AndOrTree, breadCrumbs: List[AndOrFocus]) {
     case otherwise                                      => false
   }
 
+  // Checks if the current element is an And
+  def isAnd : Boolean = z match {
+    case AndOrZipper( And(_,_), _)                       => true
+    case otherwise                                      => false
+  }
+
+  // Checks if the current element is an Or
+  def isOr : Boolean = z match {
+    case AndOrZipper( Or(_,_), _)                       => true
+    case otherwise                                      => false
+  }
+
+  def isRoot : Boolean = z.tree match {
+    case Word(Leaf(NoParserLocation,"root"))            => true
+    case otherwise                                      => false
+  }
+
   // Checks if we are at the end of a branch
   def atEnd : Boolean = z.tree match {
     case And(e::Nil, l)                                 => true
@@ -109,10 +128,6 @@ case class AndOrZipper(tree: AndOrTree, breadCrumbs: List[AndOrFocus]) {
     case otherwise                                      => false
   }
 
-  def isRoot : Boolean = z.tree match {
-    case Word(Leaf(NoParserLocation,"root"))            => true
-    case otherwise                                      => false
-  }
 
   override def toString : String = z.safeMove(_.down).changeLeaf({case Leaf(pos, name) => Leaf(pos, name + "\t <<")}).topMost.tree.toString
 
