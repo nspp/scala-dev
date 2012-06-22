@@ -4,7 +4,7 @@ package debugging
 object AndOrZipper {
 
   // Creates the root zipper to start out with
-  def root : AndOrZipper = AndOrZipper(Word(Leaf(NoParserLocation,"root")), Nil)
+  def root : AndOrZipper = AndOrZipper(Word(Leaf(NoParserLocation,"root",Unparsed)), Nil)
 
 }
 
@@ -116,7 +116,7 @@ case class AndOrZipper(tree: AndOrTree, breadCrumbs: List[AndOrFocus]) {
   }
 
   def isRoot : Boolean = z.tree match {
-    case Word(Leaf(NoParserLocation,"root"))            => true
+    case Word(Leaf(NoParserLocation,"root",Unparsed))   => true
     case otherwise                                      => false
   }
 
@@ -129,6 +129,10 @@ case class AndOrZipper(tree: AndOrTree, breadCrumbs: List[AndOrFocus]) {
   }
 
 
-  override def toString : String = z.safeMove(_.down).changeLeaf({case Leaf(pos, name) => Leaf(pos, name + "\t <<")}).topMost.tree.toString
+  override def toString : String = {
+    z.safeMove(_.down)
+     .changeLeaf({case Leaf(pos, name,status) => Leaf(pos, name + "\t <<",status)})
+     .topMost.tree.toString
+  }
 
 }

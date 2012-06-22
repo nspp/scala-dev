@@ -37,7 +37,7 @@ package debugging
 
 object AndOrTree {
   
-  def empty : Word = Word(Leaf(NoParserLocation,""))
+  def empty : Word = Word(Leaf(NoParserLocation,"",Unparsed))
   def emptyList(n : Int)() : List[Word] = (1 to n).map(i => empty).toList
 
 }
@@ -103,5 +103,5 @@ case class Word(leaf : Leaf) extends AndOrTree {
 
 // The data class for the Leaf.
 case class Leaf(loc : ParserLocation, name : String, state : ParseState) {
-  override def toString : String = name
+  override def toString : String = name + "(" + state + ")"
 }

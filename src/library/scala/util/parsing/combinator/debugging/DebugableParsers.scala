@@ -55,16 +55,8 @@ object Builder {
 
   // Add a word such as "blup" to the parse tree
   def word(loc : ParserLocation, name : String) : Unit = {
-    // If item before exists and we are in an And, set the status to parsed
-    z.left.map(z => 
-      if z.isAnd {
-        z.replaceHead(e => 
-          e.changeLeaf({ case Leaf(loc, name, _) => 
-            Leaf(loc, name, Parsed)
-          })
-        )
-      }
-    )
+    // Update the status of the item before (if any)
+    z = updateLeftStatus
 
     // Construct new Item
     var item = Word(Leaf(loc, name, Unparsed))
@@ -79,6 +71,8 @@ object Builder {
   // Replace first element of list with Or( Word(), Word(), ... , Word() );
   // k is the number of Words
   def or(k: Int, loc: ParserLocation, name : String) : Unit = {
+    // Update the status of the item before (if any)
+    z = updateLeftStatus
     // Construct new item
     var item = Or( AndOrTree.emptyList(k), Leaf(loc, name, Unparsed))
     // Now replace head with new item and enter
@@ -92,6 +86,8 @@ object Builder {
   // Replace first element of list with And( Word(), Word(), ... , Word() );
   // k is th enumber of Words
   def and(k: Int, loc: ParserLocation, name : String) : Unit = {
+    // Update the status of the item before (if any)
+    z = updateLeftStatus
     // Construct new item
     var item = And( AndOrTree.emptyList(k), Leaf(loc, name, Unparsed))
     // Now replace head with new item and enter
@@ -105,13 +101,26 @@ object Builder {
   // If an element of an And tree failed, we mark it as failed and go up
   def exit(loc: ParserLocation) : Unit = {
     // Mark current position as failed and go up
-    z.down.get
+    z = z.down.get
      .changeLeaf({ case Leaf(loc, name, state) => Leaf(loc, name, Failed)})
-     .up.up
+     .up.get.up.get
   }
 
   // Mostly for debugging
   def print : Unit = println(z.toString)
+
+  // Whenever we parse a new word, we can deduce if the last word was parsed or failed
+  def updateLeftStatus : AndOrZipper = {
+    z.left match {
+      case Some(zipper)                   => zipper match {
+        case zip @ AndOrZipper( And(_,_),_)    => zip.changeLeaf({ case Leaf(l, n, _) => Leaf(l, n, Parsed)}).right.get
+        case zip @ AndOrZipper( Or(_,_),_)     => zip.changeLeaf({ case Leaf(l, n, _) => Leaf(l, n, Failed)}).right.get
+        case zip @ AndOrZipper( Word(_),_)     => sys.error("How can we take the left of a word?")
+      }
+      case None                           => z
+    }
+  }
+
 
 }
 
