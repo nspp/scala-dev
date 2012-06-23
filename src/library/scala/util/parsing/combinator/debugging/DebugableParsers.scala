@@ -72,7 +72,7 @@ object Builder {
   // k is the number of Words
   def or(k: Int, loc: ParserLocation, name : String) : Unit = {
     // Update the status of the item before (if any)
-    z = updateLeftStatus
+    //z = updateLeftStatus
     // Construct new item
     var item = Or( AndOrTree.emptyList(k), Leaf(loc, name, Unparsed))
     // Now replace head with new item and enter
@@ -87,7 +87,7 @@ object Builder {
   // k is th enumber of Words
   def and(k: Int, loc: ParserLocation, name : String) : Unit = {
     // Update the status of the item before (if any)
-    z = updateLeftStatus
+    //z = updateLeftStatus
     // Construct new item
     var item = And( AndOrTree.emptyList(k), Leaf(loc, name, Unparsed))
     // Now replace head with new item and enter
@@ -99,11 +99,17 @@ object Builder {
   }
 
   // If an element of an And tree failed, we mark it as failed and go up
-  def exit(loc: ParserLocation) : Unit = {
+  def exit(loc: ParserLocation, msg : String) : Unit = {
     // Mark current position as failed and go up
-    z = z.down.get
-     .changeLeaf({ case Leaf(loc, name, state) => Leaf(loc, name, Failed)})
-     .up.get.up.get
+    z = z.left.get.down.get
+         .changeLeaf({ case Leaf(loc, name, state) => Leaf(loc, name, Failed(msg))})
+         .up.get.right.get.up.get.next
+
+    println(msg)
+    Builder.print
+    println("")
+    println("")
+
   }
 
   // Mostly for debugging
@@ -114,7 +120,7 @@ object Builder {
     z.left match {
       case Some(zipper)                   => zipper match {
         case zip @ AndOrZipper( And(_,_),_)    => zip.changeLeaf({ case Leaf(l, n, _) => Leaf(l, n, Parsed)}).right.get
-        case zip @ AndOrZipper( Or(_,_),_)     => zip.changeLeaf({ case Leaf(l, n, _) => Leaf(l, n, Failed)}).right.get
+        case zip @ AndOrZipper( Or(_,_),_)     => zip.changeLeaf({ case Leaf(l, n, _) => Leaf(l, n, Failed("TODO: SET REASON"))}).right.get
         case zip @ AndOrZipper( Word(_),_)     => sys.error("How can we take the left of a word?")
       }
       case None                           => z
@@ -126,18 +132,28 @@ object Builder {
 
 object Dispatcher {
 
-  var go = default(_,_,_)
+  var go = default(_)
+  var lvl : Int = 0
+  var loc : ParserLocation = NoParserLocation
+  var msg : String = ""
+
+
+  def assign(newlvl : Int, newloc : ParserLocation, newmsg : String) = {
+    lvl = newlvl
+    loc = newloc
+    if (newmsg != "") msg = newmsg
+  }
   //val andNames : List[String] = List("~","phrase")
 
   // If we recieve a
   // ~ Then change dispatcher to And
   // | Then change dispatcher to Or
   //   else create a Word from the current location and continue with default dispatch
-  def default(name : String, lvl : Int, loc : ParserLocation) : Unit = (name, lvl) match {
+  def default(name : String) : Unit = (name, lvl) match {
     case ("|",n)                        => set(2, n, "or")
     case ("~",n)                        => set(2, n, "and")
     case ("phrase",n)                   => Builder.and(1, loc, "phrase")
-    case ("failed",_)                   => Builder.exit(loc)
+    case ("failed",_)                   => set(0, 0, "failed")
     case (s, n) if(ignore(s))           => println("Ignoring " + s)
     case otherwise                      => Builder.word(loc, name)
   }
@@ -147,11 +163,11 @@ object Dispatcher {
   // | and the level is different, then build the final 'or', and start a new count
   // ~ then build the final 'or' and start a new count for 'and'
   //   else return to the default dispatch
-  def or(k : Int, initlvl : Int)(name : String, curlvl : Int, loc : ParserLocation) : Unit = (name, curlvl) match {
+  def or(k : Int, initlvl : Int)(name : String) : Unit = (name, lvl) match {
     case ("|",n) if (n == initlvl)      => set(k + 1,n, "or")
     case ("|",n)                        => Builder.or(k, loc, "|"); set(2, n, "or")
     case ("~",n)                        => Builder.or(k, loc, "|"); set(2,n, "and")
-    case ("failed",_)                   => {} // What to do here?
+    case ("failed",_)                   => set(0,0,"failed")
     case (s, n) if (ignore(s))          => Builder.or(k, loc, "|"); set(0,0,"default");
     case otherwise                      => Builder.or(k, loc, "|"); set(0,0,"default"); Builder.word(loc, name)
   }
@@ -160,21 +176,36 @@ object Dispatcher {
   // ~ and the level is the same, then add one to the count and continue
   // ~ and the level is different, then build the final 'and' and start a new count
   // | then build the final and and start a new count for 'or'
+  // "failed" then go to failed dispatcher
   //   else return to the default dispatch
-  def and(k : Int, initlvl : Int)(name : String, curlvl : Int, loc : ParserLocation) : Unit = (name, curlvl) match {
+  def and(k : Int, initlvl : Int)(name : String) : Unit = (name, lvl) match {
     case ("~",n) if (n == initlvl)      => set(k + 1,n, "and")
     case ("|",n)                        => Builder.and(k, loc, "~"); set(2,n, "or")
     case ("~",n)                        => Builder.and(k, loc, "~"); set(2,n, "and")
-    case ("failed",_)                   => {} // What to do here?
+    case ("failed",_)                   => set(0,0,"failed")
     case (s, n) if (ignore(s))          => Builder.and(k, loc, "~"); set(0,0,"default");
     case otherwise                      => Builder.and(k, loc, "~"); set(0,0,"default"); Builder.word(loc, name)
   }
 
+  // If we recieve a
+  // "failed" then ignore and continue
+  // | then exit and start new count for 'or'
+  // ~ then exit and start new count for 'and'
+  //   else return to the default dispatch
+  def failed(name : String) : Unit = (name, lvl) match {
+    case ("failed",_)                   => {} // continue as usual
+    case ("|",n)                        => Builder.exit(loc, msg); set(2,n, "or")
+    case ("~",n)                        => Builder.exit(loc, msg); set(2,n, "and")
+    case (s, n) if (ignore(s))          => Builder.exit(loc, msg); set(0,0,"default");
+    case otherwise                      => Builder.exit(loc, msg); set(0,0,"default"); Builder.word(loc, name)
+  }
+
   // Assigns the next dispatch function to the dispatch variable with appropriate parameters
   def set(n : Int, lvl : Int, which : String) : Unit = which match {
-    case "or"         => go = or(n,lvl)(_,_,_)
-    case "and"        => go = and(n,lvl)(_,_,_)
-    case otherwise    => go = default(_,_,_)
+    case "or"         => go = or(n,lvl)(_)
+    case "and"        => go = and(n,lvl)(_)
+    case "failed"     => go = failed(_)
+    case otherwise    => go = default(_)
   }
 
   def ignore(s : String) : Boolean = s match {
@@ -224,7 +255,8 @@ trait DebugableParsers {
         var level = getLevel(location)
 
         // Call the dispatcher with name and level
-        Dispatcher.go(name, level, location)
+        Dispatcher.assign(level, location, "")
+        Dispatcher.go(name)
 
         println("[Name] " + name)
         println("Level:\t" + getLevel(location))
@@ -255,7 +287,8 @@ trait DebugableParsers {
             println("Matched: " + res)
           case NoSuccess(msg, next) => {
             var level = getLevel(location)
-            Dispatcher.go("failed", level, location)
+            Dispatcher.assign(level, location, msg)
+            Dispatcher.go("failed")
             println("Failed: " + msg)
           }
         }
