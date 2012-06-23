@@ -105,7 +105,6 @@ object Builder {
          .changeLeaf({ case Leaf(loc, name, state) => Leaf(loc, name, Failed(msg))})
          .up.get.right.get.up.get.next
 
-    println(msg)
     Builder.print
     println("")
     println("")
@@ -116,15 +115,11 @@ object Builder {
   def print : Unit = println(z.toString)
 
   // Whenever we parse a new word, we can deduce if the last word was parsed or failed
-  def updateLeftStatus : AndOrZipper = {
-    z.left match {
-      case Some(zipper)                   => zipper match {
-        case zip @ AndOrZipper( And(_,_),_)    => zip.changeLeaf({ case Leaf(l, n, _) => Leaf(l, n, Parsed)}).right.get
-        case zip @ AndOrZipper( Or(_,_),_)     => zip.changeLeaf({ case Leaf(l, n, _) => Leaf(l, n, Failed("TODO: SET REASON"))}).right.get
-        case zip @ AndOrZipper( Word(_),_)     => sys.error("How can we take the left of a word?")
-      }
-      case None                           => z
-    }
+  def updateLeftStatus : AndOrZipper = z.left match {
+    case Some(zip @ AndOrZipper( And(e::es,_),_))   => zip.down.get.changeLeaf({ case Leaf(l, n, _) => Leaf(l, n, Parsed)}).up.get.right.get
+    case Some(zip @ AndOrZipper( Or(e::es,_),_))    => zip.down.get.changeLeaf({ case Leaf(l, n, _) => Leaf(l, n, Failed("TODO: SET REASON"))}).up.get.right.get
+    case Some(zip @ AndOrZipper( Word(_),_))        => sys.error("How can we take the left of a word?")
+    case otherwise                                  => z
   }
 
 
