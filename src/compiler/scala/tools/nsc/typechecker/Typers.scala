@@ -3763,8 +3763,7 @@ trait Typers extends Modes with Adaptations with Tags {
                 else                  nme.applyDynamic
               // not supported: foo.bar(a1,..., an: _*)
               if (treeInfo.isWildcardStarArgList(as)) {
-               DynamicVarArgUnsupported(tree, oper)
-               return Some(setError(tree))
+               return Some(DynamicVarArgUnsupported(tree, oper))
               } else oper
             case Assign(`tree`, _) => nme.updateDynamic
             case _                 => nme.selectDynamic
@@ -4069,17 +4068,15 @@ trait Typers extends Modes with Adaptations with Tags {
         val sym = tp.typeSymbol.initialize
         if (sym.isAbstractType || sym.hasAbstractFlag)
           IsAbstractError(tree, sym)
-        else if (isPrimitiveValueClass(sym)) {
-          NotAMemberError(tpt, TypeTree(tp), nme.CONSTRUCTOR)
-          setError(tpt)
-        }
+        else if (isPrimitiveValueClass(sym))
+          NotAMemberError(tpt, TypeTree(tp), nme.CONSTRUCTOR, setErrorTpe = true)
         else if (!(  tp == sym.thisSym.tpe // when there's no explicit self type -- with (#3612) or without self variable
                      // sym.thisSym.tpe == tp.typeOfThis (except for objects)
                   || narrowRhs(tp) <:< tp.typeOfThis
                   || phase.erasedTypes
-                  )) {
+                  ))
           DoesNotConformToSelfTypeError(tree, sym, tp.typeOfThis)
-        } else
+        else
           treeCopy.New(tree, tpt1).setType(tp)
       }
 
@@ -4382,6 +4379,10 @@ trait Typers extends Modes with Adaptations with Tags {
        */
       def typedSelect(qual: Tree, name: Name): Tree = {
         def asDynamicCall = dyna.mkInvoke(context.tree, tree, qual, name) map (typed1(_, mode, pt))
+        def copySelect(tree: Tree): Tree = tree match {
+          case Select(_, _) => treeCopy.Select(tree, qual, name)
+          case SelectFromTypeTree(_, _) => treeCopy.SelectFromTypeTree(tree, qual, name)
+        }
 
         val sym = tree.symbol orElse member(qual, name) orElse {
           // symbol not found? --> try to convert implicitly to a type that does have the required
@@ -4412,14 +4413,8 @@ trait Typers extends Modes with Adaptations with Tags {
             "\nscope-id = "+qual.tpe.termSymbol.info.decls.hashCode()+"\nmembers = "+qual.tpe.members+
             "\nname = "+name+"\nfound = "+sym+"\nowner = "+context.enclClass.owner
           )
-
-          def makeInteractiveErrorTree = {
-            val tree1 = tree match {
-              case Select(_, _) => treeCopy.Select(tree, qual, name)
-              case SelectFromTypeTree(_, _) => treeCopy.SelectFromTypeTree(tree, qual, name)
-            }
-            setError(tree1)
-          }
+          
+          def makeInteractiveErrorTree = setError(copySelect(tree))
 
           if (name == nme.ERROR && forInteractive)
             return makeInteractiveErrorTree
@@ -4429,15 +4424,12 @@ trait Typers extends Modes with Adaptations with Tags {
               val lastTry = missingHook(qual.tpe.typeSymbol, name)
               if (lastTry != NoSymbol) return typed1(tree setSymbol lastTry, mode, pt)
             }
-            NotAMemberError(tree, qual, name)
+            NotAMemberError(tree, qual, name, setErrorTpe = false)
           }
 
           if (forInteractive) makeInteractiveErrorTree else setError(tree)
         } else {
-          val tree1 = tree match {
-            case Select(_, _) => treeCopy.Select(tree, qual, name)
-            case SelectFromTypeTree(_, _) => treeCopy.SelectFromTypeTree(tree, qual, name)
-          }
+          val tree1 = copySelect(tree)
           val (result, accessibleError) = silent(_.makeAccessible(tree1, sym, qual.tpe, qual)) match {
             case SilentTypeError(err) =>
               if (err.kind != ErrorKinds.Access) {
@@ -4496,13 +4488,8 @@ trait Typers extends Modes with Adaptations with Tags {
       def typedIdent(name: Name): Tree = {
         var errorContainer: AbsTypeError = null
         @inline
-        def ambiguousError(msg: String) = {
-          assert(errorContainer == null, "Cannot set ambiguous error twice for identifier")
-          errorContainer = AmbiguousIdentError(tree, name, msg)
-        }
-        @inline
         def identError(tree: AbsTypeError) = {
-          assert(errorContainer == null, "Cannot set ambiguous error twice for identifier")
+          assert(errorContainer == null, "Cannot set ident error twice for identifier")
           errorContainer = tree
         }
 
@@ -4604,9 +4591,7 @@ trait Typers extends Modes with Adaptations with Tags {
           }
           if (defSym.exists) {
             if (impSym.exists)
-              ambiguousError(
-                "it is both defined in "+defSym.owner +
-                " and imported subsequently by \n"+imports.head)
+              identError(AmbiguousIdentScopeError(tree, name, defSym.owner, imports.head))
             else if (!defSym.owner.isClass || defSym.owner.isPackageClass || defSym.isTypeParameterOrSkolem)
               pre = NoPrefix
             else
@@ -4617,8 +4602,7 @@ trait Typers extends Modes with Adaptations with Tags {
               var imports1 = imports.tail
               def ambiguousImport() = {
                 if (!(imports.head.qual.tpe =:= imports1.head.qual.tpe && impSym == impSym1))
-                  ambiguousError(
-                    "it is imported twice in the same scope by\n"+imports.head +  "\nand "+imports1.head)
+                  identError(AmbiguousIdentImportError(tree, name, imports.head, imports1.head))
               }
               while (errorContainer == null && !imports1.isEmpty &&
                      (!imports.head.isExplicitImport(name) ||
