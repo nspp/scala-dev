@@ -45,8 +45,9 @@ object AndOrTree {
 abstract class ParseState
 
 case object Parsed extends ParseState
+//case object Parsing extends ParseState
 case class Failed(msg : String) extends ParseState {
-  override def toString : String = "Failed (" + msg + ")"
+  override def toString : String = "Failed: \"" + msg + "\""
 }
 case object Unparsed extends ParseState {
   override def toString : String = "Not Reached"
@@ -108,4 +109,5 @@ case class Word(leaf : Leaf) extends AndOrTree {
 // The data class for the Leaf.
 case class Leaf(loc : ParserLocation, name : String, state : ParseState) {
   override def toString : String = name + " (" + state + ")"
+  def changeState(s  :ParseState) : Leaf = Leaf(loc, name, s)
 }

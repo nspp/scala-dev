@@ -72,9 +72,15 @@ case class AndOrZipper(tree: AndOrTree, breadCrumbs: List[AndOrFocus]) {
   def replaceHead(f : AndOrTree => AndOrTree) : Option[AndOrZipper] = z match {
     case AndOrZipper(And(e::es, l), fs)                 => Some( AndOrZipper(And(f(e)::es, l), fs) )
     case AndOrZipper(Or(e::es, l), fs)                  => Some( AndOrZipper(Or(f(e)::es, l), fs) )
-    case AndOrZipper(w @ Word(_), fs)                   => Some( AndOrZipper(f(w), fs) )
+    case AndOrZipper(w @ Word(_), fs)                   => None //Some( AndOrZipper(f(w), fs) )
     case otherwise                                      => None
   }
+
+  def replace(f : AndOrTree => AndOrTree) : AndOrZipper = z match {
+    case AndOrZipper(tree, fs)                          => AndOrZipper(f(tree), fs)
+  }
+
+  def replaceWith(elem : AndOrTree) : AndOrZipper = replace(_ => elem)
 
   // Replaces the head of the list of trees in the current element
   def replaceHeadWith(elem : AndOrTree) : Option[AndOrZipper] = replaceHead(_ => elem)
