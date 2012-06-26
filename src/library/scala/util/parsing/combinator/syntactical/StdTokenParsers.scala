@@ -13,6 +13,7 @@ package combinator
 package syntactical
 
 import token._
+import debugging.ParserLocation
 import scala.collection.mutable
 import language.implicitConversions
 
@@ -36,15 +37,15 @@ trait StdTokenParsers extends TokenParsers {
     keywordCache.getOrElseUpdate(chars, accept(Keyword(chars))(loc) ^^ (_.chars, loc))
 
   /** A parser which matches a numeric literal */
-  def numericLit: Parser[String] =
+  def numericLit(implicit loc: ParserLocation): Parser[String] =
     elem("number", _.isInstanceOf[NumericLit]) ^^ (_.chars)
 
   /** A parser which matches a string literal */
-  def stringLit: Parser[String] =
+  def stringLit(implicit loc: ParserLocation): Parser[String] =
     elem("string literal", _.isInstanceOf[StringLit]) ^^ (_.chars)
 
   /** A parser which matches an identifier */
-  def ident: Parser[String] =
+  def ident(implicit loc: ParserLocation): Parser[String] =
     elem("identifier", _.isInstanceOf[Identifier]) ^^ (_.chars)
 }
 

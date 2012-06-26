@@ -14,6 +14,7 @@ package lexical
 
 import token._
 import input.CharArrayReader.EofCh
+import debugging.ParserLocation
 
 /** This component complements the `Scanners` component with
  *  common operations for lexical parsers.
@@ -26,14 +27,14 @@ import input.CharArrayReader.EofCh
 abstract class Lexical extends Scanners with Tokens {
 
   /** A character-parser that matches a letter (and returns it).*/
-  def letter = elem("letter", _.isLetter)
+  def letter(implicit loc: ParserLocation) = elem("letter", _.isLetter)
 
   /** A character-parser that matches a digit (and returns it).*/
-  def digit = elem("digit", _.isDigit)
+  def digit(implicit loc: ParserLocation) = elem("digit", _.isDigit)
 
   /** A character-parser that matches any character except the ones given in `cs` (and returns it).*/
-  def chrExcept(cs: Char*) = elem("", ch => (cs forall (ch != _)))
+  def chrExcept(cs: Char*)(implicit loc: ParserLocation) = elem("", ch => (cs forall (ch != _)))
 
   /** A character-parser that matches a white-space character (and returns it).*/
-  def whitespaceChar = elem("space char", ch => ch <= ' ' && ch != EofCh)
+  def whitespaceChar(implicit loc: ParserLocation) = elem("space char", ch => ch <= ' ' && ch != EofCh)
 }
