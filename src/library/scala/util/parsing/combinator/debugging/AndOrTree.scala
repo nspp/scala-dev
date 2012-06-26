@@ -73,6 +73,23 @@ abstract class AndOrBranch extends AndOrTree {
   def drop : AndOrBranch
 }
 
+abstract class AndOrType
+case object AndType extends AndOrType
+case object OrType extends AndOrType
+
+case class Branch(elems : List[AndOrTree], leaf : Leaf, t : AndOrType) extends AndOrTree {
+  def insert(e : AndOrTree) : AndOrBranch = And(e::elems, leaf)
+  def head : Option[AndOrTree] = elems.headOption
+  def drop : AndOrBranch = And(elems.drop(1), leaf)
+
+  // Pretty Print for debugging use
+  def print(indent : String) : String = {
+    var s : String = indent + " " + t + ": " + leaf + "\n"
+    elems.foreach{e => s = s + e.print(indent + "  ") + "\n"}
+    s
+  }
+}
+
 // The And class, used for elements separated by a ~
 case class And(elems : List[AndOrTree], leaf : Leaf) extends AndOrBranch {
   override def insert(e : AndOrTree) : AndOrBranch = And(e::elems, leaf)
