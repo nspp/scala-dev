@@ -80,7 +80,7 @@ object Builder {
     //z = updateLeftStatus
 
     // Construct new item
-    var item = Or( AndOrTree.emptyList(k), Leaf(loc, name, Unparsed))
+    var item = Branch( AndOrTree.emptyList(k), Leaf(loc, name, Unparsed), OrType)
     // Now replace head with new item and enter
     z = z.down.get.replaceWith(item)
 
@@ -95,8 +95,8 @@ object Builder {
     // Update the status of the item before (if any)
     //z = updateLeftStatus
     println("Name: " + name + ", k: " + k)
-    // Construct new item
-    var item = And( AndOrTree.emptyList(k), Leaf(loc, name, Unparsed))
+    // Construct new And
+    var item = Branch( AndOrTree.emptyList(k), Leaf(loc, name, Unparsed), AndType)
 
     // If z is root, just replace current item
     if (z.isRoot) z= z.replaceWith(item)
@@ -148,12 +148,12 @@ object Builder {
   def print : Unit = println(z.toString)
 
   // Whenever we parse a new word, we can deduce if the last word was parsed or failed
-  def updateLeftStatus : AndOrZipper = z.left match {
-    case Some(zip @ AndOrZipper( And(e::es,_),_))   => zip.down.get.changeLeaf({ case Leaf(l, n, _) => Leaf(l, n, Parsed)}).up.get.right.get
-    case Some(zip @ AndOrZipper( Or(e::es,_),_))    => zip.down.get.changeLeaf({ case Leaf(l, n, _) => Leaf(l, n, Failed("TODO: SET REASON"))}).up.get.right.get
-    case Some(zip @ AndOrZipper( Word(_),_))        => sys.error("How can we take the left of a word?")
-    case otherwise                                  => z
-  }
+  // def updateLeftStatus : AndOrZipper = z.left match {
+  //   case Some(zip @ AndOrZipper( And(e::es,_),_))   => zip.down.get.changeLeaf({ case Leaf(l, n, _) => Leaf(l, n, Parsed)}).up.get.right.get
+  //   case Some(zip @ AndOrZipper( Or(e::es,_),_))    => zip.down.get.changeLeaf({ case Leaf(l, n, _) => Leaf(l, n, Failed("TODO: SET REASON"))}).up.get.right.get
+  //   case Some(zip @ AndOrZipper( Word(_),_))        => sys.error("How can we take the left of a word?")
+  //   case otherwise                                  => z
+  // }
 
 
 }
@@ -185,7 +185,7 @@ object Dispatcher {
     case ("failed",_)                   => set(0, 0, "failed")
     case ("parsed",_)                   => set(0, 0, "parsed")
     case (s, n) if(ignore(s))           => println("Ignoring " + s)
-    case otherwise                      => Builder.word(loc, name)
+    case otherwise                      => println("1.3"); Builder.word(loc, name)
   }
 
   // If we recieve a
@@ -201,7 +201,7 @@ object Dispatcher {
     case ("failed",_)                   => set(0,0,"failed")
     case ("parsed",_)                   => set(0, 0, "parsed")
     case (s, n) if (ignore(s))          => Builder.or(k, loc, "|"); set(0,0,"default");
-    case otherwise                      => Builder.or(k, loc, "|"); set(0,0,"default"); Builder.word(loc, name)
+    case otherwise                      => println("1.2"); Builder.or(k, loc, "|"); set(0,0,"default"); Builder.word(loc, name)
   }
 
   // If we recieve a
@@ -217,7 +217,7 @@ object Dispatcher {
     case ("failed",_)                   => set(0,0,"failed")
     case ("parsed",_)                   => set(0, 0, "parsed")
     case (s, n) if (ignore(s))          => Builder.and(k, loc, "~"); set(0,0,"default");
-    case otherwise                      => Builder.and(k, loc, "~"); set(0,0,"default"); Builder.word(loc, name)
+    case otherwise                      => println("1.1"); Builder.and(k, loc, "~"); set(0,0,"default"); Builder.word(loc, name)
   }
 
   // If we recieve a
@@ -232,7 +232,7 @@ object Dispatcher {
     case ("|",n)                        => Builder.fail(loc, msg); set(2,n, "or")
     case ("~",n)                        => Builder.fail(loc, msg); set(2,n, "and")
     case (s, n) if (ignore(s))          => Builder.fail(loc, msg); set(0,0,"default");
-    case otherwise                      => Builder.fail(loc, msg); set(0,0,"default"); Builder.word(loc, name)
+    case otherwise                      => println("1.4"); Builder.fail(loc, msg); set(0,0,"default"); Builder.word(loc, name)
   }
 
   // If we recieve a
@@ -247,7 +247,7 @@ object Dispatcher {
     case ("|",n)                        => Builder.parse(loc); set(2,n, "or")
     case ("~",n)                        => Builder.parse(loc); set(2,n, "and")
     case (s, n) if (ignore(s))          => Builder.parse(loc); set(0,0,"default");
-    case otherwise                      => Builder.parse(loc); set(0,0,"default"); Builder.word(loc, name)
+    case otherwise                      => println("1.5"); Builder.parse(loc); set(0,0,"default"); Builder.word(loc, name)
   }
 
   // Assigns the next dispatch function to the dispatch variable with appropriate parameters
@@ -262,7 +262,7 @@ object Dispatcher {
   def ignore(s : String) : Boolean = s match {
     case s if(s.indexOf("Parser") >= 0)         => true
     case s if(s.indexOf("parser-map-") >= 0)    => true
-    case otherwise                              => println(">> " + s + " <<"); false
+    case otherwise                              => false
   }
 
 }
@@ -339,7 +339,9 @@ trait DebugableParsers {
           case Success(res0, next) =>
             println("Matched: " + res)
             Dispatcher.assign(level, location, "")
+            println("1")
             Dispatcher.go("parsed")
+            println("2")
           case NoSuccess(msg, next) => {
             println("Failed: " + msg)
             Dispatcher.assign(level, location, msg)

@@ -12,7 +12,7 @@ object AndOrZipper {
 // Breadcrumbs for the zipper
 abstract class AndOrFocus
 case class Right(past: AndOrTree) extends AndOrFocus
-case class Down(past : AndOrBranch) extends AndOrFocus
+case class Down(past : Branch) extends AndOrFocus
 
 
 // A AndOrZipper for the AndOrTree
@@ -22,24 +22,19 @@ case class AndOrZipper(tree: AndOrTree, breadCrumbs: List[AndOrFocus]) {
 
   // Movement for the zipper class
   def right : Option[AndOrZipper] = z match {
-    case AndOrZipper( And(e::es, l), fs)                => Some( AndOrZipper( And(es, l), Right(e)::fs) )
-    case AndOrZipper( Or(e::es, l), fs)                 => Some( AndOrZipper( Or(es, l), Right(e)::fs) )
-    case AndOrZipper( And(Nil, _), _)                   => None
-    case AndOrZipper( Or(Nil, _), _)                    => None
+    case AndOrZipper( Branch(e::es, l, t), fs)          => Some( AndOrZipper( Branch(es, l, t), Right(e)::fs) )
+    case AndOrZipper( Branch(Nil, l, t), fs)             => None
     case AndOrZipper( Word(_), _)                       => None
   }
 
   def down : Option[AndOrZipper] = z match {
-    case AndOrZipper( And(e::es, l), fs)                => Some( AndOrZipper( e, Down(And(es, l))::fs) )
-    case AndOrZipper( Or(e::es, l), fs)                 => Some( AndOrZipper( e, Down(Or(es, l))::fs) )
-    case AndOrZipper( And(Nil, _), _)                   => None
-    case AndOrZipper( Or(Nil, _), _)                    => None
+    case AndOrZipper( Branch(e::es, l, t), fs)          => Some( AndOrZipper( e, Down(Branch(es, l, t))::fs) )
+    case AndOrZipper( Branch(Nil, l, t), fs)            => None
     case AndOrZipper( Word(_), _)                       => None
   }
 
   def left : Option[AndOrZipper] = z match {
-    case AndOrZipper( And(es, l), Right(p)::fs)         => Some( AndOrZipper( And(p::es, l), fs))
-    case AndOrZipper( Or(es, l), Right(p)::fs)          => Some( AndOrZipper( Or(p::es, l), fs))
+    case AndOrZipper( Branch(es, l, t), Right(p)::fs)   => Some( AndOrZipper( Branch(p::es, l, t), fs))
     case AndOrZipper( Word(_), _)                       => None
     case AndOrZipper( _, Down(_)::_)                    => None
     case AndOrZipper( _, Nil)                           => None
@@ -47,8 +42,7 @@ case class AndOrZipper(tree: AndOrTree, breadCrumbs: List[AndOrFocus]) {
 
   def up : Option[AndOrZipper] = z match {
     case AndOrZipper( e, Down(p) :: fs)                 => Some( AndOrZipper( p.insert(e), fs) )
-    case AndOrZipper( e:AndOrBranch, Right(p) :: fs)    => AndOrZipper( e.insert(p), fs).up
-    case AndOrZipper( Word(_), _)                       => None
+    case AndOrZipper( e:Branch, Right(p) :: fs)         => AndOrZipper( e.insert(p), fs).up
     case AndOrZipper( _, Nil)                           => None
   }
 
@@ -70,20 +64,20 @@ case class AndOrZipper(tree: AndOrTree, breadCrumbs: List[AndOrFocus]) {
   }
 
   def replaceHead(f : AndOrTree => AndOrTree) : Option[AndOrZipper] = z match {
-    case AndOrZipper(And(e::es, l), fs)                 => Some( AndOrZipper(And(f(e)::es, l), fs) )
-    case AndOrZipper(Or(e::es, l), fs)                  => Some( AndOrZipper(Or(f(e)::es, l), fs) )
-    case AndOrZipper(w @ Word(_), fs)                   => None //Some( AndOrZipper(f(w), fs) )
-    case otherwise                                      => None
+    case AndOrZipper(Branch(e::es, l, t), fs)           => Some( AndOrZipper(Branch(f(e)::es, l, t), fs) )
+    case AndOrZipper(w @ Word(_), fs)                   => None
   }
 
+  // Replaces the head of the list of trees in the current element
+  def replaceHeadWith(elem : AndOrTree) : Option[AndOrZipper] = replaceHead(_ => elem)
+
+  // Modifies current tree with f
   def replace(f : AndOrTree => AndOrTree) : AndOrZipper = z match {
     case AndOrZipper(tree, fs)                          => AndOrZipper(f(tree), fs)
   }
 
+  // Replaces current tree with elem
   def replaceWith(elem : AndOrTree) : AndOrZipper = replace(_ => elem)
-
-  // Replaces the head of the list of trees in the current element
-  def replaceHeadWith(elem : AndOrTree) : Option[AndOrZipper] = replaceHead(_ => elem)
 
   // Returns the next head, even if we need to go up to get it. If there aren't any left we throw an error
   def next : AndOrZipper = (z.atEnd, z.isRoot, z.up) match {
@@ -95,8 +89,7 @@ case class AndOrZipper(tree: AndOrTree, breadCrumbs: List[AndOrFocus]) {
 
   // Updates the information about the current active node
   def changeLeaf(f : Leaf => Leaf) : AndOrZipper = z match {
-    case AndOrZipper( And(elems, l), fs)                => AndOrZipper( And(elems, f(l)), fs);
-    case AndOrZipper( Or(elems, l), fs)                 => AndOrZipper( Or(elems, f(l)), fs);
+    case AndOrZipper( Branch(elems, l, t), fs)          => AndOrZipper( Branch(elems, f(l), t), fs);
     case AndOrZipper( Word(l), fs)                      => AndOrZipper( Word(f(l)), fs)
   }
 
@@ -111,13 +104,13 @@ case class AndOrZipper(tree: AndOrTree, breadCrumbs: List[AndOrFocus]) {
 
   // Checks if the current element is an And
   def isAnd : Boolean = z match {
-    case AndOrZipper( And(_,_), _)                       => true
+    case AndOrZipper( Branch(_,_, AndType), _)          => true
     case otherwise                                      => false
   }
 
   // Checks if the current element is an Or
   def isOr : Boolean = z match {
-    case AndOrZipper( Or(_,_), _)                       => true
+    case AndOrZipper( Branch(_,_, OrType), _)           => true
     case otherwise                                      => false
   }
 
@@ -128,8 +121,7 @@ case class AndOrZipper(tree: AndOrTree, breadCrumbs: List[AndOrFocus]) {
 
   // Checks if we are at the end of a branch
   def atEnd : Boolean = z.tree match {
-    case And(e::Nil, l)                                 => true
-    case Or(e::Nil, l)                                  => true
+    case Branch(e::Nil, l, t)                           => true
     case Word(_)                                        => true
     case otherwise                                      => false
   }
