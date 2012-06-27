@@ -10,42 +10,62 @@ import language.implicitConversions
 // A controller deciding what to do given the user input and parser
 object Controller {
 
-  // Store the user's last action
-  var lastAction : Action = Step()
-  var initialized : Boolean = true;
+  var initialized : Boolean = false;
+  var z : AndOrZipper = AndOrZipper.root
+  var path : List[AndOrFocus] = Nil
 
-  def input : Action = {
-    // Print empty line and Ask for user input
+  def input : Unit = {
+    // Play initial message if we haven't been initialized
+    if (!initialized) initMsg
+
+    // Print empty line and ask for user input
     println("\n>> ")
     Console.readChar match {
-      case 'j'    => Step()
-      case 'l'    => StepIn()
-      case 'h'    => StepOut()
-      case 'q'    => Quit()
+      case 's'    => step
+      case 'h'    => left
+      case 'j'    => down
+      case 'k'    => right
+      case 'l'    => up
+      case 'q'    => quit
     }
+
+    // Print z
+    println(z)
+  }
+
+  def left : Unit = z.left match {
+    case None           => {} // At leftmost
+    case Some(zNew)     => { path = path.drop(1); z = zNew }
+  }
+
+  def down : Unit = z.down match {
+    case None           => {} // At downmost
+    case Some(zNew)     => { path = Down::path; z = zNew }
+  }
+
+  def right : Unit = z.right match {
+    case None           => {} // At rightmost
+    case Some(zNew)     => { path = Right::path; z = zNew }
+  }
+
+  def up : Unit = z.up match {
+    case None           => {} // At upmost
+    case Some(zNew)     => { path = path.dropWhile(_ != Down).drop(1); z = zNew }
   }
 
   def initMsg : Unit = {
     // Print a few statements about how to control the debugger
     if (initialized) {
       println("Welcome to the Combinator Parser Debugger")
-      println("Controls: j: Step, l: Step in, h: Step out, q: quit")
+      println("Controls: s: Step, h: Go Left, j: Go Down, k: Go Up, l: Go Right, q: Quit")
     }
 
     // Set init to false
-    initialized = false;
+    initialized = true;
 
     // There might be more things to initalize later one
   }
 
-  // Decides what to do based on last action and current parser
-  def step(name : String, loc: ParserLocation) : Unit = lastAction match {
-    // Step isn't right, since it would stop at every '|' and not just the ones in the current scope
-    case Step()       => if (name == "|") lastAction = input else () // If input is '|' in the same scope, then stop
-    case StepIn()     => () // we need the parents to work for this
-    case StepOut()    => () // also need the parent
-    case Quit()       => exit(0) // Should be somewhere else
-  }
 }
 
 object Builder {
@@ -194,8 +214,7 @@ object Dispatcher {
   def assign(newlvl : Int, newloc : ParserLocation, newmsg : String) = {
     lvl = newlvl
     loc = newloc
-    println("MSG set to: " + newmsg)
-    if (newmsg != "") msg = newmsg
+    msg = newmsg
   }
   //val andNames : List[String] = List("~","phrase")
 
@@ -252,13 +271,13 @@ object Dispatcher {
   // ~ then exit and start new count for 'and'
   //   "parsed" then go to parsed dispatcher
   //   else return to the default dispatch
-  def failed(name : String) : Unit = (name, lvl) match {
-    case ("failed",_)                   => {} // continue as usual
-    case ("parsed",_)                   => Builder.fail(msg); set(0,0, "parsed")
-    case ("|",n)                        => Builder.fail(msg); set(2,n, "or")
-    case ("~",n)                        => Builder.fail(msg); set(2,n, "and")
-    case (s, n) if (ignore(s))          => Builder.fail(msg); set(0,0,"default");
-    case otherwise                      => Builder.fail(msg); set(0,0,"default"); Builder.word(loc, name)
+  def failed(errorMsg : String)(name : String) : Unit = (name, lvl) match {
+    case ("failed",_)                   => println(errorMsg) // continue as usual
+    case ("parsed",_)                   => Builder.fail(errorMsg); set(0,0, "parsed")
+    case ("|",n)                        => Builder.fail(errorMsg); set(2,n, "or")
+    case ("~",n)                        => Builder.fail(errorMsg); set(2,n, "and")
+    case (s, n) if (ignore(s))          => Builder.fail(errorMsg); set(0,0,"default");
+    case otherwise                      => Builder.fail(errorMsg); set(0,0,"default"); Builder.word(loc, name)
   }
 
   // If we recieve a
@@ -280,7 +299,7 @@ object Dispatcher {
   def set(n : Int, lvl : Int, which : String) : Unit = which match {
     case "or"         => go = or(n,lvl)(_)
     case "and"        => go = and(n,lvl)(_)
-    case "failed"     => go = failed(_)
+    case "failed"     => { println("setting go to failed with msg: " + msg); go = failed(msg)(_) }
     case "parsed"     => go = parsed(_)
     case otherwise    => go = default(_)
   }
