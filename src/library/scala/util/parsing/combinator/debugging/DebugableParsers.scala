@@ -80,7 +80,7 @@ object Builder {
     //z = updateLeftStatus
 
     // Construct new item
-    var item = Branch( AndOrTree.emptyList(k), Leaf(loc, name, Unparsed), OrType)
+    var item = Branch( AndOrTree.emptyList(k), Leaf(loc, name, Parsing), OrType)
     // Now replace head with new item and enter
     z = z.down.get.replaceWith(item)
 
@@ -110,42 +110,63 @@ object Builder {
   }
 
   // If an element of an And tree failed, we mark it as failed and go up
-  def fail(loc: ParserLocation, msg : String) : Unit = {
+  def fail(msg : String) : Unit = {
     // Mark current position as failed and go up
     var failedWord = Word(nextLeaf.changeState(Failed(msg)))
 
     // Update tree
     z = z.replaceHeadWith(failedWord).get
 
-    // If we are in an And tree, we step up, change leaf to failed and get the next item
-    if (z.isAnd) (
-      z = z.changeLeaf({ case Leaf(l,n,_) => Leaf(l,n,Failed(msg)) })
-           .up.get.next)
+    // Make sure parents are appropriately failed
+    failParent(msg)
 
-    // If we are in an Or tree, we step to next
-    else if (z.isOr) z = z.next
+    // If we aren't moving up, move to next
+    z = z.right.get
 
     println(z.toString)
     println("")
     println("")
   }
 
+  // In case a word has failed parsing, check if we should fail the parent too
+  def failParent(msg : String) : Unit = {
+    // If we are in an And tree ...
+    if (z.isAnd || (z.isOr && z.atEnd)) {
+      // Change leaf and move up
+      z = z.changeLeaf({ case Leaf(l,n,_) => Leaf(l,n,Failed(msg)) }).up.get
+      // The fail recursively
+      failParent(msg);
+    }
+  }
+
+
+
   // If an element of a tree was parsed we add it to the tree
-  def parse(loc : ParserLocation) : Unit = {
+  def parse : Unit = {
     // Replace head with word
     z = z.replaceHeadWith(Word(nextLeaf)).get
 
-    // If we are in an Or tree, we change it to parsed, step up and get the next item
-    if (z.isOr) (
-      z = z.changeLeaf({ case Leaf(l,n,_) => Leaf(l,n,Parsed) })
-           .up.get.next)
+    // Parse parents
+    parseParent
 
-    // If we are in an And tree, we step to next
-    else if (z.isAnd) z = z.next
+    // Then step to next
+    z = z.next
 
     println(z.toString)
     println("")
     println("")
+  }
+
+  // In case a word was parsed, check if we should parse the parent too
+  def parseParent : Unit = {
+
+    // If we are in an Or tree or and And tree at last leaf, we change it to parsed and step up
+    if (z.isOr || (z.isAnd && z.atEnd)) {
+      // Change leaf and move up
+      z = z.changeLeaf({ case Leaf(l,n,_) => Leaf(l,n,Parsed) }).up.get
+      // Parse parents recusirvely
+      parseParent
+    }
   }
 
   // Mostly for debugging
@@ -173,6 +194,7 @@ object Dispatcher {
   def assign(newlvl : Int, newloc : ParserLocation, newmsg : String) = {
     lvl = newlvl
     loc = newloc
+    println("MSG set to: " + newmsg)
     if (newmsg != "") msg = newmsg
   }
   //val andNames : List[String] = List("~","phrase")
@@ -232,11 +254,11 @@ object Dispatcher {
   //   else return to the default dispatch
   def failed(name : String) : Unit = (name, lvl) match {
     case ("failed",_)                   => {} // continue as usual
-    case ("parsed",_)                   => Builder.fail(loc, msg); set(0,0, "parsed")
-    case ("|",n)                        => Builder.fail(loc, msg); set(2,n, "or")
-    case ("~",n)                        => Builder.fail(loc, msg); set(2,n, "and")
-    case (s, n) if (ignore(s))          => Builder.fail(loc, msg); set(0,0,"default");
-    case otherwise                      => Builder.fail(loc, msg); set(0,0,"default"); Builder.word(loc, name)
+    case ("parsed",_)                   => Builder.fail(msg); set(0,0, "parsed")
+    case ("|",n)                        => Builder.fail(msg); set(2,n, "or")
+    case ("~",n)                        => Builder.fail(msg); set(2,n, "and")
+    case (s, n) if (ignore(s))          => Builder.fail(msg); set(0,0,"default");
+    case otherwise                      => Builder.fail(msg); set(0,0,"default"); Builder.word(loc, name)
   }
 
   // If we recieve a
@@ -247,11 +269,11 @@ object Dispatcher {
   //   else return to the default dispatch
   def parsed(name : String) : Unit = (name, lvl) match {
     case ("parsed",_)                   => {} // continue as usual
-    case ("failed",_)                   => Builder.parse(loc); set(0,0, "failed")
-    case ("|",n)                        => Builder.parse(loc); set(2,n, "or")
-    case ("~",n)                        => Builder.parse(loc); set(2,n, "and")
-    case (s, n) if (ignore(s))          => Builder.parse(loc); set(0,0,"default");
-    case otherwise                      => Builder.parse(loc); set(0,0,"default"); Builder.word(loc, name)
+    case ("failed",_)                   => Builder.parse; set(0,0, "failed")
+    case ("|",n)                        => Builder.parse; set(2,n, "or")
+    case ("~",n)                        => Builder.parse; set(2,n, "and")
+    case (s, n) if (ignore(s))          => Builder.parse; set(0,0,"default");
+    case otherwise                      => Builder.parse; set(0,0,"default"); Builder.word(loc, name)
   }
 
   // Assigns the next dispatch function to the dispatch variable with appropriate parameters

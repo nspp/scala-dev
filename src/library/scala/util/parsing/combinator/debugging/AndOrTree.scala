@@ -85,39 +85,12 @@ case class Branch(elems : List[AndOrTree], leaf : Leaf, t : AndOrType) extends A
 
   // Pretty Print for debugging use
   def print(indent : String) : String = {
-    var s : String = indent + " " + t + ": " + leaf + "\n"
-    elems.foreach{e => s = s + e.print(indent + "  ") + "\n"}
+    var s : String = indent + t + ": " + leaf + "\n"
+    elems.foreach{e => s = s + e.print(indent + "    ") + "\n"}
     s
   }
 }
 
-// The And class, used for elements separated by a ~
-// case class And(elems : List[AndOrTree], leaf : Leaf) extends AndOrBranch {
-//   override def insert(e : AndOrTree) : AndOrBranch = And(e::elems, leaf)
-//   override def head : Option[AndOrTree] = elems.headOption
-//   override def drop : AndOrBranch = And(elems.drop(1), leaf)
-// 
-//   // Pretty Print for debugging use
-//   def print(indent : String) : String = {
-//     var s : String = indent + "And: " + leaf.name + "\n"
-//     elems.foreach{e => s = s + e.print(indent + "  ") + "\n"}
-//     s
-//   }
-// }
-// 
-// // The Or class, used for elements separated by a |
-// case class Or(elems : List[AndOrTree], leaf : Leaf) extends AndOrBranch {
-//   override def insert(e : AndOrTree) : AndOrBranch = Or(e::elems, leaf)
-//   override def head : Option[AndOrTree] = elems.headOption
-//   override def drop : AndOrBranch = Or(elems.drop(1), leaf)
-// 
-//   // Pretty Print for debugging use
-//   def print(indent : String) : String = {
-//     var s : String = indent + "Or: " + leaf.name + "\n"
-//     elems.foreach{ e => (s = s + e.print(indent + "  ") + "\n") }
-//     s
-//   }
-// }
 
 case class Word(leaf : Leaf) extends AndOrTree {
   // Pretty Print for debugging use
