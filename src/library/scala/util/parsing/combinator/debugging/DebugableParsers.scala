@@ -96,7 +96,7 @@ object Builder {
     //z = updateLeftStatus
     println("Name: " + name + ", k: " + k)
     // Construct new And
-    var item = Branch( AndOrTree.emptyList(k), Leaf(loc, name, Unparsed), AndType)
+    var item = Branch( AndOrTree.emptyList(k), Leaf(loc, name, Parsing), AndType)
 
     // If z is root, just replace current item
     if (z.isRoot) z= z.replaceWith(item)
@@ -117,8 +117,10 @@ object Builder {
     // Update tree
     z = z.replaceHeadWith(failedWord).get
 
-    // If we are in an And tree, we step up and get the next item
-    if (z.isAnd) z = z.up.get.next
+    // If we are in an And tree, we step up, change leaf to failed and get the next item
+    if (z.isAnd) (
+      z = z.changeLeaf({ case Leaf(l,n,_) => Leaf(l,n,Failed(msg)) })
+           .up.get.next)
 
     // If we are in an Or tree, we step to next
     else if (z.isOr) z = z.next
@@ -133,8 +135,10 @@ object Builder {
     // Replace head with word
     z = z.replaceHeadWith(Word(nextLeaf)).get
 
-    // If we are in an Or tree, we step up and get the next item
-    if (z.isOr) z = z.up.get.next
+    // If we are in an Or tree, we change it to parsed, step up and get the next item
+    if (z.isOr) (
+      z = z.changeLeaf({ case Leaf(l,n,_) => Leaf(l,n,Parsed) })
+           .up.get.next)
 
     // If we are in an And tree, we step to next
     else if (z.isAnd) z = z.next
@@ -185,7 +189,7 @@ object Dispatcher {
     case ("failed",_)                   => set(0, 0, "failed")
     case ("parsed",_)                   => set(0, 0, "parsed")
     case (s, n) if(ignore(s))           => println("Ignoring " + s)
-    case otherwise                      => println("1.3"); Builder.word(loc, name)
+    case otherwise                      => Builder.word(loc, name)
   }
 
   // If we recieve a
@@ -201,7 +205,7 @@ object Dispatcher {
     case ("failed",_)                   => set(0,0,"failed")
     case ("parsed",_)                   => set(0, 0, "parsed")
     case (s, n) if (ignore(s))          => Builder.or(k, loc, "|"); set(0,0,"default");
-    case otherwise                      => println("1.2"); Builder.or(k, loc, "|"); set(0,0,"default"); Builder.word(loc, name)
+    case otherwise                      => Builder.or(k, loc, "|"); set(0,0,"default"); Builder.word(loc, name)
   }
 
   // If we recieve a
@@ -217,7 +221,7 @@ object Dispatcher {
     case ("failed",_)                   => set(0,0,"failed")
     case ("parsed",_)                   => set(0, 0, "parsed")
     case (s, n) if (ignore(s))          => Builder.and(k, loc, "~"); set(0,0,"default");
-    case otherwise                      => println("1.1"); Builder.and(k, loc, "~"); set(0,0,"default"); Builder.word(loc, name)
+    case otherwise                      => Builder.and(k, loc, "~"); set(0,0,"default"); Builder.word(loc, name)
   }
 
   // If we recieve a
@@ -232,7 +236,7 @@ object Dispatcher {
     case ("|",n)                        => Builder.fail(loc, msg); set(2,n, "or")
     case ("~",n)                        => Builder.fail(loc, msg); set(2,n, "and")
     case (s, n) if (ignore(s))          => Builder.fail(loc, msg); set(0,0,"default");
-    case otherwise                      => println("1.4"); Builder.fail(loc, msg); set(0,0,"default"); Builder.word(loc, name)
+    case otherwise                      => Builder.fail(loc, msg); set(0,0,"default"); Builder.word(loc, name)
   }
 
   // If we recieve a
@@ -247,7 +251,7 @@ object Dispatcher {
     case ("|",n)                        => Builder.parse(loc); set(2,n, "or")
     case ("~",n)                        => Builder.parse(loc); set(2,n, "and")
     case (s, n) if (ignore(s))          => Builder.parse(loc); set(0,0,"default");
-    case otherwise                      => println("1.5"); Builder.parse(loc); set(0,0,"default"); Builder.word(loc, name)
+    case otherwise                      => Builder.parse(loc); set(0,0,"default"); Builder.word(loc, name)
   }
 
   // Assigns the next dispatch function to the dispatch variable with appropriate parameters
@@ -339,9 +343,7 @@ trait DebugableParsers {
           case Success(res0, next) =>
             println("Matched: " + res)
             Dispatcher.assign(level, location, "")
-            println("1")
             Dispatcher.go("parsed")
-            println("2")
           case NoSuccess(msg, next) => {
             println("Failed: " + msg)
             Dispatcher.assign(level, location, msg)
