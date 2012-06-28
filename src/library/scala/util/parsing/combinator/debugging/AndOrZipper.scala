@@ -23,7 +23,7 @@ case class AndOrZipper(tree: AndOrTree, breadCrumbs: List[AndOrFocus]) {
   // Movement for the zipper class
   def right : Option[AndOrZipper] = z match {
     case AndOrZipper( Branch(e::es, l, t), fs)          => Some( AndOrZipper( Branch(es, l, t), Right(e)::fs) )
-    case AndOrZipper( Branch(Nil, l, t), fs)             => None
+    case AndOrZipper( Branch(Nil, l, t), fs)            => None
     case AndOrZipper( Word(_), _)                       => None
   }
 

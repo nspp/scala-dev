@@ -33,24 +33,51 @@ object Controller {
     println(z)
   }
 
+  def quit : Unit = {
+    exit(0)
+  }
+
+  // Leave the control flow to the outside parser
+  def step : Unit = {
+    // Save current path
+    path = z.breadCrumbs
+
+    // release control flow
+  }
+
+  // After a step, enter controller
+  def enter(zipper : AndOrZipper) : Unit = {
+    // Got to root
+    z = zipper.topMost
+
+    // Rewind the path to get to last position
+    for (d <- path) d match {
+      case Right(_)     => z = z.right.get
+      case Down(_)      => z = z.down.get
+    }
+    
+    // Then call input and loop
+    input
+  }
+
   def left : Unit = z.left match {
-    case None           => {} // At leftmost
-    case Some(zNew)     => { path = path.drop(1); z = zNew }
+    case None           => input // At leftmost
+    case Some(zNew)     => { z = zNew; input }
   }
 
   def down : Unit = z.down match {
-    case None           => {} // At downmost
-    case Some(zNew)     => { path = Down::path; z = zNew }
+    case None           => input // At downmost
+    case Some(zNew)     => { z = zNew; input }
   }
 
   def right : Unit = z.right match {
-    case None           => {} // At rightmost
-    case Some(zNew)     => { path = Right::path; z = zNew }
+    case None           => input // At rightmost
+    case Some(zNew)     => { z = zNew; input }
   }
 
   def up : Unit = z.up match {
-    case None           => {} // At upmost
-    case Some(zNew)     => { path = path.dropWhile(_ != Down).drop(1); z = zNew }
+    case None           => input // At upmost
+    case Some(zNew)     => { z = zNew; input }
   }
 
   def initMsg : Unit = {
