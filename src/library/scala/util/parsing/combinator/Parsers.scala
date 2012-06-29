@@ -251,9 +251,9 @@ trait Parsers extends AnyRef with debugging.DebugableParsers {
 
     /** An unspecified method that defines the behaviour of this parser. */
     def consume(in: Input): ParseResult[T]
-    
+
     def apply(in: Input): ParseResult[T] = {
-      enterRes()
+      enterRes(in)
       val res = consume(in)
       exitRes(res)
       res
@@ -307,7 +307,8 @@ trait Parsers extends AnyRef with debugging.DebugableParsers {
      * @return a `Parser` that -- on success -- returns the result of `q`.
      */
     @migration("The call-by-name argument is evaluated at most once per constructed Parser object, instead of on every need that arises during parsing.", "2.9.0")
-    def ~> [U](q: => Parser[U])(implicit loc: ParserLocation): Parser[U] = { lazy val p = q // lazy argument
+    def ~> [U](q: => Parser[U]): Parser[U] = { lazy val p = q // lazy argument
+      implicit val noloc = NoParserLocation
       (for(a <- this; b <- p) yield b).named("~>")
     }
 
@@ -322,7 +323,8 @@ trait Parsers extends AnyRef with debugging.DebugableParsers {
      * @return a `Parser` that -- on success -- returns the result of `p`.
      */
     @migration("The call-by-name argument is evaluated at most once per constructed Parser object, instead of on every need that arises during parsing.", "2.9.0")
-    def <~ [U](q: => Parser[U])(implicit loc: ParserLocation): Parser[T] = { lazy val p = q // lazy argument
+    def <~ [U](q: => Parser[U]): Parser[T] = { lazy val p = q // lazy argument
+      implicit val noloc = NoParserLocation
       (for(a <- this; b <- p) yield a).named("<~")
     }
 
@@ -341,8 +343,9 @@ trait Parsers extends AnyRef with debugging.DebugableParsers {
      *         that contains the result of `p` and that of `q`.
      *         The resulting parser fails if either `p` or `q` fails, this failure is fatal.
      */
-    def ~! [U](p: => Parser[U])(implicit loc: ParserLocation): Parser[~[T, U]]
+    def ~! [U](p: => Parser[U]): Parser[~[T, U]]
       = {
+      implicit val noloc = NoParserLocation
       OnceParser{ (for(a <- this; b <- commit(p)) yield new ~(a,b)).named("~!") }
     }
     
@@ -396,8 +399,10 @@ trait Parsers extends AnyRef with debugging.DebugableParsers {
      * @return a parser that has the same behaviour as the current parser, but whose result is
      *         transformed by `f`.
      */
-    def ^^ [U](f: T => U, loc0: ParserLocation): Parser[U] =
+    def ^^ [U](f: T => U, loc0: ParserLocation): Parser[U] = {
+      //implicit val noloc = NoParserLocation
       map(f)(loc0).named(toString+"^^")
+    }
     
     def ^^[U](f: T => U): Parser[U] = ^^(f, NoParserLocation)
 
@@ -465,7 +470,8 @@ trait Parsers extends AnyRef with debugging.DebugableParsers {
      *  @return a parser that succeeds if this parser succeeds (with result `x`)
      *          and if then `fq(x)` succeeds
      */
-    def into[U](fq: T => Parser[U])(implicit loc: ParserLocation): Parser[U] = {
+    def into[U](fq: T => Parser[U]): Parser[U] = {
+        implicit val noloc = NoParserLocation
         flatMap(fq)
       }
 
@@ -583,7 +589,7 @@ trait Parsers extends AnyRef with debugging.DebugableParsers {
    *  @param  p      A predicate that determines which elements match.
    *  @return
    */
-  def elem(kind: String, p: Elem => Boolean)(implicit loc: ParserLocation) = acceptIf(p)(inEl => kind+" expected")(None)(loc)
+  def elem(kind: String, p: Elem => Boolean) = acceptIf(p)(inEl => kind+" expected")(None)(NoParserLocation)
 
   /** A parser that matches only the given element `e`.
    *
