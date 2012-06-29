@@ -18,6 +18,9 @@ object Controller {
     // Play initial message if we haven't been initialized
     if (!initialized) initMsg
 
+    // Print z
+    println(z.toString)
+
     // Print empty line and ask for user input
     println("\n>> ")
     Console.readChar match {
@@ -27,10 +30,8 @@ object Controller {
       case 'k'    => right
       case 'l'    => up
       case 'q'    => quit
+      case _      => println("Press q to quit"); input
     }
-
-    // Print z
-    println(z)
   }
 
   def quit : Unit = {
@@ -82,10 +83,8 @@ object Controller {
 
   def initMsg : Unit = {
     // Print a few statements about how to control the debugger
-    if (initialized) {
-      println("Welcome to the Combinator Parser Debugger")
-      println("Controls: s: Step, h: Go Left, j: Go Down, k: Go Up, l: Go Right, q: Quit")
-    }
+    println("Welcome to the Combinator Parser Debugger")
+    println("Controls: s: Step, h: Go Left, j: Go Down, k: Go Up, l: Go Right, q: Quit")
 
     // Set init to false
     initialized = true;
@@ -101,11 +100,17 @@ object Builder {
   var initialized : Boolean = false
   var nextLeaf : Leaf = Leaf(NoParserLocation,"", Unparsed)
 
+  def getZipper : AndOrZipper = z
+
   // Add a word such as "blup" to the parse tree
   def word(loc : ParserLocation, name : String) : Unit = {
 
     // Set next
     nextLeaf = Leaf(loc, name, Parsed)
+
+    // Enter controller
+    Controller.enter(z)
+
 
     //z = z.replaceHeadWith(item).get.next
     // Update the status of the item before (if any)
@@ -131,9 +136,9 @@ object Builder {
     // Now replace head with new item and enter
     z = z.down.get.replaceWith(item)
 
-    Builder.print
-    println("")
-    println("")
+    //Builder.print
+    //println("")
+    //println("")
   }
 
   // Replace first element of list with And( Word(), Word(), ... , Word() );
@@ -141,7 +146,7 @@ object Builder {
   def and(k: Int, loc: ParserLocation, name : String) : Unit = {
     // Update the status of the item before (if any)
     //z = updateLeftStatus
-    println("Name: " + name + ", k: " + k)
+    //println("Name: " + name + ", k: " + k)
     // Construct new And
     var item = Branch( AndOrTree.emptyList(k), Leaf(loc, name, Parsing), AndType)
 
@@ -151,9 +156,9 @@ object Builder {
     else z = z.down.get.replaceWith(item)
     // Now replace head with new item and enter
 
-    Builder.print
-    println("")
-    println("")
+    //Builder.print
+    //println("")
+    //println("")
   }
 
   // If an element of an And tree failed, we mark it as failed and go up
@@ -170,9 +175,9 @@ object Builder {
     // If we aren't moving up, move to next
     z = z.next
 
-    println(z.toString)
-    println("")
-    println("")
+    //println(z.toString)
+    //println("")
+    //println("")
   }
 
   // In case a word has failed parsing, check if we should fail the parent too
@@ -201,9 +206,9 @@ object Builder {
     // Then step to next
     z = z.next
 
-    println(z.toString)
-    println("")
-    println("")
+    //println(z.toString)
+    //println("")
+    //println("")
   }
 
   // In case a word was parsed, check if we should parse the parent too
@@ -261,7 +266,7 @@ object Dispatcher {
     case ("phrase",n)                   => Builder.and(1, loc, "phrase")
     case ("failed",_)                   => set(0, 0, "failed")
     case ("parsed",_)                   => set(0, 0, "parsed")
-    case (s, n) if(ignore(s))           => println("Ignoring " + s)
+    case (s, n) if(ignore(s))           => {} //println("Ignoring " + s)
     case otherwise                      => Builder.word(loc, name)
   }
 
@@ -386,9 +391,9 @@ trait DebugableParsers {
         Dispatcher.assign(level, location, "")
         Dispatcher.go(name)
 
-        println("[Name] " + name)
-        println("Level:\t" + getLevel(location))
-        println("")
+        //println("[Name] " + name)
+        //println("Level:\t" + getLevel(location))
+        //println("")
 
         // println("Try to consume token")
         // println("[Name] " + name)
@@ -414,11 +419,11 @@ trait DebugableParsers {
 
         res match {
           case Success(res0, next) =>
-            println("Matched: " + res)
+            //println("Matched: " + res)
             Dispatcher.assign(level, location, "")
             Dispatcher.go("parsed")
           case NoSuccess(msg, next) => {
-            println("Failed: " + msg)
+            //println("Failed: " + msg)
             Dispatcher.assign(level, location, msg)
             Dispatcher.go("failed")
           }
