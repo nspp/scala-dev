@@ -168,7 +168,7 @@ object Builder {
     failParent(msg)
 
     // If we aren't moving up, move to next
-    z = z.right.get
+    z = z.next
 
     println(z.toString)
     println("")
@@ -180,9 +180,11 @@ object Builder {
     // If we are in an And tree ...
     if (z.isAnd || (z.isOr && z.atEnd)) {
       // Change leaf and move up
-      z = z.changeLeaf({ case Leaf(l,n,_) => Leaf(l,n,Failed(msg)) }).up.get
-      // The fail recursively
-      failParent(msg);
+      z = z.changeLeaf({ case Leaf(l,n,_) => Leaf(l,n,Failed(msg)) })
+      z.up match {
+        case Some(zip)  => z = zip; failParent(msg)
+        case None       => {}
+      }
     }
   }
 
@@ -209,10 +211,13 @@ object Builder {
 
     // If we are in an Or tree or and And tree at last leaf, we change it to parsed and step up
     if (z.isOr || (z.isAnd && z.atEnd)) {
-      // Change leaf and move up
-      z = z.changeLeaf({ case Leaf(l,n,_) => Leaf(l,n,Parsed) }).up.get
-      // Parse parents recusirvely
-      parseParent
+      // Change leaf
+      z = z.changeLeaf({ case Leaf(l,n,_) => Leaf(l,n,Parsed) })
+      // and move up
+      z.up match {
+        case Some(zip)  => z = zip; parseParent
+        case None       => {}
+      }
     }
   }
 
@@ -298,13 +303,13 @@ object Dispatcher {
   // ~ then exit and start new count for 'and'
   //   "parsed" then go to parsed dispatcher
   //   else return to the default dispatch
-  def failed(errorMsg : String)(name : String) : Unit = (name, lvl) match {
-    case ("failed",_)                   => println(errorMsg) // continue as usual
-    case ("parsed",_)                   => Builder.fail(errorMsg); set(0,0, "parsed")
-    case ("|",n)                        => Builder.fail(errorMsg); set(2,n, "or")
-    case ("~",n)                        => Builder.fail(errorMsg); set(2,n, "and")
-    case (s, n) if (ignore(s))          => Builder.fail(errorMsg); set(0,0,"default");
-    case otherwise                      => Builder.fail(errorMsg); set(0,0,"default"); Builder.word(loc, name)
+  def failed(name : String) : Unit = (name, lvl) match {
+    case ("failed",_)                   => {} // continue as usual
+    case ("parsed",_)                   => set(0,0, "parsed")
+    case ("|",n)                        => set(2,n, "or")
+    case ("~",n)                        => set(2,n, "and")
+    case (s, n) if (ignore(s))          => set(0,0,"default");
+    case otherwise                      => set(0,0,"default"); Builder.word(loc, name)
   }
 
   // If we recieve a
@@ -315,19 +320,19 @@ object Dispatcher {
   //   else return to the default dispatch
   def parsed(name : String) : Unit = (name, lvl) match {
     case ("parsed",_)                   => {} // continue as usual
-    case ("failed",_)                   => Builder.parse; set(0,0, "failed")
-    case ("|",n)                        => Builder.parse; set(2,n, "or")
-    case ("~",n)                        => Builder.parse; set(2,n, "and")
-    case (s, n) if (ignore(s))          => Builder.parse; set(0,0,"default");
-    case otherwise                      => Builder.parse; set(0,0,"default"); Builder.word(loc, name)
+    case ("failed",_)                   => set(0,0, "failed")
+    case ("|",n)                        => set(2,n, "or")
+    case ("~",n)                        => set(2,n, "and")
+    case (s, n) if (ignore(s))          => set(0,0,"default");
+    case otherwise                      => set(0,0,"default"); Builder.word(loc, name)
   }
 
   // Assigns the next dispatch function to the dispatch variable with appropriate parameters
   def set(n : Int, lvl : Int, which : String) : Unit = which match {
-    case "or"         => go = or(n,lvl)(_)
-    case "and"        => go = and(n,lvl)(_)
-    case "failed"     => { println("setting go to failed with msg: " + msg); go = failed(msg)(_) }
-    case "parsed"     => go = parsed(_)
+    case "or"         => go = or(n,lvl)_
+    case "and"        => go = and(n,lvl)_
+    case "failed"     => go = failed(_); Builder.fail(msg); 
+    case "parsed"     => go = parsed(_); Builder.parse; 
     case otherwise    => go = default(_)
   }
 
