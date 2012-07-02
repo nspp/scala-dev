@@ -42,17 +42,6 @@ object AndOrTree {
 
 }
 
-abstract class ParseState
-
-case object Parsed extends ParseState
-case object Parsing extends ParseState
-//case object Parsing extends ParseState
-case class Failed(msg : String) extends ParseState {
-  override def toString : String = "Failed: \"" + msg + "\""
-}
-case object Unparsed extends ParseState {
-  override def toString : String = "Not Reached"
-}
 
 // The whole tree
 abstract class AndOrTree {
