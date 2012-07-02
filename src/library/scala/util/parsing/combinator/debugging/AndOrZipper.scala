@@ -63,6 +63,12 @@ case class AndOrZipper(tree: AndOrTree, breadCrumbs: List[AndOrFocus]) {
     case Some(z_new)                                    => z_new.topMost
   }
 
+  // Checks if we are at the top
+  def isTopMost : Boolean = z.up match {
+    case None                                           => true
+    case _                                              => false
+  }
+
   def replaceHead(f : AndOrTree => AndOrTree) : Option[AndOrZipper] = z match {
     case AndOrZipper(Branch(e::es, l, t), fs)           => Some( AndOrZipper(Branch(f(e)::es, l, t), fs) )
     case AndOrZipper(w @ Word(_), fs)                   => None
@@ -130,7 +136,7 @@ case class AndOrZipper(tree: AndOrTree, breadCrumbs: List[AndOrFocus]) {
   override def toString : String = {
     z.safeMove(_.down)
      .changeLeaf({case Leaf(pos, name,status) => Leaf(pos, name + "\t <<",status)})
-     .topMost.tree.toString
+     .topMost.leftMost.tree.toString
   }
 
 }

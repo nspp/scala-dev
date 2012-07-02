@@ -61,10 +61,23 @@ object Controller {
     input
   }
 
-  def next : Unit = z.down match {
-    case None           => right // At downmost go right instead
-    case Some(zNew)     => { z = zNew; input }
+  def next : Unit = (z.right, z.down, z.up) match {
+    case (None, None, None)                         => input
+    case (None, None, Some(zUp))                    => { z = zUp; right; }
+    case (None, Some(zD), Some(zUp)) if zD.isWord   => { z = zUp; right; }
+    case (Some(zR), Some(zD), _)     if zD.isWord   => { z = zR; input }
+    case (Some(zR), None, _)                        => { z = zR; input; }
+    case (_, Some(zD), _)                           => { z = zD; input; }
+    case _                                          => input
   }
+
+
+
+/*   def next : Unit = z.down match { */
+/*     case None                           => input // At downmost go right instead */
+/*     case Some(zNew) if zNew.isWord      => right */
+/*     case Some(zNew)                     => { z = zNew; input } */
+/*   } */
 
   def prev : Unit = z.left match {
     case None           => up // At downmost go right instead
@@ -72,7 +85,7 @@ object Controller {
   }
 
   def nextRight : Unit = z.right match {
-    case None           => down // At downmost go right instead
+    case None           => next // at rightmost, see if it's possible to go down instead
     case Some(zNew)     => { z = zNew; input }
   }
   
@@ -82,11 +95,6 @@ object Controller {
     case Some(zNew)     => { z = zNew; input }
   }
 
-
-  def down : Unit = z.down match {
-    case None           => input // At downmost
-    case Some(zNew)     => { z = zNew; input }
-  }
 
   def right : Unit = z.right match {
     case None           => input // At rightmost
