@@ -25,10 +25,10 @@ object Controller {
     println("\n>> ")
     Console.readChar match {
       case 's'    => step
-      case 'h'    => left
-      case 'j'    => down
-      case 'k'    => right
-      case 'l'    => up
+      case 'h'    => prev
+      case 'j'    => next
+      case 'k'    => up
+      case 'l'    => nextRight
       case 'q'    => quit
       case _      => println("Press q to quit"); input
     }
@@ -52,7 +52,7 @@ object Controller {
     z = zipper.topMost
 
     // Rewind the path to get to last position
-    for (d <- path) d match {
+    for (d <- path.reverse) d match {
       case Right(_)     => z = z.right.get
       case Down(_)      => z = z.down.get
     }
@@ -61,10 +61,27 @@ object Controller {
     input
   }
 
+  def next : Unit = z.down match {
+    case None           => right // At downmost go right instead
+    case Some(zNew)     => { z = zNew; input }
+  }
+
+  def prev : Unit = z.left match {
+    case None           => up // At downmost go right instead
+    case Some(zNew)     => { z = zNew; input }
+  }
+
+  def nextRight : Unit = z.right match {
+    case None           => down // At downmost go right instead
+    case Some(zNew)     => { z = zNew; input }
+  }
+  
+
   def left : Unit = z.left match {
     case None           => input // At leftmost
     case Some(zNew)     => { z = zNew; input }
   }
+
 
   def down : Unit = z.down match {
     case None           => input // At downmost
@@ -172,7 +189,7 @@ object Builder {
     // Make sure parents are appropriately failed
     failParent(msg)
 
-    // If we aren't moving up, move to next
+    // move to next
     z = z.next
 
     //println(z.toString)
