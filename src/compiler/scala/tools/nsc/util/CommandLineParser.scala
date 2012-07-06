@@ -21,6 +21,7 @@ import scala.util.parsing.combinator.debugging.NoParserLocation
  */
 
 trait ParserUtil extends Parsers {
+  protected implicit val noloc = NoParserLocation
   protected implicit class ParserPlus[+T](underlying: Parser[T]) {
     def !~>[U](p: => Parser[U]): Parser[U] = (underlying ~! p) ^^ { case a~b  => b }
     def <~![U](p: => Parser[U]): Parser[T] = (underlying ~! p) ^^ { case a~b  => a }
@@ -115,8 +116,6 @@ case class CommandLine(
 
 object CommandLineParser extends RegexParsers with ParserUtil {
   override def skipWhitespace = false
-  
-  private implicit val noloc = NoParserLocation
 
   def elemExcept(xs: Elem*): Parser[Elem] = elem("elemExcept", x => x != EofCh && !(xs contains x))
   def elemOf(xs: Elem*): Parser[Elem]     = elem("elemOf", xs contains _)
