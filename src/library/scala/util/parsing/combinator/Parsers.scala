@@ -713,7 +713,7 @@ trait Parsers extends AnyRef with debugging.DebugableParsers {
    * @param p a `Parser` that is to be applied successively to the input
    * @return A parser that returns a list of results produced by repeatedly applying `p` to the input.
    */
-  def rep[T](p: => Parser[T])(implicit loc: ParserLocation): Parser[List[T]] = rep1(p) | success(List())
+  def rep[T](p: => Parser[T])(implicit loc: ParserLocation): Parser[List[T]] = (rep1(p) | success(List())).named("rep")
 
   /** A parser generator for interleaved repetitions.
    *
@@ -728,7 +728,7 @@ trait Parsers extends AnyRef with debugging.DebugableParsers {
    *         The results of `p` are collected in a list. The results of `q` are discarded.
    */
   def repsep[T](p: => Parser[T], q: => Parser[Any])(implicit loc: ParserLocation): Parser[List[T]] =
-    rep1sep(p, q) | success(List())
+    rep1sep(p, q) | success(List()).named("repsep")
 
   /** A parser generator for non-empty repetitions.
    *
@@ -739,7 +739,7 @@ trait Parsers extends AnyRef with debugging.DebugableParsers {
    * @return A parser that returns a list of results produced by repeatedly applying `p` to the input
    *        (and that only succeeds if `p` matches at least once).
    */
-  def rep1[T](p: => Parser[T])(implicit loc: ParserLocation): Parser[List[T]] = rep1(p, p)
+  def rep1[T](p: => Parser[T])(implicit loc: ParserLocation): Parser[List[T]] = rep1(p, p).named("rep1")
 
   /** A parser generator for non-empty repetitions.
    *
@@ -772,7 +772,7 @@ trait Parsers extends AnyRef with debugging.DebugableParsers {
       case Success(x, rest) => elems += x ; continue(rest)
       case ns: NoSuccess    => ns
     }
-  }, loc0)
+  }, loc0).named("rep1")
 
   /** A parser generator for a specified number of repetitions.
    *

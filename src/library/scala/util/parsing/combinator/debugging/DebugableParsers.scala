@@ -263,16 +263,20 @@ trait DebugableParsers extends LocationAwareParser {
     def enterRes(in: Input): Unit = {
       if (debug && location != NoParserLocation) {
 
+        println("[Name] " + name)
+        println("Method:\t" + printMethod(location))
+        println("")
+
+
         // Redefine name for easier reading
         if (name == "") name = "Undefined"
 
         // Call the dispatcher with name and level
         Dispatcher.go(toParserKind(name, location))
 
-        println("[Name] " + name)
-        println("Method:\t" + printMethod(location))
-        println("")
-
+      }
+      else {
+        println("NoParserLocation with name: " + name)
       }
     }
 
