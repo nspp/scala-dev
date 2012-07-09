@@ -229,11 +229,11 @@ trait LocationAwareParser {
       case otherwise                              => false
     }
     s match {
-      case "|"             => OrParser(s, loc)
-      case "~"             => AndParser(s, loc)
-      case "phrase"        => OtherParser(s, loc)
-      case other if ignore => IgnoredParser(other, loc)
-      case normal          => WordParser(normal, loc)
+      case "|"                          => OrParser(s, loc)
+      case "~" | "~>" | "<~"            => AndParser(s, loc)
+      case "phrase"                     => OtherParser(s, loc)
+      case other if ignore              => IgnoredParser(other, loc)
+      case normal                       => WordParser(normal, loc)
     }
   }
 }
