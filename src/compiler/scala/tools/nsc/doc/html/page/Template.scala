@@ -70,8 +70,7 @@ class Template(universe: doc.Universe, tpl: DocTemplateEntity) extends HtmlPage 
         <p id="owner">{ templatesToHtml(tpl.inTemplate.toRoot.reverse.tail, xml.Text(".")) }</p>
     }
 
-    <body class={ if (tpl.isTrait || tpl.isClass || tpl.qualifiedName == "scala.AnyRef") "type" else "value" }
-          onload={ "sh_highlightDocument('../lib/', '.min.js');" }>
+    <body class={ if (tpl.isTrait || tpl.isClass || tpl.qualifiedName == "scala.AnyRef") "type" else "value" }>
       <div id="definition">
         {
           tpl.companion match {
@@ -88,7 +87,7 @@ class Template(universe: doc.Universe, tpl: DocTemplateEntity) extends HtmlPage 
       { memberToCommentHtml(tpl, true) }
 
       <div id="mbrsel">
-        <div id='textfilter'><span class='pre'/><span class='input'><input type='text' accesskey='/'/></span><span class='post'/></div>
+        <div id='textfilter'><span class='pre'/><span class='input'><input id='mbrsel-input' type='text' accesskey='/'/></span><span class='post'/></div>
         { if (tpl.linearizationTemplates.isEmpty && tpl.conversions.isEmpty) NodeSeq.Empty else
             <div id="order">
               <span class="filtertype">Ordering</span>
@@ -512,7 +511,7 @@ class Template(universe: doc.Universe, tpl: DocTemplateEntity) extends HtmlPage 
             <dt>See also</dt>
             <dd>{
               val seeXml:List[scala.xml.NodeSeq]=(for(see <- comment.see ) yield <span class="cmt">{bodyToHtml(see)}</span> )
-              seeXml.reduceLeft(_ ++ Text(", ") ++ _)
+              seeXml.reduceLeft(_ ++ _)
             }</dd>
           } else NodeSeq.Empty
 

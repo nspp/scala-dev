@@ -20,12 +20,12 @@ trait ParserUtil extends Parsers {
     def <~![U](p: => Parser[U]): Parser[T] = (underlying ~! p) ^^ { case a~b  => a }
   }
   protected implicit def parser2parserPlus[T](p: Parser[T]): ParserPlus[T] = new ParserPlus(p)
+  protected implicit val noloc = NoParserLocation
 }
 
 object Parser extends RegexParsers with ParserUtil {
   override def skipWhitespace = false
-  private implicit val noloc = NoParserLocation
-
+  
   def elemExcept(xs: Elem*): Parser[Elem] = elem("elemExcept", x => x != EofCh && !(xs contains x))
   def elemOf(xs: Elem*): Parser[Elem]     = elem("elemOf", xs contains _)
   def escaped(ch: Char): Parser[String] = "\\" + ch

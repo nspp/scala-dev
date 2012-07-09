@@ -11,7 +11,7 @@ package scala.collection
 /** A trait for all maps upon which operations may be
  *  implemented in parallel.
  *
- *  @define Coll GenMap
+ *  @define Coll `GenMap`
  *  @define coll general map
  *  @author Martin Odersky
  *  @author Aleksandar Prokopec
@@ -42,7 +42,6 @@ trait GenMapLike[A, +B, +Repr] extends GenIterableLike[(A, B), Repr] with Equals
    *            otherwise the result of the `default` computation.
    *   @usecase def getOrElse(key: A, default: => B): B
    *     @inheritdoc
-   *     @tparam  B        the result type of the default computation.
    */
   def getOrElse[B1 >: B](key: A, default: => B1): B1
 

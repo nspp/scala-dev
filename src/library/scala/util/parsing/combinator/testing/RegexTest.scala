@@ -7,10 +7,14 @@ import language.postfixOps
 
 import debugging.{ParserLocation, NoParserLocation}
 
+@deprecated("This class will be removed", "2.10.0")
 case class Ident(s: String)
+@deprecated("This class will be removed", "2.10.0")
 case class Number(n: Int)
+@deprecated("This class will be removed", "2.10.0")
 case class Str(s: String)
 
+@deprecated("This class will be removed", "2.10.0")
 object RegexTest extends RegexParsers {
   implicit val loc: ParserLocation = NoParserLocation
   

@@ -15,7 +15,7 @@ import annotation.migration
 import language.implicitConversions
 import scala.util.DynamicVariable
 
-import debugging.{ParserLocation, NoParserLocation}
+import debugging.{ParserLocation}
 
 // TODO: better error handling (labelling like parsec's <?>)
 
@@ -307,8 +307,7 @@ trait Parsers extends AnyRef with debugging.DebugableParsers {
      * @return a `Parser` that -- on success -- returns the result of `q`.
      */
     @migration("The call-by-name argument is evaluated at most once per constructed Parser object, instead of on every need that arises during parsing.", "2.9.0")
-    def ~> [U](q: => Parser[U]): Parser[U] = { lazy val p = q // lazy argument
-      implicit val noloc = NoParserLocation
+    def ~> [U](q: => Parser[U])(implicit loc: ParserLocation): Parser[U] = { lazy val p = q // lazy argument
       (for(a <- this; b <- p) yield b).named("~>")
     }
 
@@ -323,8 +322,7 @@ trait Parsers extends AnyRef with debugging.DebugableParsers {
      * @return a `Parser` that -- on success -- returns the result of `p`.
      */
     @migration("The call-by-name argument is evaluated at most once per constructed Parser object, instead of on every need that arises during parsing.", "2.9.0")
-    def <~ [U](q: => Parser[U]): Parser[T] = { lazy val p = q // lazy argument
-      implicit val noloc = NoParserLocation
+    def <~ [U](q: => Parser[U])(implicit loc: ParserLocation): Parser[T] = { lazy val p = q // lazy argument
       (for(a <- this; b <- p) yield a).named("<~")
     }
 
@@ -343,9 +341,7 @@ trait Parsers extends AnyRef with debugging.DebugableParsers {
      *         that contains the result of `p` and that of `q`.
      *         The resulting parser fails if either `p` or `q` fails, this failure is fatal.
      */
-    def ~! [U](p: => Parser[U]): Parser[~[T, U]]
-      = {
-      implicit val noloc = NoParserLocation
+    def ~! [U](p: => Parser[U])(implicit loc: ParserLocation): Parser[~[T, U]] = {
       OnceParser{ (for(a <- this; b <- commit(p)) yield new ~(a,b)).named("~!") }
     }
     
@@ -372,7 +368,7 @@ trait Parsers extends AnyRef with debugging.DebugableParsers {
      * @return a `Parser` that returns the result of the parser consuming the most characters (out of `p` and `q`).
      */
     @migration("The call-by-name argument is evaluated at most once per constructed Parser object, instead of on every need that arises during parsing.", "2.9.0")
-    def ||| [U >: T](q0: => Parser[U]): Parser[U] = new Parser[U] with NoLocationParser[U] {
+    def ||| [U >: T](q0: => Parser[U])(implicit loc: ParserLocation): Parser[U] = new Parser[U] {
       lazy val q = q0 // lazy argument
       def consume(in: Input) = {
         val res1 = Parser.this(in)
@@ -387,6 +383,8 @@ trait Parsers extends AnyRef with debugging.DebugableParsers {
         }
       }
       override def toString = "|||"
+      val location: ParserLocation = loc
+        
     }
 
     /** A parser combinator for function application.
@@ -397,12 +395,10 @@ trait Parsers extends AnyRef with debugging.DebugableParsers {
      * @return a parser that has the same behaviour as the current parser, but whose result is
      *         transformed by `f`.
      */
-    def ^^ [U](f: T => U, loc0: ParserLocation): Parser[U] = {
-      //implicit val noloc = NoParserLocation
+    def ^^ [U](f: T => U)(implicit loc0: ParserLocation): Parser[U] =
       map(f)(loc0).named(toString+"^^")
-    }
     
-    def ^^[U](f: T => U): Parser[U] = ^^(f, NoParserLocation)
+//    def ^^[U](f: T => U): Parser[U] = ^^(f, NoParserLocation)
 
     /** A parser combinator that changes a successful result into the specified value.
      *
@@ -431,8 +427,8 @@ trait Parsers extends AnyRef with debugging.DebugableParsers {
      * @return a parser that succeeds if the current parser succeeds <i>and</i> `f` is applicable
      *         to the result. If so, the result will be transformed by `f`.
      */
-    def ^? [U](f: PartialFunction[T, U], error: T => String): Parser[U] = Parser{ in =>
-      this(in).mapPartial(f, error)}.named(toString+"^?")
+    def ^? [U](f: PartialFunction[T, U], error: T => String)(implicit loc: ParserLocation): Parser[U] = Parser ({ in =>
+      this(in).mapPartial(f, error)}, loc).named(toString+"^?")
 
     /** A parser combinator for partial function application.
      *
@@ -444,7 +440,7 @@ trait Parsers extends AnyRef with debugging.DebugableParsers {
      * @return a parser that succeeds if the current parser succeeds <i>and</i> `f` is applicable
      *         to the result. If so, the result will be transformed by `f`.
      */
-    def ^? [U](f: PartialFunction[T, U]): Parser[U] = ^?(f, r => "Constructor function not defined at "+r)
+    def ^? [U](f: PartialFunction[T, U])(implicit loc: ParserLocation): Parser[U] = ^?(f, r => "Constructor function not defined at "+r)
 
     /** A parser combinator that parameterizes a subsequent parser with the
      *  result of this one.
@@ -468,21 +464,20 @@ trait Parsers extends AnyRef with debugging.DebugableParsers {
      *  @return a parser that succeeds if this parser succeeds (with result `x`)
      *          and if then `fq(x)` succeeds
      */
-    def into[U](fq: T => Parser[U]): Parser[U] = {
-        implicit val noloc = NoParserLocation
+    def into[U](fq: T => Parser[U])(implicit loc: ParserLocation): Parser[U] = {
         flatMap(fq)
       }
 
     // shortcuts for combinators:
 
     /** Returns `into(fq)`. */
-    def >>[U](fq: T => Parser[U])=into(fq)
+    def >>[U](fq: T => Parser[U])(implicit loc: ParserLocation) = into(fq)
 
     /** Returns a parser that repeatedly parses what this parser parses.
      *
      *  @return rep(this)
      */
-    def * = rep(this)(NoParserLocation)
+    def *(implicit loc: ParserLocation) = rep(this)
 
     /** Returns a parser that repeatedly parses what this parser parses,
      *  interleaved with the `sep` parser. The `sep` parser specifies how
@@ -490,7 +485,7 @@ trait Parsers extends AnyRef with debugging.DebugableParsers {
      *
      *  @return chainl1(this, sep)
      */
-    def *[U >: T](sep: => Parser[(U, U) => U]) = chainl1(this, sep)
+    def *[U >: T](sep: => Parser[(U, U) => U])(implicit loc: ParserLocation) = chainl1(this, sep)
 
     // TODO: improve precedence? a ~ b*(",") = a ~ (b*(","))  should be true
 
@@ -498,13 +493,13 @@ trait Parsers extends AnyRef with debugging.DebugableParsers {
      *
      *  @return rep1(this)
      */
-    def + = rep1(this)
+    def +(implicit loc: ParserLocation) = rep1(this)
 
     /** Returns a parser that optionally parses what this parser parses.
      *
      *  @return opt(this)
      */
-    def ? = opt(this)(NoParserLocation)
+    def ?(implicit loc: ParserLocation) = opt(this)
 
     /** Changes the failure message produced by a parser.
      *
@@ -527,12 +522,12 @@ trait Parsers extends AnyRef with debugging.DebugableParsers {
      *  @param msg The message that will replace the default failure message.
      *  @return    A parser with the same properties and different failure message.
      */
-    def withFailureMessage(msg: String) = Parser{ in =>
+    def withFailureMessage(msg: String)(implicit loc: ParserLocation) = Parser ({ in =>
       this(in) match {
         case Failure(_, next) => Failure(msg, next)
         case other            => other
       }
-    }
+    }, loc)
 
     /** Changes the error message produced by a parser.
      *
@@ -555,25 +550,25 @@ trait Parsers extends AnyRef with debugging.DebugableParsers {
      *  @param msg The message that will replace the default error message.
      *  @return    A parser with the same properties and different error message.
      */
-    def withErrorMessage(msg: String) = Parser{ in =>
+    def withErrorMessage(msg: String)(implicit loc: ParserLocation) = Parser ({ in =>
       this(in) match {
         case Error(_, next) => Error(msg, next)
         case other          => other
       }
-    }
+    }, loc)
   }
 
   /** Wrap a parser so that its failures become errors (the `|` combinator
    *  will give up as soon as it encounters an error, on failure it simply
    *  tries the next alternative).
    */
-  def commit[T](p: => Parser[T]) = Parser{ in =>
+  def commit[T](p: => Parser[T])(implicit loc: ParserLocation) = Parser ({ in =>
     p(in) match{
       case s @ Success(_, _) => s
       case e @ Error(_, _) => e
       case f @ Failure(msg, next) => Error(msg, next)
     }
-  }
+  }, loc)
 
 	/*trait ElemFun
   case class EFCons(hd: Elem => ElemFun, tl: ElemFun) extends ElemFun
@@ -587,7 +582,7 @@ trait Parsers extends AnyRef with debugging.DebugableParsers {
    *  @param  p      A predicate that determines which elements match.
    *  @return
    */
-  def elem(kind: String, p: Elem => Boolean) = acceptIf(p)(inEl => kind+" expected")(None)(NoParserLocation)
+  def elem(kind: String, p: Elem => Boolean)(implicit loc: ParserLocation) = acceptIf(p)(inEl => kind+" expected")(None)(loc)
 
   /** A parser that matches only the given element `e`.
    *
@@ -596,7 +591,7 @@ trait Parsers extends AnyRef with debugging.DebugableParsers {
    *  @param e the `Elem` that must be the next piece of input for the returned parser to succeed
    *  @return a `Parser` that succeeds if `e` is the next available input (and returns it).
    */
-  def elem(e: Elem): Parser[Elem] = accept(e)(NoParserLocation)
+  def elem(e: Elem)(implicit loc: ParserLocation): Parser[Elem] = accept(e)
 
   /** A parser that matches only the given element `e`.
    *
@@ -617,7 +612,7 @@ trait Parsers extends AnyRef with debugging.DebugableParsers {
    *  @param  es the list of expected elements
    *  @return a Parser that recognizes a specified list of elements
    */
-  def accept[ES <% List[Elem]](es: ES): Parser[List[Elem]] = acceptSeq(es)
+  def accept[ES <% List[Elem]](es: ES)(implicit loc: ParserLocation): Parser[List[Elem]] = acceptSeq(es)
 
   /** The parser that matches an element in the domain of the partial function `f`.
    *
@@ -632,7 +627,7 @@ trait Parsers extends AnyRef with debugging.DebugableParsers {
    *  @return A parser that succeeds if `f` is applicable to the first element of the input,
    *          applying `f` to it to produce the result.
    */
-  def accept[U](expected: String, f: PartialFunction[Elem, U]): Parser[U] = acceptMatch(expected, f)
+  def accept[U](expected: String, f: PartialFunction[Elem, U])(implicit loc: ParserLocation): Parser[U] = acceptMatch(expected, f)
 
   /** A parser matching input elements that satisfy a given predicate.
    *
@@ -661,11 +656,11 @@ trait Parsers extends AnyRef with debugging.DebugableParsers {
    *  @return A parser that succeeds if `f` is applicable to the first element of the input,
    *          applying `f` to it to produce the result.
    */
-  def acceptMatch[U](expected: String, f: PartialFunction[Elem, U]): Parser[U] = Parser{ in =>
+  def acceptMatch[U](expected: String, f: PartialFunction[Elem, U])(implicit loc: ParserLocation): Parser[U] = Parser ({ in =>
     if (in.atEnd) Failure("end of input", in)
     else if (f.isDefinedAt(in.first)) Success(f(in.first), in.rest)
     else Failure(expected+" expected", in)
-  }
+  }, loc)
 
   /** A parser that matches only the given [[scala.collection.Iterable]] collection of elements `es`.
    *
@@ -674,9 +669,8 @@ trait Parsers extends AnyRef with debugging.DebugableParsers {
    *  @param  es the list of expected elements
    *  @return a Parser that recognizes a specified list of elements
    */
-  def acceptSeq[ES <% Iterable[Elem]](es: ES): Parser[List[Elem]] = {
-    implicit val noloc = NoParserLocation
-    es.foldRight[Parser[List[Elem]]](success(Nil)){(x, pxs) => accept(x)(NoParserLocation) ~ pxs ^^ mkList}
+  def acceptSeq[ES <% Iterable[Elem]](es: ES)(implicit loc: ParserLocation): Parser[List[Elem]] = {
+    es.foldRight[Parser[List[Elem]]](success(Nil)){(x, pxs) => accept(x) ~ pxs ^^ mkList}
   }
 
   /** A parser that always fails.
@@ -684,32 +678,32 @@ trait Parsers extends AnyRef with debugging.DebugableParsers {
    * @param msg The error message describing the failure.
    * @return A parser that always fails with the specified error message.
    */
-  def failure(msg: String) = Parser{ in => Failure(msg, in) }
+  def failure(msg: String)(implicit loc: ParserLocation) = Parser ({ in => Failure(msg, in) }, loc)
 
   /** A parser that results in an error.
    *
    * @param msg The error message describing the failure.
    * @return A parser that always fails with the specified error message.
    */
-  def err(msg: String) = Parser{ in => Error(msg, in) }
+  def err(msg: String)(implicit loc: ParserLocation) = Parser ({ in => Error(msg, in) }, loc)
 
   /** A parser that always succeeds.
    *
    * @param v The result for the parser
    * @return A parser that always succeeds, with the given result `v`
    */
-  def success[T](v: T) = Parser{ in => Success(v, in) }
+  def success[T](v: T)(implicit loc: ParserLocation) = Parser ({ in => Success(v, in) }, loc)
 
   /** A helper method that turns a `Parser` into one that will
    *  print debugging information to stdout before and after
    *  being applied.
    */
-  def log[T](p: => Parser[T])(name: String): Parser[T] = Parser{ in =>
+  def log[T](p: => Parser[T])(name: String)(implicit loc: ParserLocation): Parser[T] = Parser ({ in =>
     println("trying "+ name +" at "+ in)
     val r = p(in)
     println(name +" --> "+ r)
     r
-  }
+  }, loc)
 
   /** A parser generator for repetitions.
    *
@@ -745,7 +739,7 @@ trait Parsers extends AnyRef with debugging.DebugableParsers {
    * @return A parser that returns a list of results produced by repeatedly applying `p` to the input
    *        (and that only succeeds if `p` matches at least once).
    */
-  def rep1[T](p: => Parser[T]): Parser[List[T]] = rep1(p, p)
+  def rep1[T](p: => Parser[T])(implicit loc: ParserLocation): Parser[List[T]] = rep1(p, p)
 
   /** A parser generator for non-empty repetitions.
    *
@@ -759,7 +753,7 @@ trait Parsers extends AnyRef with debugging.DebugableParsers {
    *         repeatedly `p` to the input (it only succeeds if `f` matches).
    */
   @migration("The `p0` call-by-name arguments is evaluated at most once per constructed Parser object, instead of on every need that arises during parsing.", "2.9.0")
-  def rep1[T](first: => Parser[T], p0: => Parser[T]): Parser[List[T]] = Parser { in =>
+  def rep1[T](first: => Parser[T], p0: => Parser[T])(implicit loc0: ParserLocation): Parser[List[T]] = Parser ({ in =>
     lazy val p = p0 // lazy argument
     val elems = new ListBuffer[T]
 
@@ -778,7 +772,7 @@ trait Parsers extends AnyRef with debugging.DebugableParsers {
       case Success(x, rest) => elems += x ; continue(rest)
       case ns: NoSuccess    => ns
     }
-  }
+  }, loc0)
 
   /** A parser generator for a specified number of repetitions.
    *
@@ -790,8 +784,8 @@ trait Parsers extends AnyRef with debugging.DebugableParsers {
    * @return    A parser that returns a list of results produced by repeatedly applying `p` to the input
    *        (and that only succeeds if `p` matches exactly `n` times).
    */
-  def repN[T](num: Int, p: => Parser[T]): Parser[List[T]] =
-    if (num == 0) success(Nil) else Parser { in =>
+  def repN[T](num: Int, p: => Parser[T])(implicit loc: ParserLocation): Parser[List[T]] =
+    if (num == 0) success(Nil) else Parser ({ in =>
       val elems = new ListBuffer[T]
       val p0 = p    // avoid repeatedly re-evaluating by-name parser
 
@@ -803,7 +797,7 @@ trait Parsers extends AnyRef with debugging.DebugableParsers {
         }
 
       applyp(in)
-    }
+    }, loc)
 
   /** A parser generator for non-empty repetitions.
    *
@@ -817,9 +811,8 @@ trait Parsers extends AnyRef with debugging.DebugableParsers {
    *         (and that only succeeds if `p` matches at least once).
    *         The results of `p` are collected in a list. The results of `q` are discarded.
    */
-  def rep1sep[T](p : => Parser[T], q : => Parser[Any]): Parser[List[T]] = {
-    implicit val noloc = NoParserLocation
-    p ~ rep(q ~> p)(NoParserLocation) ^^ {case x~y => x::y}
+  def rep1sep[T](p : => Parser[T], q : => Parser[Any])(implicit loc: ParserLocation): Parser[List[T]] = {
+    p ~ rep(q ~> p) ^^ {case x~y => x::y}
   }
 
   /** A parser generator that, roughly, generalises the rep1sep generator so
@@ -833,7 +826,7 @@ trait Parsers extends AnyRef with debugging.DebugableParsers {
    * @param q a parser that parses the token(s) separating the elements, yielding a left-associative function that
    *          combines two elements into one
    */
-  def chainl1[T](p: => Parser[T], q: => Parser[(T, T) => T]): Parser[T]
+  def chainl1[T](p: => Parser[T], q: => Parser[(T, T) => T])(implicit loc: ParserLocation): Parser[T]
     = chainl1(p, p, q)
 
   /** A parser generator that, roughly, generalises the `rep1sep` generator
@@ -846,10 +839,9 @@ trait Parsers extends AnyRef with debugging.DebugableParsers {
    *          yielding a left-associative function that combines two elements
    *          into one
    */
-  def chainl1[T, U](first: => Parser[T], p: => Parser[U], q: => Parser[(T, U) => T]): Parser[T]
+  def chainl1[T, U](first: => Parser[T], p: => Parser[U], q: => Parser[(T, U) => T])(implicit loc: ParserLocation): Parser[T]
     = {
-      implicit val noloc = NoParserLocation
-      first ~ rep(q ~ p)(NoParserLocation) ^^ {
+      first ~ rep(q ~ p) ^^ {
         case x ~ xs => xs.foldLeft(x: T){case (a, f ~ b) => f(a, b)} // x's type annotation is needed to deal with changed type inference due to SI-5189
       }
   }
@@ -867,10 +859,9 @@ trait Parsers extends AnyRef with debugging.DebugableParsers {
    * @param combine the "last" (left-most) combination function to be applied
    * @param first   the "first" (right-most) element to be combined
    */
-  def chainr1[T, U](p: => Parser[T], q: => Parser[(T, U) => U], combine: (T, U) => U, first: U): Parser[U]
+  def chainr1[T, U](p: => Parser[T], q: => Parser[(T, U) => U], combine: (T, U) => U, first: U)(implicit loc: ParserLocation): Parser[U]
     = {
-      implicit val noloc = NoParserLocation
-      p ~ rep(q ~ p)(NoParserLocation) ^^ {
+      p ~ rep(q ~ p) ^^ {
         case x ~ xs => (new ~(combine, x) :: xs).foldRight(first){case (f ~ a, b) => f(a, b)}
       }
   }
@@ -889,12 +880,12 @@ trait Parsers extends AnyRef with debugging.DebugableParsers {
   /** Wrap a parser so that its failures and errors become success and
    *  vice versa -- it never consumes any input.
    */
-  def not[T](p: => Parser[T]): Parser[Unit] = Parser { in =>
+  def not[T](p: => Parser[T])(implicit loc: ParserLocation): Parser[Unit] = Parser ({ in =>
     p(in) match {
       case Success(_, _)  => Failure("Expected failure", in)
       case _              => Success((), in)
     }
-  }
+  }, loc)
 
   /** A parser generator for guard expressions. The resulting parser will
    *  fail or succeed just like the one given as parameter but it will not
@@ -904,12 +895,12 @@ trait Parsers extends AnyRef with debugging.DebugableParsers {
    * @return A parser that returns success if and only if `p` succeeds but
    *         never consumes any input
    */
-  def guard[T](p: => Parser[T]): Parser[T] = Parser { in =>
+  def guard[T](p: => Parser[T])(implicit loc: ParserLocation): Parser[T] = Parser ({ in =>
     p(in) match{
       case s@ Success(s1,_) => Success(s1, in)
       case e => e
     }
-  }
+  }, loc)
 
   /** `positioned` decorates a parser's result with the start position of the
    *  input it consumed.
@@ -919,12 +910,12 @@ trait Parsers extends AnyRef with debugging.DebugableParsers {
    *         result with the start position of the input it consumed,
    *         if it didn't already have a position.
    */
-  def positioned[T <: Positional](p: => Parser[T]): Parser[T] = Parser { in =>
+  def positioned[T <: Positional](p: => Parser[T])(implicit loc: ParserLocation): Parser[T] = Parser ({ in =>
     p(in) match {
       case Success(t, in1) => Success(if (t.pos == NoPosition) t setPos in.pos else t, in1)
       case ns: NoSuccess => ns
     }
-  }
+  }, loc)
 
   /** A parser generator delimiting whole phrases (i.e. programs).
    *

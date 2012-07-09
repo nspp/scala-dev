@@ -35,7 +35,8 @@ trait Promise[T] {
    *
    *  $promiseCompletion
    */
-  def complete(result: Either[Throwable, T]): this.type = if (tryComplete(result)) this else throwCompleted
+  def complete(result: Either[Throwable, T]): this.type =
+    if (tryComplete(result)) this else throw new IllegalStateException("Promise already completed.")
 
   /** Tries to complete the promise with either a value or the exception.
    *
@@ -50,19 +51,26 @@ trait Promise[T] {
    *  @return   This promise
    */
   final def completeWith(other: Future[T]): this.type = {
-    other onComplete {
-      this complete _
-    }
+    other onComplete { this complete _ }
+    this
+  }
+  
+  /** Attempts to complete this promise with the specified future, once that future is completed.
+   *
+   *  @return   This promise
+   */
+  final def tryCompleteWith(other: Future[T]): this.type = {
+    other onComplete { this tryComplete _ }
     this
   }
 
   /** Completes the promise with a value.
    *
-   *  @param value    The value to complete the promise with.
+   *  @param v    The value to complete the promise with.
    *
    *  $promiseCompletion
    */
-  def success(v: T): this.type = if (trySuccess(v)) this else throwCompleted
+  def success(v: T): this.type = complete(Right(v))
 
   /** Tries to complete the promise with a value.
    *
@@ -80,7 +88,7 @@ trait Promise[T] {
    *
    *  $promiseCompletion
    */
-  def failure(t: Throwable): this.type = if (tryFailure(t)) this else throwCompleted
+  def failure(t: Throwable): this.type = complete(Left(t))
 
   /** Tries to complete the promise with an exception.
    *
@@ -89,18 +97,6 @@ trait Promise[T] {
    *  @return    If the promise has already been completed returns `false`, or `true` otherwise.
    */
   def tryFailure(t: Throwable): Boolean = tryComplete(Left(t))
-
-  /** Wraps a `Throwable` in an `ExecutionException` if necessary. TODO replace with `resolver` from scala.concurrent
-   *
-   *  $allowedThrowables
-   */
-  protected def wrap(t: Throwable): Throwable = t match {
-    case t: Throwable if isFutureThrowable(t) => t
-    case _ => new ExecutionException(t)
-  }
-
-  private def throwCompleted = throw new IllegalStateException("Promise already completed.")
-
 }
 
 
@@ -110,7 +106,7 @@ object Promise {
   /** Creates a promise object which can be completed with a value.
    *  
    *  @tparam T       the type of the value in the promise
-   *  @param execctx  the execution context on which the promise is created on
+   *  @param executor the execution context on which the promise is created on
    *  @return         the newly created `Promise` object
    */
   def apply[T]()(implicit executor: ExecutionContext): Promise[T] = new impl.Promise.DefaultPromise[T]()
@@ -118,7 +114,7 @@ object Promise {
   /** Creates an already completed Promise with the specified exception.
    *  
    *  @tparam T       the type of the value in the promise
-   *  @param execctx  the execution context on which the promise is created on
+   *  @param executor the execution context on which the promise is created on
    *  @return         the newly created `Promise` object
    */
   def failed[T](exception: Throwable)(implicit executor: ExecutionContext): Promise[T] = new impl.Promise.KeptPromise[T](Left(exception))
@@ -126,7 +122,7 @@ object Promise {
   /** Creates an already completed Promise with the specified result.
    *  
    *  @tparam T       the type of the value in the promise
-   *  @param execctx  the execution context on which the promise is created on
+   *  @param executor the execution context on which the promise is created on
    *  @return         the newly created `Promise` object
    */
   def successful[T](result: T)(implicit executor: ExecutionContext): Promise[T] = new impl.Promise.KeptPromise[T](Right(result))

@@ -127,14 +127,15 @@ trait RegexParsers extends Parsers {
    *         start position of the input it consumed after whitespace has been skipped, if it
    *         didn't already have a position.
    */
-  override def positioned[T <: Positional](p: => Parser[T]): Parser[T] = {
+  override def positioned[T <: Positional](p: => Parser[T])(implicit loc: ParserLocation): Parser[T] = {
     val pp = super.positioned(p)
-    new Parser[T] with NoLocationParser[T] {
+    new Parser[T] {
       def consume(in: Input) = {
         val offset = in.offset
         val start = handleWhiteSpace(in.source, offset)
         pp(in.drop (start - offset))
       }
+      val location: ParserLocation = loc
     }
   }
 

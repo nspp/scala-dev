@@ -6,7 +6,8 @@
 package scala.reflect
 package internal
 
-import scala.collection.{ mutable, immutable }
+import scala.collection.{ mutable, immutable, generic }
+import generic.Clearable
 import scala.ref.WeakReference
 import mutable.ListBuffer
 import Flags._
@@ -97,7 +98,7 @@ trait Types extends api.Types { self: SymbolTable =>
    */
   private final val propagateParameterBoundsToTypeVars = sys.props contains "scalac.debug.prop-constraints"
 
-  protected val enableTypeVarExperimentals = settings.Xexperimental.value || !settings.XoldPatmat.value
+  protected val enableTypeVarExperimentals = settings.Xexperimental.value
 
   /** Empty immutable maps to avoid allocations. */
   private val emptySymMap   = immutable.Map[Symbol, Symbol]()
@@ -115,7 +116,7 @@ trait Types extends api.Types { self: SymbolTable =>
 
   protected def newUndoLog = new UndoLog
 
-  class UndoLog {
+  class UndoLog extends Clearable {
     private type UndoPairs = List[(TypeVar, TypeConstraint)]
     private var log: UndoPairs = List()
 
@@ -139,7 +140,7 @@ trait Types extends api.Types { self: SymbolTable =>
       log ::= ((tv, tv.constr.cloneInternal))
     }
 
-    private[scala] def clear() {
+    def clear() {
       if (settings.debug.value)
         self.log("Clearing " + log.size + " entries from the undoLog.")
 
@@ -1609,12 +1610,26 @@ trait Types extends api.Types { self: SymbolTable =>
     override def typeConstructor =
       copyRefinedType(this, parents map (_.typeConstructor), decls)
 
-    /* MO to AM: This is probably not correct
-     * If they are several higher-kinded parents with different bounds we need
-     * to take the intersection of their bounds
-     */
-    override def normalize = {
-      if (isHigherKinded) {
+    final override def normalize: Type =
+      if (phase.erasedTypes) normalizeImpl
+      else {
+        if (normalized eq null) normalized = normalizeImpl
+        normalized
+      }
+
+    private var normalized: Type = _
+    private def normalizeImpl = {
+      // TODO see comments around def intersectionType and def merge
+      def flatten(tps: List[Type]): List[Type] = tps flatMap { case RefinedType(parents, ds) if ds.isEmpty => flatten(parents) case tp => List(tp) }
+      val flattened = flatten(parents).distinct
+      if (decls.isEmpty && flattened.tail.isEmpty) {
+        flattened.head
+      } else if (flattened != parents) {
+        refinedType(flattened, if (typeSymbol eq NoSymbol) NoSymbol else typeSymbol.owner, decls, NoPosition)
+      } else if (isHigherKinded) {
+        // MO to AM: This is probably not correct
+        // If they are several higher-kinded parents with different bounds we need
+        // to take the intersection of their bounds
         typeFun(
           typeParams,
           RefinedType(
@@ -1624,8 +1639,7 @@ trait Types extends api.Types { self: SymbolTable =>
             },
             decls,
             typeSymbol))
-      }
-      else super.normalize
+      } else super.normalize
     }
 
     /** A refined type P1 with ... with Pn { decls } is volatile if
@@ -2548,8 +2562,8 @@ trait Types extends api.Types { self: SymbolTable =>
     override def prefix = maybeRewrap(underlying.prefix)
     override def typeArgs = underlying.typeArgs map maybeRewrap
     override def params = underlying.params mapConserve { param =>
-      val tpe1 = rewrap(param.tpe)
-      if (tpe1 eq param.tpe) param else param.cloneSymbol.setInfo(tpe1)
+      val tpe1 = rewrap(param.tpeHK)
+      if (tpe1 eq param.tpeHK) param else param.cloneSymbol.setInfo(tpe1)
     }
     override def paramTypes = underlying.paramTypes map maybeRewrap
     override def instantiateTypeParams(formals: List[Symbol], actuals: List[Type]) = {
@@ -2648,6 +2662,10 @@ trait Types extends api.Types { self: SymbolTable =>
       (alternatives map pre.memberType).mkString("", " <and> ", "")
     override def kind = "OverloadedType"
   }
+
+  def overloadedType(pre: Type, alternatives: List[Symbol]): Type =
+    if (alternatives.tail.isEmpty) pre memberType alternatives.head
+    else OverloadedType(pre, alternatives)
 
   /** A class remembering a type instantiation for some a set of overloaded
    *  polymorphic symbols.
@@ -2898,6 +2916,7 @@ trait Types extends api.Types { self: SymbolTable =>
     // existential.
     // were we compared to skolems at a higher skolemizationLevel?
     // EXPERIMENTAL: value will not be considered unless enableTypeVarExperimentals is true
+    // see SI-5729 for why this is still experimental
     private var encounteredHigherLevel = false
     private def shouldRepackType = enableTypeVarExperimentals && encounteredHigherLevel
 
@@ -3049,7 +3068,8 @@ trait Types extends api.Types { self: SymbolTable =>
     }
 
     def registerTypeEquality(tp: Type, typeVarLHS: Boolean): Boolean = {
-      //println("regTypeEq: "+(safeToString, debugString(tp), typeVarLHS)) //@MDEBUG
+//      println("regTypeEq: "+(safeToString, debugString(tp), tp.getClass, if (typeVarLHS) "in LHS" else "in RHS", if (suspended) "ZZ" else if (constr.instValid) "IV" else "")) //@MDEBUG
+//      println("constr: "+ constr)
       def checkIsSameType(tp: Type) =
         if(typeVarLHS) constr.inst =:= tp
         else           tp          =:= constr.inst
@@ -3106,10 +3126,7 @@ trait Types extends api.Types { self: SymbolTable =>
         tparams map (_.defString) mkString("[", ",", "]")
       case _ => ""
     }
-    def originName = {
-      val name = origin.typeSymbolDirect.decodedName
-      if (name contains "_$") origin.typeSymbolDirect.decodedName else name
-    }
+    def originName = origin.typeSymbolDirect.decodedName
     def originLocation = {
       val sym  = origin.typeSymbolDirect
       val encl = sym.owner.logicallyEnclosingMember
@@ -3127,7 +3144,7 @@ trait Types extends api.Types { self: SymbolTable =>
     protected def typeVarString = originName
     override def safeToString = (
       if ((constr eq null) || (constr.inst eq null)) "TVar<" + originName + "=null>"
-      else if (constr.inst ne NoType) "" + constr.inst
+      else if (constr.inst ne NoType) "=?" + constr.inst
       else (if(untouchable) "!?" else "?") + levelString + originName
     )
     override def kind = "TypeVar"
@@ -3261,8 +3278,10 @@ trait Types extends api.Types { self: SymbolTable =>
   final class UniqueErasedValueType(sym: Symbol) extends ErasedValueType(sym) with UniqueType
 
   object ErasedValueType {
-    def apply(sym: Symbol): Type =
+    def apply(sym: Symbol): Type = {
+      assert(sym ne NoSymbol, "ErasedValueType cannot be NoSymbol")
       unique(new UniqueErasedValueType(sym))
+    }
   }
 
   /** A class representing an as-yet unevaluated type.
@@ -3320,7 +3339,7 @@ trait Types extends api.Types { self: SymbolTable =>
     if (phase.erasedTypes)
       if (parents.isEmpty) ObjectClass.tpe else parents.head
     else {
-      val clazz = owner.newRefinementClass(NoPosition)
+      val clazz = owner.newRefinementClass(pos) // TODO: why were we passing in NoPosition instead of pos?
       val result = RefinedType(parents, decls, clazz)
       clazz.setInfo(result)
       result
@@ -4904,7 +4923,23 @@ trait Types extends api.Types { self: SymbolTable =>
     override def hashCode = tp1.hashCode * 41 + tp2.hashCode
     override def equals(other: Any) = other match {
       case stp: SubTypePair =>
-        (tp1 =:= stp.tp1) && (tp2 =:= stp.tp2)
+        // suspend TypeVars in types compared by =:=,
+        // since we don't want to mutate them simply to check whether a subtype test is pending
+        // in addition to making subtyping "more correct" for type vars,
+        // it should avoid the stackoverflow that's been plaguing us (https://groups.google.com/d/topic/scala-internals/2gHzNjtB4xA/discussion)
+        // this method is only called when subtyping hits a recursion threshold (subsametypeRecursions >= LogPendingSubTypesThreshold)
+        @inline def suspend(tp: Type) =
+          if (tp.isGround) null else suspendTypeVarsInType(tp)
+        @inline def revive(suspension: List[TypeVar]) =
+          if (suspension ne null) suspension foreach (_.suspended = false)
+
+        val suspensions = Array(tp1, stp.tp1, tp2, stp.tp2) map suspend
+
+        val sameTypes = (tp1 =:= stp.tp1) && (tp2 =:= stp.tp2)
+
+        suspensions foreach revive
+
+        sameTypes
       case _ =>
         false
     }
@@ -5702,14 +5737,15 @@ trait Types extends api.Types { self: SymbolTable =>
     val info1 = tp1.memberInfo(sym1)
     val info2 = tp2.memberInfo(sym2).substThis(tp2.typeSymbol, tp1)
     //System.out.println("specializes "+tp1+"."+sym1+":"+info1+sym1.locationString+" AND "+tp2+"."+sym2+":"+info2)//DEBUG
-    sym2.isTerm && (info1 <:< info2) /*&& (!sym2.isStable || sym1.isStable) */ ||
-    sym2.isAbstractType && {
-      val memberTp1 = tp1.memberType(sym1)
-      // println("kinds conform? "+(memberTp1, tp1, sym2, kindsConform(List(sym2), List(memberTp1), tp2, sym2.owner)))
-      info2.bounds.containsType(memberTp1) &&
-      kindsConform(List(sym2), List(memberTp1), tp1, sym1.owner)
-    } ||
-    sym2.isAliasType && tp2.memberType(sym2).substThis(tp2.typeSymbol, tp1) =:= tp1.memberType(sym1) //@MAT ok
+    (    sym2.isTerm && (info1 <:< info2) && (!sym2.isStable || sym1.isStable)
+      || sym2.isAbstractType && {
+            val memberTp1 = tp1.memberType(sym1)
+            // println("kinds conform? "+(memberTp1, tp1, sym2, kindsConform(List(sym2), List(memberTp1), tp2, sym2.owner)))
+            info2.bounds.containsType(memberTp1) &&
+            kindsConform(List(sym2), List(memberTp1), tp1, sym1.owner)
+        }
+      || sym2.isAliasType && tp2.memberType(sym2).substThis(tp2.typeSymbol, tp1) =:= tp1.memberType(sym1) //@MAT ok
+    )
   }
 
   /** A function implementing `tp1` matches `tp2`. */
@@ -5884,8 +5920,8 @@ trait Types extends api.Types { self: SymbolTable =>
         foreach3(tvars, tparams, variances)((tvar2, tparam2, variance2) => {
           val ok = (tparam2 != tparam) && (
                (bound contains tparam2)
-            ||  up && (tparam2.info.bounds.lo =:= tparam.tpe)
-            || !up && (tparam2.info.bounds.hi =:= tparam.tpe)
+            ||  up && (tparam2.info.bounds.lo =:= tparam.tpeHK)
+            || !up && (tparam2.info.bounds.hi =:= tparam.tpeHK)
           )
           if (ok) {
             if (tvar2.constr.inst eq null) cyclic = true
@@ -5899,7 +5935,7 @@ trait Types extends api.Types { self: SymbolTable =>
             for (tparam2 <- tparams)
               tparam2.info.bounds.lo.dealias match {
                 case TypeRef(_, `tparam`, _) =>
-                  tvar addHiBound tparam2.tpe.instantiateTypeParams(tparams, tvars)
+                  tvar addHiBound tparam2.tpeHK.instantiateTypeParams(tparams, tvars)
                 case _ =>
               }
           } else {
@@ -5909,7 +5945,7 @@ trait Types extends api.Types { self: SymbolTable =>
             for (tparam2 <- tparams)
               tparam2.info.bounds.hi.dealias match {
                 case TypeRef(_, `tparam`, _) =>
-                  tvar addLoBound tparam2.tpe.instantiateTypeParams(tparams, tvars)
+                  tvar addLoBound tparam2.tpeHK.instantiateTypeParams(tparams, tvars)
                 case _ =>
               }
           }
@@ -6713,6 +6749,11 @@ trait Types extends api.Types { self: SymbolTable =>
     case TypeRef(_, sym, _)                       => !isPrimitiveValueClass(sym)
     case _                                        => false
   }
+  // Add serializable to a list of parents, unless one of them already is
+  def addSerializable(ps: Type*): List[Type] = (
+    if (ps exists (_ <:< SerializableClass.tpe)) ps.toList
+    else (ps :+ SerializableClass.tpe).toList
+  )
 
   def objToAny(tp: Type): Type =
     if (!phase.erasedTypes && tp.typeSymbol == ObjectClass) AnyClass.tpe
