@@ -158,6 +158,7 @@ trait LocationAwareParser {
   object Dispatcher {
 
     var go = default(_)
+    var level = 0
 
     // If we recieve a
     // ~ Then change dispatcher to And
@@ -180,14 +181,14 @@ trait LocationAwareParser {
     // ~ then build the final 'or' and start a new count for 'and'
     // "failed" or "parsed" then go to failed/parsed dispatcher
     //   else return to the default dispatch
-    def or(k : Int, initlvl : Int, first : OrParser)(which : ParserKind) : Unit = which match {
-      case OrParser(_,loc) if eq(loc, initlvl)  => go = or(k+1, getLevel(loc), first)(_)
+    def or(k : Int, d : Int, first : OrParser)(which : ParserKind) : Unit = which match {
+      case OrParser(_,loc) if depth(loc) == d   => go = or(k+1, d, first)_
       case WordParser(_,loc)                    => Builder.or(k, first); set(which); Builder.word(loc, which)
-      case _                                    => Builder.or(k, first); set(which)
+      case _                                    => println("d: " + d); Builder.or(k, first); set(which)
     }
 
-    def and(k : Int, initlvl : Int, first : AndParser)(which : ParserKind) : Unit = which match {
-      case AndParser(_,loc) if eq(loc, initlvl) => go = and(k+1, getLevel(loc), first)(_)
+    def and(k : Int, d : Int, first : AndParser)(which : ParserKind) : Unit = which match {
+      case AndParser(_,loc) if depth(loc) == d  => go = and(k+1, d, first)_
       case WordParser(_,loc)                    => Builder.and(k, first); set(which); Builder.word(loc, which)
       case _                                    => Builder.and(k, first); set(which)
     }
@@ -206,18 +207,22 @@ trait LocationAwareParser {
 
     // Assigns the next dispatch function to the dispatch variable with appropriate parameters    
     def set(which: ParserKind): Unit = which match {
-      case OrParser(name, loc)                  => go = or(2, getLevel(loc), OrParser(name, loc))(_)
-      case AndParser(name, loc)                 => go = and(2, getLevel(loc), AndParser(name, loc))(_)
+      case OrParser(name, loc)                  => go = or(2, depth(loc), OrParser(name, loc))_
+      case AndParser(name, loc)                 => go = and(2, depth(loc), AndParser(name, loc))_
       case FailureParser(msg)                   => go = failed(_); Builder.fail(msg);
       case SuccessParser(_)                     => go = parsed(_); Builder.parse;
       case _                                    => go = default(_)
     }
 
-    def eq(loc : ParserLocation, lvl : Int) : Boolean = (getLevel(loc) == lvl)
+    def eq(lvl : Int) : Boolean = (getLevel == lvl)
 
-    def getLevel(loc : ParserLocation) : Int = loc.outer match {
+    def incLevel : Unit = { level = level + 1 }
+    def decLevel : Unit = { level = level - 1 }
+    def getLevel : Int = level
+
+    def depth(loc : ParserLocation) : Int = loc.outer match {
       case null     => 0
-      case method   => getLevel(loc.outer) + 1;
+      case method   => depth(method) + 1
     }
   }
 
@@ -263,35 +268,41 @@ trait DebugableParsers extends LocationAwareParser {
     def enterRes(in: Input): Unit = {
       if (debug && location != NoParserLocation) {
 
-        println("[Name] " + name)
+        println("Name:  \t " + name)
         println("Method:\t" + printMethod(location))
-        println("")
 
 
         // Redefine name for easier reading
         if (name == "") name = "Undefined"
 
         // Call the dispatcher with name and level
+
+        Dispatcher.incLevel
         Dispatcher.go(toParserKind(name, location))
+        
+        println("Level: \t" + Dispatcher.getLevel)
+        println("")
 
       }
-      else {
-        println("NoParserLocation with name: " + name)
-      }
+      /* else { */
+      /*   println("NoParserLocation with name: " + name) */
+      /* } */
     }
 
     def exitRes[U >: T](res: ParseResult[U]): Unit = {
       if (debug && location != NoParserLocation) {
 
+        Dispatcher.decLevel
         res match {
           case Success(res0, next) =>
-            //println("Matched: " + res)
+            println("Matched: " + res)
             Dispatcher.go(SuccessParser(res0.toString))
           case NoSuccess(msg, next) => {
-            //println("Failed: " + msg)
+            println("Failed: " + msg)
             Dispatcher.go(FailureParser(msg))
           }
         }
+        println("Level: \t" + Dispatcher.getLevel)
       }
     }
 
