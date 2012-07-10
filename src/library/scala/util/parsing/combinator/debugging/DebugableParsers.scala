@@ -40,6 +40,19 @@ trait LocationAwareParser {
       println("")
     }
 
+    def tunnel : Unit = {
+      // Construct new stick
+      var item = Branch( AndOrTree.emptyList(1), nextLeaf.changeState(Parsing), AndType)
+      // Replace head with stick
+      z = z.replaceHeadWith(item).get
+
+      // If z is root, just replace current item
+      if (z.isRoot) z= z.replaceWith(item)
+      // Else, go down and replace
+      else z = z.down.get.replaceWith(item)
+      // Now replace head with new item and enter
+    }
+
     // Replace first element of list with Or( Word(), Word(), ... , Word() );
     // k is the number of Words
     def or(k: Int, p : OrParser) : Unit = {
@@ -166,13 +179,9 @@ trait LocationAwareParser {
     // "failed" or "parsed" then go to failed/parsed dispatcher
     //   else create a Word from the current location and continue with default dispatch
     def default(which : ParserKind) : Unit = which match { 
-      case AndParser(_,_)                       => set(which)
-      case OrParser(_,_)                        => set(which)
       case IgnoredParser(repr,_)                => println("Ignoring " + repr)
-      case WordParser(_,loc)                    => Builder.word(loc, which)
       case OtherParser(name,loc)                => Builder.and(1, AndParser(name, loc))
-      case SuccessParser(_)                     => set(which)
-      case FailureParser(_)                     => set(which)
+      case _                                    => set(which)
     }
 
     // If we recieve a
@@ -183,25 +192,21 @@ trait LocationAwareParser {
     //   else return to the default dispatch
     def or(k : Int, d : Int, first : OrParser)(which : ParserKind) : Unit = which match {
       case OrParser(_,loc) if depth(loc) == d   => go = or(k+1, d, first)_
-      case WordParser(_,loc)                    => Builder.or(k, first); set(which); Builder.word(loc, which)
-      case _                                    => println("d: " + d); Builder.or(k, first); set(which)
+      case _                                    => Builder.or(k, first); set(which)
     }
 
     def and(k : Int, d : Int, first : AndParser)(which : ParserKind) : Unit = which match {
       case AndParser(_,loc) if depth(loc) == d  => go = and(k+1, d, first)_
-      case WordParser(_,loc)                    => Builder.and(k, first); set(which); Builder.word(loc, which)
       case _                                    => Builder.and(k, first); set(which)
     }
   
     def failed(which : ParserKind) : Unit = which match {
       case FailureParser(_)                     => {} // Continue as usual
-      case WordParser(_,loc)                    => set(which); Builder.word(loc, which)
       case _                                    => set(which)
     }
 
     def parsed(which : ParserKind) : Unit = which match {
       case SuccessParser(_)                     => {} // Continue as usual
-      case WordParser(_,loc)                    => set(which); Builder.word(loc, which)
       case _                                    => set(which)
     }
 
@@ -211,8 +216,15 @@ trait LocationAwareParser {
       case AndParser(name, loc)                 => go = and(2, depth(loc), AndParser(name, loc))_
       case FailureParser(msg)                   => go = failed(_); Builder.fail(msg);
       case SuccessParser(_)                     => go = parsed(_); Builder.parse;
+      case WordParser(_,loc)                    => go = word(level)_; Builder.word(loc, which)
       case _                                    => go = default(_)
     }
+
+    def word(l : Int)(which : ParserKind) : Unit = which match { 
+      case WordParser(_,loc) if l != level      => Builder.tunnel; Builder.word(loc, which)
+      case _                                    => set(which)
+    }
+
 
     def eq(lvl : Int) : Boolean = (getLevel == lvl)
 
