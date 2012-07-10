@@ -136,7 +136,23 @@ case class AndOrZipper(tree: AndOrTree, breadCrumbs: List[AndOrFocus]) {
   override def toString : String = {
     z.safeMove(_.down)
      .changeLeaf({case Leaf(pos, name,status) => Leaf(pos, name + "\t <<",status)})
-     .topMost.leftMost.tree.toString
+     .topMost.leftMost.tree.toString// + "\n\n" + parserPos
   }
+
+  def parserPos : String = z match {
+    case AndOrZipper(Branch(_, Leaf(loc, _, _), _), _)  => getFileDetails(loc)
+    case AndOrZipper(Word(Leaf(loc, _, _)),_)          => getFileDetails(loc)
+  }
+
+  def getFileDetails(loc : ParserLocation) : String = {
+    import scala.io.Source._
+    println(new java.io.File(".").getAbsolutePath)
+    println(loc.fileName)
+
+    val lines = fromFile(loc.fileName).getLines
+    val segment = lines.drop(loc.line-1).take(3)
+    return segment.toString
+  }
+
 
 }

@@ -173,23 +173,17 @@ trait LocationAwareParser {
     var go = default(_)
     var level = 0
 
-    // If we recieve a
-    // ~ Then change dispatcher to And
-    // | Then change dispatcher to Or
-    // "failed" or "parsed" then go to failed/parsed dispatcher
-    //   else create a Word from the current location and continue with default dispatch
     def default(which : ParserKind) : Unit = which match { 
       case IgnoredParser(repr,_)                => println("Ignoring " + repr)
       case OtherParser(name,loc)                => Builder.and(1, AndParser(name, loc))
       case _                                    => set(which)
     }
 
-    // If we recieve a
-    // | and the level is the same, then add one to the count and continue
-    // | and the level is different, then build the final 'or', and start a new count
-    // ~ then build the final 'or' and start a new count for 'and'
-    // "failed" or "parsed" then go to failed/parsed dispatcher
-    //   else return to the default dispatch
+    def word(l : Int)(which : ParserKind) : Unit = which match { 
+      case WordParser(_,loc) if l != level      => Builder.tunnel; Builder.word(loc, which)
+      case _                                    => set(which)
+    }
+
     def or(k : Int, d : Int, first : OrParser)(which : ParserKind) : Unit = which match {
       case OrParser(_,loc) if depth(loc) == d   => go = or(k+1, d, first)_
       case _                                    => Builder.or(k, first); set(which)
@@ -220,10 +214,6 @@ trait LocationAwareParser {
       case _                                    => go = default(_)
     }
 
-    def word(l : Int)(which : ParserKind) : Unit = which match { 
-      case WordParser(_,loc) if l != level      => Builder.tunnel; Builder.word(loc, which)
-      case _                                    => set(which)
-    }
 
 
     def eq(lvl : Int) : Boolean = (getLevel == lvl)
@@ -246,8 +236,8 @@ trait LocationAwareParser {
       case otherwise                              => false
     }
     s match {
-      case "|"                          => OrParser(s, loc)
-      case "~" | "~>" | "<~"            => AndParser(s, loc)
+      case "|" | "|||"                  => OrParser(s, loc)
+      case "~" | "~>" | "<~" | "~!"     => AndParser(s, loc)
       case "phrase"                     => OtherParser(s, loc)
       case other if ignore              => IgnoredParser(other, loc)
       case normal                       => WordParser(normal, loc)
