@@ -103,9 +103,9 @@ trait LocationAwareParser {
       // move to next
       z = z.next
 
-      //println(z.toString)
-      //println("")
-      //println("")
+      println(z.toString)
+      println("")
+      println("")
     }
 
     // In case a word has failed parsing, check if we should fail the parent too
@@ -134,9 +134,9 @@ trait LocationAwareParser {
       // Then step to next
       z = z.next
 
-      //println(z.toString)
-      //println("")
-      //println("")
+      println(z.toString)
+      println("")
+      println("")
     }
 
     // In case a word was parsed, check if we should parse the parent too
@@ -180,7 +180,7 @@ trait LocationAwareParser {
     }
 
     def word(l : Int)(which : ParserKind) : Unit = which match { 
-      case WordParser(_,loc) if l != level      => Builder.tunnel; Builder.word(loc, which)
+      case WordParser(_,loc) if l != level      => Builder.tunnel; set(which)
       case _                                    => set(which)
     }
 

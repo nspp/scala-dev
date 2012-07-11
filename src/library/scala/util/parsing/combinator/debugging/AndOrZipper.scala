@@ -147,7 +147,6 @@ case class AndOrZipper(tree: AndOrTree, breadCrumbs: List[AndOrFocus]) {
   def getFileDetails(loc : ParserLocation) : String = {
     import scala.io.Source._
     //println(new java.io.File(".").getAbsolutePath)
-    println(loc.fileName)
 
     val lines = fromFile(loc.fileName).getLines
     val segment = lines.drop(loc.line-2).take(3)
