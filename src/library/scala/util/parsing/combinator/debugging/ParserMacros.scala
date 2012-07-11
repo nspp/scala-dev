@@ -19,7 +19,7 @@ object ParserMacros {
     
     val rawTree: String = "[" + elem.toString + "||" + elem.getClass + "]"
     val DefDef(_, methodName, _, _, _, _) = c.enclosingMethod
-    val fileName = elem.pos.fileInfo.getName
+    val fileName = elem.pos.fileInfo.getAbsolutePath
     val line = elem.pos.line
     val charOffset = elem.pos.point
     val column = elem.pos.column
