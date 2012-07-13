@@ -216,7 +216,7 @@ trait LocationAwareParser {
 
 
 
-    def eq(lvl : Int) : Boolean = (getLevel == lvl)
+    def equalLevels(lvl : Int) : Boolean = (getLevel == lvl)
 
     def incLevel : Unit = { level = level + 1 }
     def decLevel : Unit = { level = level - 1 }
