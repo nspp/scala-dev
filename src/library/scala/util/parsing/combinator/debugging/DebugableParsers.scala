@@ -70,7 +70,7 @@ trait LocationAwareParser {
     }
 
     // Replace first element of list with And( Word(), Word(), ... , Word() );
-    // k is th enumber of Words
+    // k is the number of Words
     def and(k: Int, p : AndParser) : Unit = {
       // Update the status of the item before (if any)
       //z = updateLeftStatus
@@ -273,7 +273,6 @@ trait DebugableParsers extends LocationAwareParser {
         println("Name:  \t " + name)
         println("Method:\t" + printMethod(location))
 
-
         // Redefine name for easier reading
         if (name == "") name = "Undefined"
 
@@ -285,10 +284,10 @@ trait DebugableParsers extends LocationAwareParser {
         println("Level: \t" + Dispatcher.getLevel)
         println("")
 
+      } else {
+        if (java.lang.Boolean.getBoolean("parsec.debug"))
+          println("NoParserLocation with name: " + name)
       }
-      /* else { */
-      /*   println("NoParserLocation with name: " + name) */
-      /* } */
     }
 
     def exitRes[U >: T](res: ParseResult[U]): Unit = {
