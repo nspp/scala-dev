@@ -24,18 +24,6 @@ trait LocationAwareParser {
       // Set next
       nextLeaf = Leaf(loc, which.toString, Parsed)
 
-      // Enter controller
-      //Controller.enter(z)
-
-
-      //z = z.replaceHeadWith(item).get.next
-      // Update the status of the item before (if any)
-      //// z = updateLeftStatus
-
-      //// Construct new Item
-      //var item = Word(Leaf(loc, name, Unparsed))
-      //// Move to next position and Add word to zipper
-
       Builder.print
       println("(word)")
       println("")
@@ -248,7 +236,7 @@ trait LocationAwareParser {
 trait DebugableParsers extends LocationAwareParser with Controllers {
   self: Parsers =>
 
-  var contr : Controller = new Controller
+  var contr : Controller = null
   val debug: Boolean = true//(sys.props.getOrElse("parser.combinators.debug", "false") == "true")
 
   trait NoLocationParser[+T] {
@@ -281,18 +269,35 @@ trait DebugableParsers extends LocationAwareParser with Controllers {
         // Redefine name for easier reading
         if (name == "") name = "Undefined"
 
-        // Call the dispatcher with name and level
+        // Get parserKind
+        val p : ParserKind = toParserKind(name, location)
 
+        // Call the dispatcher with name and level
         Dispatcher.incLevel
-        Dispatcher.go(toParserKind(name, location))
+        Dispatcher.go(p)
 
         println("Level: \t" + Dispatcher.getLevel)
         println("")
+
+        // Check if we are taking a step
+        p match {
+          case WordParser(_,_)      => if (contr != null) step
+          case _                    => {}
+        }
 
       }
       /* else { */
       /*   println("NoParserLocation with name: " + name) */
       /* } */
+    }
+
+    def step : Unit = {
+      // Stop the controller
+      while (contr.state == null) contr.wait
+      // Once we resume, fill in some information
+      contr.state.field = Builder.z
+      // Notify the request that it has been filled
+      contr.state.notify
     }
 
     def exitRes[U >: T](res: ParseResult[U]): Unit = {
