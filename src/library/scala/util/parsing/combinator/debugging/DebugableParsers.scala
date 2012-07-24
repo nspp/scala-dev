@@ -9,6 +9,7 @@ import language.implicitConversions
 
 trait LocationAwareParser {
 
+
   object Builder {
 
     var z : AndOrZipper  = AndOrZipper.root
@@ -214,10 +215,6 @@ trait LocationAwareParser {
       case _                                    => go = default(_)
     }
 
-
-
-    def eq(lvl : Int) : Boolean = (getLevel == lvl)
-
     def incLevel : Unit = { level = level + 1 }
     def decLevel : Unit = { level = level - 1 }
     def getLevel : Int = level
@@ -248,9 +245,10 @@ trait LocationAwareParser {
 
 
 
-trait DebugableParsers extends LocationAwareParser {
+trait DebugableParsers extends LocationAwareParser with Controllers {
   self: Parsers =>
 
+  var contr : Controller = new Controller
   val debug: Boolean = true//(sys.props.getOrElse("parser.combinators.debug", "false") == "true")
 
   trait NoLocationParser[+T] {
@@ -258,6 +256,12 @@ trait DebugableParsers extends LocationAwareParser {
     val location: ParserLocation = NoParserLocation
   }
 
+  def registerController(c : Controller) : Unit = {
+    // Set controller
+    contr = c
+  }
+
+  def run(c : Controller) : Unit
 
   trait DebugableParser[+T] {
     selfP: Parser[T] =>
@@ -281,7 +285,7 @@ trait DebugableParsers extends LocationAwareParser {
 
         Dispatcher.incLevel
         Dispatcher.go(toParserKind(name, location))
-        
+
         println("Level: \t" + Dispatcher.getLevel)
         println("")
 

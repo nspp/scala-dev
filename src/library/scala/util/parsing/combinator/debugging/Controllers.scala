@@ -1,8 +1,36 @@
 package scala.util.parsing.combinator.debugging
 
 trait Controllers {
-  // A controller deciding what to do given the user input and parser
-  object Controller {
+
+  class Request {
+    var field : AndOrZipper = null
+  }
+
+  class Controller {
+    var state : Request = null
+    def step : Unit = println("Taking a step")
+  }
+
+/* For running we will do it roughly like this (not go through the 'main' method as we still have to add the controller): */
+/* val classToRun = Class.forName(nameOfTheTestClass, ....) */
+/* val methHandler = classToRun.getMethod("runTest", Array(classOf[parsec.Controller], Int, ....)) // runTest would be defined in Parsers and would add Controller argument to the list of listeners */
+/* val controller = new DebuggerHttpController() // this will serve as our way of communicating with the running debugger session */
+/* val test = classToRun.instance() */
+/* methHandler.invoke(test, Array(controller, 123, ...)) // run in another thread */
+
+/* // request comes from the user */
+/* req("step", id) */
+/* val contr = .... // lookup the controller used for initializing the test */
+/* // since you do not have (and do not want to have a direct access to nameOfTheTestClass) you have to get the info from controller */
+/* // controller will only expose enough information that you need (but it can also get you AndOrZipper, AndOrTree...) */
+/* val res = contr.makeStep() */
+/* // transform result etc.... */
+/* ... and return a proper response to the client. */
+
+
+
+  // A controller deciding what to do given the terminal input input and parser
+  trait TerminalController {
   
     var initialized : Boolean = false;
     var z : AndOrZipper = AndOrZipper.root
