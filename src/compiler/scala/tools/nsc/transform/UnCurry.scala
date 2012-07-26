@@ -418,23 +418,23 @@ abstract class UnCurry extends InfoTransform
         def sequenceToArray(tree: Tree) = {
           val toArraySym = tree.tpe member nme.toArray
           assert(toArraySym != NoSymbol)
-          def getArrayTag(tp: Type): Tree = {
-            val tag = localTyper.resolveArrayTag(tp, tree.pos)
+          def getClassTag(tp: Type): Tree = {
+            val tag = localTyper.resolveClassTag(tree.pos, tp)
             // Don't want bottom types getting any further than this (SI-4024)
-            if (tp.typeSymbol.isBottomClass) getArrayTag(AnyClass.tpe)
+            if (tp.typeSymbol.isBottomClass) getClassTag(AnyClass.tpe)
             else if (!tag.isEmpty) tag
-            else if (tp.bounds.hi ne tp) getArrayTag(tp.bounds.hi)
-            else localTyper.TyperErrorGen.MissingArrayTagError(tree, tp)
+            else if (tp.bounds.hi ne tp) getClassTag(tp.bounds.hi)
+            else localTyper.TyperErrorGen.MissingClassTagError(tree, tp)
           }
-          def traversableArrayTag(tpe: Type): Tree = {
+          def traversableClassTag(tpe: Type): Tree = {
             (tpe baseType TraversableClass).typeArgs match {
-              case targ :: _  => getArrayTag(targ)
+              case targ :: _  => getClassTag(targ)
               case _          => EmptyTree
             }
           }
           afterUncurry {
             localTyper.typedPos(pos) {
-              gen.mkMethodCall(tree, toArraySym, Nil, List(traversableArrayTag(tree.tpe)))
+              gen.mkMethodCall(tree, toArraySym, Nil, List(traversableClassTag(tree.tpe)))
             }
           }
         }
@@ -564,12 +564,6 @@ abstract class UnCurry extends InfoTransform
       }
 
       val sym = tree.symbol
-      // Take a pass looking for @specialize annotations and set all
-      // their SPECIALIZE flags for cheaper recognition.
-      if ((sym ne null) && (sym.isClass || sym.isMethod)) {
-        for (tp <- sym.typeParams ; if tp hasAnnotation SpecializedClass)
-          tp setFlag SPECIALIZED
-      }
       val result = (
         // TODO - settings.noassertions.value temporarily retained to avoid
         // breakage until a reasonable interface is settled upon.
@@ -688,7 +682,7 @@ abstract class UnCurry extends InfoTransform
 
       tree match {
         /* Some uncurry post transformations add members to templates.
-         * 
+         *
          * Members registered by `addMembers` for the current template are added
          * once the template transformation has finished.
          *
@@ -713,7 +707,7 @@ abstract class UnCurry extends InfoTransform
           addJavaVarargsForwarders(dd, flatdd)
 
         case Try(body, catches, finalizer) =>
-          if (opt.virtPatmat) { if(catches exists (cd => !treeInfo.isCatchCase(cd))) debugwarn("VPM BUG! illegal try/catch "+ catches); tree }
+          if (!settings.XoldPatmat.value) { if(catches exists (cd => !treeInfo.isCatchCase(cd))) debugwarn("VPM BUG! illegal try/catch "+ catches); tree }
           else if (catches forall treeInfo.isCatchCase) tree
           else {
             val exname = unit.freshTermName("ex$")

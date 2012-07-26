@@ -6,10 +6,10 @@ import scala.reflect.makro.Context
 
 object ParserMacros {
   def location(c: Context) = {
-    import c.mirror._
+    import c.universe._
     
-    val inscope = c.inferImplicitValue(staticClass("scala.util.parsing.combinator.debugging.ParserLocation").asType)
-    val outer = Expr[ParserLocation](if (!inscope.isEmpty) inscope else Literal(Constant(null)))
+    val inscope = c.inferImplicitValue(c.mirror.staticClass("scala.util.parsing.combinator.debugging.ParserLocation").asType)
+    val outer = c.Expr[ParserLocation](if (!inscope.isEmpty) inscope else Literal(Constant(null)))
 
     val elem: Tree = c.enclosingImplicits(0)._2 match {
       case v@Select(qual, name) =>
@@ -23,8 +23,8 @@ object ParserMacros {
     val line = elem.pos.line
     val charOffset = elem.pos.point
     val column = elem.pos.column
-    c.reify { SomeParserLocation(outer.eval,c.literal(charOffset).eval, c.literal(line).eval, c.literal(column).eval,
-                                 c.literal(fileName).eval, c.literal(methodName.toString).eval, c.literal(rawTree).eval) }
+    c.reify { SomeParserLocation(outer.splice, c.literal(charOffset).splice, c.literal(line).splice, c.literal(column).splice,
+                                 c.literal(fileName).splice, c.literal(methodName.toString).splice, c.literal(rawTree).splice) }
     //c.reify {NoParserLocation}
   }
   

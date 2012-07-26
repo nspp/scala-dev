@@ -5,7 +5,8 @@
 package scala.tools.nsc
 package ast.parser
 
-import scala.tools.nsc.util._
+import scala.tools.nsc.util.CharArrayReader
+import scala.reflect.internal.util._
 import scala.reflect.internal.Chars._
 import Tokens._
 import scala.annotation.switch
@@ -185,7 +186,7 @@ trait Scanners extends ScannersCommon {
       sepRegions.nonEmpty && sepRegions.head == STRINGLIT
 
     /** Are we directly in a multiline string interpolation expression?
-     *  @pre: inStringInterpolation
+     *  @pre inStringInterpolation
      */
     @inline private def inMultiLineInterpolation =
       inStringInterpolation && sepRegions.tail.nonEmpty && sepRegions.tail.head == STRINGPART
@@ -397,7 +398,7 @@ trait Scanners extends ScannersCommon {
              *  there a realistic situation where one would need it?
              */
             if (isDigit(ch)) {
-              if (opt.future) syntaxError("Non-zero numbers may not have a leading zero.")
+              if (settings.future.value) syntaxError("Non-zero numbers may not have a leading zero.")
               else deprecationWarning("Treating numbers with a leading zero as octal is deprecated.")
             }
             base = 8
@@ -974,9 +975,9 @@ trait Scanners extends ScannersCommon {
         val c = lookahead.getc()
 
         /** As of scala 2.11, it isn't a number unless c here is a digit, so
-         *  opt.future excludes the rest of the logic.
+         *  settings.future.value excludes the rest of the logic.
          */
-        if (opt.future && !isDigit(c))
+        if (settings.future.value && !isDigit(c))
           return setStrVal()
 
         val isDefinitelyNumber = (c: @switch) match {

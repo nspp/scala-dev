@@ -8,7 +8,7 @@ package ast
 
 import symtab._
 import reporters._
-import util.{Position, NoPosition}
+import scala.reflect.internal.util.{Position, NoPosition}
 import util.DocStrings._
 import scala.reflect.internal.Chars._
 import scala.collection.mutable
@@ -458,7 +458,7 @@ trait DocComments { self: Global =>
           case site :: sites1 => select(site.thisType, name, findIn(sites1))
         }
         val (classes, pkgs) = site.ownerChain.span(!_.isPackageClass)
-        findIn(classes ::: List(pkgs.head, definitions.RootClass))
+        findIn(classes ::: List(pkgs.head, rootMirror.RootClass))
       }
 
       def getType(_str: String, variable: String): Type = {
@@ -508,7 +508,7 @@ trait DocComments { self: Global =>
               val tpe = getType(repl.trim, alias.name.toString)
               if (tpe != NoType) tpe
               else {
-                val alias1 = alias.cloneSymbol(definitions.RootClass, alias.rawflags, newTypeName(repl))
+                val alias1 = alias.cloneSymbol(rootMirror.RootClass, alias.rawflags, newTypeName(repl))
                 typeRef(NoPrefix, alias1, Nil)
               }
             case None =>
@@ -522,7 +522,7 @@ trait DocComments { self: Global =>
 
       val substAliases = new TypeMap {
         def apply(tp: Type) = mapOver(tp) match {
-          case tp1 @ TypeRef(pre, sym, args) if (sym.name.length > 1 && sym.name(0) == '$') =>
+          case tp1 @ TypeRef(pre, sym, args) if (sym.name.length > 1 && sym.name.startChar == '$') =>
             subst(sym, aliases, aliasExpansions) match {
               case TypeRef(pre1, sym1, _) =>
                 typeRef(pre1, sym1, args)

@@ -10,13 +10,11 @@ package scala.concurrent.impl
 
 
 
-import java.util.concurrent.TimeUnit.{ NANOSECONDS, MILLISECONDS }
-import scala.concurrent.{ Awaitable, ExecutionContext, blocking, CanAwait, TimeoutException, ExecutionException }
-//import scala.util.continuations._
+import java.util.concurrent.TimeUnit.NANOSECONDS
+import scala.concurrent.{ ExecutionContext, CanAwait, OnCompleteRunnable, TimeoutException, ExecutionException }
 import scala.concurrent.util.Duration
-import scala.util
 import scala.annotation.tailrec
-//import scala.concurrent.NonDeterministic
+import scala.util.control.NonFatal
 
 
 
@@ -24,8 +22,23 @@ private[concurrent] trait Promise[T] extends scala.concurrent.Promise[T] with Fu
   def future: this.type = this
 }
 
+private class CallbackRunnable[T](val executor: ExecutionContext, val onComplete: (Either[Throwable, T]) => Any) extends Runnable with OnCompleteRunnable {
+  // must be filled in before running it
+  var value: Either[Throwable, T] = null
 
-object Promise {
+  override def run() = {
+    require(value ne null) // must set value to non-null before running!
+    try onComplete(value) catch { case NonFatal(e) => executor reportFailure e }
+  }
+
+  def executeWithValue(v: Either[Throwable, T]): Unit = {
+    require(value eq null) // can't complete it twice
+    value = v
+    executor.execute(this)
+  }
+}
+
+private[concurrent] object Promise {
 
   private def resolveEither[T](source: Either[Throwable, T]): Either[Throwable, T] = source match {
     case Left(t) => resolver(t)
@@ -42,8 +55,8 @@ object Promise {
   
   /** Default promise implementation.
    */
-  class DefaultPromise[T](implicit val executor: ExecutionContext) extends AbstractPromise with Promise[T] { self =>
-    updateState(null, Nil) // Start at "No callbacks" //FIXME switch to Unsafe instead of ARFU
+  class DefaultPromise[T] extends AbstractPromise with Promise[T] { self =>
+    updateState(null, Nil) // Start at "No callbacks"
     
     protected final def tryAwait(atMost: Duration): Boolean = {
       @tailrec
@@ -64,7 +77,6 @@ object Promise {
         } else
           isCompleted
       }
-      //FIXME do not do this if there'll be no waiting
       awaitUnsafe(if (atMost.isFinite) atMost.toNanos else Long.MaxValue)
     }
 
@@ -94,10 +106,10 @@ object Promise {
       val resolved = resolveEither(value)
       (try {
         @tailrec
-        def tryComplete(v: Either[Throwable, T]): List[Either[Throwable, T] => Unit] = {
+        def tryComplete(v: Either[Throwable, T]): List[CallbackRunnable[T]] = {
           getState match {
             case raw: List[_] =>
-              val cur = raw.asInstanceOf[List[Either[Throwable, T] => Unit]]
+              val cur = raw.asInstanceOf[List[CallbackRunnable[T]]]
               if (updateState(cur, v)) cur else tryComplete(v)
             case _ => null
           }
@@ -107,27 +119,21 @@ object Promise {
         synchronized { notifyAll() } //Notify any evil blockers
       }) match {
         case null             => false
-        case cs if cs.isEmpty => true
-        case cs               => Future.dispatchFuture(executor, () => cs.foreach(f => notifyCompleted(f, resolved))); true
+        case rs if rs.isEmpty => true
+        case rs               => rs.foreach(r => r.executeWithValue(resolved)); true
       }
     }
 
-    def onComplete[U](func: Either[Throwable, T] => U): Unit = {
+    def onComplete[U](func: Either[Throwable, T] => U)(implicit executor: ExecutionContext): Unit = {
+      val runnable = new CallbackRunnable[T](executor, func)
+
       @tailrec //Tries to add the callback, if already completed, it dispatches the callback to be executed
       def dispatchOrAddCallback(): Unit =
         getState match {
-          case r: Either[_, _]    => Future.dispatchFuture(executor, () => notifyCompleted(func, r.asInstanceOf[Either[Throwable, T]]))
-          case listeners: List[_] => if (updateState(listeners, func :: listeners)) () else dispatchOrAddCallback()
+          case r: Either[_, _]    => runnable.executeWithValue(r.asInstanceOf[Either[Throwable, T]])
+          case listeners: List[_] => if (updateState(listeners, runnable :: listeners)) () else dispatchOrAddCallback()
         }
       dispatchOrAddCallback()
-    }
-
-    private final def notifyCompleted(func: Either[Throwable, T] => Any, result: Either[Throwable, T]) {
-      try {
-        func(result)
-      } catch {
-        case NonFatal(e) => executor reportFailure e
-      }
     }
   }
 
@@ -135,7 +141,7 @@ object Promise {
    *
    *  Useful in Future-composition when a value to contribute is already available.
    */
-  final class KeptPromise[T](suppliedValue: Either[Throwable, T])(implicit val executor: ExecutionContext) extends Promise[T] {
+  final class KeptPromise[T](suppliedValue: Either[Throwable, T]) extends Promise[T] {
 
     val value = Some(resolveEither(suppliedValue))
 
@@ -143,9 +149,9 @@ object Promise {
 
     def tryComplete(value: Either[Throwable, T]): Boolean = false
 
-    def onComplete[U](func: Either[Throwable, T] => U): Unit = {
-      val completedAs = value.get // Avoid closing over "this"
-      Future.dispatchFuture(executor, () => func(completedAs))
+    def onComplete[U](func: Either[Throwable, T] => U)(implicit executor: ExecutionContext): Unit = {
+      val completedAs = value.get
+      (new CallbackRunnable(executor, func)).executeWithValue(completedAs)
     }
 
     def ready(atMost: Duration)(implicit permit: CanAwait): this.type = this
