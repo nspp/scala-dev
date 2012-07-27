@@ -1,5 +1,10 @@
 package scala.util.parsing.combinator.debugging
 
+trait RunMain {
+  self: Controllers =>
+  def runMain(c : Controller) : Unit
+}
+
 trait Controllers {
 
   class Request {
@@ -7,7 +12,7 @@ trait Controllers {
   }
 
   class Controller {
-    var state : Request = null
+    var request : Request = null
     def step : Unit = println("Taking a step")
   }
 

@@ -249,8 +249,6 @@ trait DebugableParsers extends LocationAwareParser with Controllers {
     contr = c
   }
 
-  def run(c : Controller) : Unit
-
   trait DebugableParser[+T] {
     selfP: Parser[T] =>
 
@@ -281,7 +279,7 @@ trait DebugableParsers extends LocationAwareParser with Controllers {
 
         // Check if we are taking a step
         p match {
-          case WordParser(_,_)      => if (contr != null) step
+          case WordParser(_,_)      => step
           case _                    => {}
         }
 
@@ -292,12 +290,20 @@ trait DebugableParsers extends LocationAwareParser with Controllers {
     }
 
     def step : Unit = {
-      // Stop the controller
-      while (contr.state == null) contr.wait
-      // Once we resume, fill in some information
-      contr.state.field = Builder.z
-      // Notify the request that it has been filled
-      contr.state.notify
+      println("scala 0")
+      contr.synchronized {
+        println("scala 1")
+        // Stop the controller
+
+        contr.request.synchronized {
+          // Once we resume, fill in some information
+          contr.request.field = Builder.z
+          // Notify the request that it has been filled
+          contr.request.notify
+        }
+        println("scala 2")
+        while (contr.request.field == Builder.z) { contr.wait; println("test") }
+      }
     }
 
     def exitRes[U >: T](res: ParseResult[U]): Unit = {
