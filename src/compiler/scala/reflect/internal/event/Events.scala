@@ -30,6 +30,7 @@ trait Events {
                         with NamerExplanations
                         with TyperExplanations
                         with InferExplanations
+                        with TypesExplanations
                         with UtilExplanations {
     self: EventModel =>
 

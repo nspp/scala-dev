@@ -740,12 +740,9 @@ trait Types extends api.Types { self: SymbolTable =>
     def <:<(that: Type): Boolean = {
       if (util.Statistics.enabled) stat_<:<(that)
       else {
-        val result = (this eq that) ||
+        (this eq that) ||
           (if (explainSwitch) explain("<:", isSubType, this, that)
-           else EV.eventBlockInform[Boolean](EV.SubTypeCheck(this, that), EV.SubTypeCheckRes(_, _)) {
-             isSubType(this, that, AnyDepth)
-           })
-        result
+           else isSubType(this, that, AnyDepth))
       }
     }
 
@@ -2381,7 +2378,7 @@ trait Types extends api.Types { self: SymbolTable =>
 
     override def isHigherKinded = !typeParams.isEmpty
 
-    override def safeToString = typeParamsString(this) + resultType
+    override def safeToString = typeParamsString(this) + resultType.safeToString
 
     override def cloneInfo(owner: Symbol) = {
       val tparams = cloneSymbolsAtOwner(typeParams, owner)
@@ -2603,6 +2600,12 @@ trait Types extends api.Types { self: SymbolTable =>
     def unapply(tv: TypeVar): Some[(Type, TypeConstraint)]   = Some((tv.origin, tv.constr))
     def apply(origin: Type, constr: TypeConstraint): TypeVar = apply(origin, constr, Nil, Nil)
     def apply(tparam: Symbol): TypeVar                       = apply(tparam.tpeHK, deriveConstraint(tparam), Nil, tparam.typeParams)
+    def logInitialBounds(tvar: TypeVar): TypeVar = {
+      // FIXME: for now we do not distinguish numerical bounds, add that later
+      tvar.constr.loBounds.foreach(b => EV << EV.AddBoundTypeVar(tvar, b, false, false))
+      tvar.constr.hiBounds.foreach(b => EV << EV.AddBoundTypeVar(tvar, b, false, true))
+      tvar
+    }
 
     /** This is the only place TypeVars should be instantiated.
      */
@@ -2613,6 +2616,7 @@ trait Types extends api.Types { self: SymbolTable =>
         else if (args.isEmpty)                new HKTypeVar(origin, constr, params)
         else throw new Error("Invalid TypeVar construction: " + ((origin, constr, args, params)))
       )
+      logInitialBounds(tv)
 
       trace("create", "In " + tv.originLocation)(tv)
     }
@@ -2702,6 +2706,7 @@ trait Types extends api.Types { self: SymbolTable =>
     def constr_=(c: TypeConstraint) {
       if (isClockOn)
         snapshot0 = TVarConstraintSnapshot(newClockTick(), c, snapshot0)
+      EV << EV.ModifyTypeConstraintForTVar(this, c)
       rawconstr = c
     }
     
@@ -2798,6 +2803,7 @@ trait Types extends api.Types { self: SymbolTable =>
      */
     def registerBound(tp: Type, isLowerBound: Boolean, isNumericBound: Boolean = false): Boolean = {
       // println("regBound: "+(safeToString, debugString(tp), isLowerBound)) //@MDEBUG
+      EV << EV.RegisterBound(this, tp, isLowerBound)
       if (isLowerBound)
         assert(tp != this)
 
@@ -5220,11 +5226,13 @@ trait Types extends api.Types { self: SymbolTable =>
         else
           try {
             pendingSubTypes += p
-            isSubType2(tp1, tp2, depth)
+            EV.eventBlockInform[Boolean](EV.SubTypeCheck(tp1, tp2), EV.SubTypeCheckRes(_, _)) {
+              isSubType2(tp1, tp2, depth)
+            }
           } finally {
             pendingSubTypes -= p
           }
-      } else {
+      } else EV.eventBlockInform[Boolean](EV.SubTypeCheck(tp1, tp2), EV.SubTypeCheckRes(_, _)) {
         isSubType2(tp1, tp2, depth)
       }
     }
@@ -5282,17 +5290,30 @@ trait Types extends api.Types { self: SymbolTable =>
     || // @M! normalize reduces higher-kinded case to PolyType's
     ((tp1.normalize.withoutAnnotations , tp2.normalize.withoutAnnotations) match {
       case (PolyType(tparams1, res1), PolyType(tparams2, res2)) => // @assume tp1.isHigherKinded && tp2.isHigherKinded (as they were both normalized to PolyType)
+        import EV.{SubCompare => Comp}
+        import EV.Side.Both
         sameLength(tparams1, tparams2) && {
           if (tparams1.head.owner.isMethod) {  // fast-path: polymorphic method type -- type params cannot be captured
-            (tparams1 corresponds tparams2)((p1, p2) => p2.info.substSym(tparams2, tparams1) <:< p1.info) &&
-            res1 <:< res2.substSym(tparams2, tparams1)
+            (tparams1 corresponds tparams2){(p1, p2) =>
+              val p2Subst = p2.info.substSym(tparams2, tparams1) 
+              EV.eventBlockInform[Boolean](EV.CompareTypes(p2Subst, p1.info, Both, Comp.CHigherKindedParams), EV.CompareDone(p2Subst, p1.info, _, _)) {
+                p2Subst <:< p1.info
+              }
+            } && EV.eventBlockInform[Boolean](EV.CompareTypes(res1, res2, Both, Comp.CHigherKindedRes), EV.CompareDone(res1, res2, _, _)) {
+              res1 <:< res2.substSym(tparams2, tparams1)
+            }
           } else { // normalized higher-kinded type
             //@M for an example of why we need to generate fresh symbols, see neg/tcpoly_ticket2101.scala
             val tpsFresh = cloneSymbols(tparams1)
-
-            (tparams1 corresponds tparams2)((p1, p2) =>
-              p2.info.substSym(tparams2, tpsFresh) <:< p1.info.substSym(tparams1, tpsFresh)) &&
-            res1.substSym(tparams1, tpsFresh) <:< res2.substSym(tparams2, tpsFresh)
+            (tparams1 corresponds tparams2){(p1, p2) =>
+              val p2fresh = p2.info.substSym(tparams2, tpsFresh)
+              val p1fresh = p1.info.substSym(tparams1, tpsFresh)
+              EV.eventBlockInform[Boolean](EV.CompareTypes(p2fresh, p1fresh, Both, Comp.CHigherKindedParams), EV.CompareDone(p2fresh, p1fresh, _, _)) {
+                p2fresh <:< p1fresh
+              }
+            } && EV.eventBlockInform[Boolean](EV.CompareTypes(res1, res2, Both, Comp.CHigherKindedRes), EV.CompareDone(res1, res2, _, _)) {
+              res1.substSym(tparams1, tpsFresh) <:< res2.substSym(tparams2, tpsFresh)
+            }
 
             //@M the forall in the previous test could be optimised to the following,
             // but not worth the extra complexity since it only shaves 1s from quick.comp
@@ -5303,7 +5324,9 @@ trait Types extends api.Types { self: SymbolTable =>
             // for (tpFresh <- tpsFresh) tpFresh.setInfo(tpFresh.info.substSym(tparams1, tpsFresh))
         }
       } && annotationsConform(tp1.normalize, tp2.normalize)
-      case (_, _) => false // @assume !tp1.isHigherKinded || !tp2.isHigherKinded
+      case (_, _) =>
+        EV << EV.FailedSubtyping(tp1, tp2, EV.Side.Both, EV.SubCompare.CHigherKindedTpe)
+        false // @assume !tp1.isHigherKinded || !tp2.isHigherKinded
       // --> thus, cannot be subtypes (Any/Nothing has already been checked)
     }))
 
@@ -5342,19 +5365,19 @@ trait Types extends api.Types { self: SymbolTable =>
             val sym2 = tr2.sym
             val pre1 = tr1.pre
             val pre2 = tr2.pre
-            EV.eventBlockInform[Boolean](EV.CompareTypes(tp1, tp2, Both, Comp.CTypeRef), EV.CompareDone(tp1, tp2, _, _)) {
-            (((if (sym1 == sym2) phase.erasedTypes || pre1 <:< pre2
+            ((if (sym1 == sym2) phase.erasedTypes || pre1 <:< pre2
                else (sym1.name == sym2.name && !sym1.isModuleClass && !sym2.isModuleClass &&
                      (isUnifiable(pre1, pre2) || isSameSpecializedSkolem(sym1, sym2, pre1, pre2)))) &&
-                    isSubArgs(tr1.args, tr2.args, sym1.typeParams))
-             ||
-             sym2.isClass && {
+                    EV.eventBlockInform[Boolean](EV.CompareTypes(tp1, tp2, Both, Comp.CTypeRef), EV.CompareDone(tp1, tp2, _, _)) {
+                      isSubArgs(tr1.args, tr2.args, sym1.typeParams)
+                    }) ||
+             (sym2.isClass && {
                val base = tr1 baseType sym2
-               (base ne tr1) && base <:< tr2
-             }
-             ||
-             thirdTryRef(tr1, tr2))
-            }
+               (base ne tr1) && EV.eventBlockInform[Boolean](EV.CompareTypes(base, tr2, Left, Comp.CTypeRefBase), EV.CompareDone(base, tr2, _, _)){
+                 base <:< tr2
+               }
+             }) ||
+             thirdTryRef(tr1, tr2)
           case _ =>
             secondTry
         }
@@ -5363,6 +5386,7 @@ trait Types extends api.Types { self: SymbolTable =>
           tp1.withoutAnnotations <:< tp2.withoutAnnotations && annotationsConform(tp1, tp2)
         }
       case BoundedWildcardType(bounds) =>
+        // TODO
         tp1 <:< bounds.hi
       case tv2 @ TypeVar(_, constr2) =>
         tp1 match {
@@ -5386,6 +5410,7 @@ trait Types extends api.Types { self: SymbolTable =>
           tp1.withoutAnnotations <:< tp2.withoutAnnotations && annotationsConform(tp1, tp2)
         }
       case BoundedWildcardType(bounds) =>
+        // TODO
         tp1.bounds.lo <:< tp2
       case tv @ TypeVar(_,_) =>
         tv.registerBound(tp2, false)
@@ -5405,26 +5430,33 @@ trait Types extends api.Types { self: SymbolTable =>
     def thirdTryRef(tp1: Type, tp2: TypeRef): Boolean = {
       val sym2 = tp2.sym
       sym2 match {
-        case NotNullClass => tp1.isNotNull
+        case NotNullClass =>
+          tp1.isNotNull
         case SingletonClass =>
           EV.eventBlockInform[Boolean](EV.CompareTypes(tp1, tp2, Right, Comp.CSingletonClass), EV.CompareDone(tp1, tp2, _, _)) {
-            tp1.isStable || fourthTry
-          }
+            tp1.isStable
+          } || fourthTry
         case _: ClassSymbol =>
-          EV.eventBlockInform[Boolean](EV.CompareTypes(tp1, tp2, Right, Comp.CClassSym), EV.CompareDone(tp1, tp2, _, _)) {
-            if (isRaw(sym2, tp2.args))
+          if (isRaw(sym2, tp2.args))
+            EV.eventBlockInform[Boolean](EV.CompareTypes(tp1, tp2, Right, Comp.CClassSymRaw), EV.CompareDone(tp1, tp2, _, _)) {
               isSubType(tp1, rawToExistential(tp2), depth)
-            else if (sym2.name == tpnme.REFINE_CLASS_NAME)
+            }
+          else if (sym2.name == tpnme.REFINE_CLASS_NAME)
+            EV.eventBlockInform[Boolean](EV.CompareTypes(tp1, tp2, Right, Comp.CClassSymRefined), EV.CompareDone(tp1, tp2, _, _)) {
               isSubType(tp1, sym2.info, depth)
-            else
-              fourthTry
-          }
+            }
+          else
+            fourthTry
         case _: TypeSymbol =>
           if (sym2 hasFlag DEFERRED) {
             val tp2a = tp2.bounds.lo
-            isDifferentTypeConstructor(tp2, tp2a) && tp1 <:< tp2a || fourthTry
+              isDifferentTypeConstructor(tp2, tp2a) && EV.eventBlockInform[Boolean](EV.CompareTypes(tp1, tp2a, Right, Comp.CTypeSymDeferred), EV.CompareDone(tp1, tp2a, _, _)) {
+                tp1 <:< tp2a
+              } || fourthTry
           } else {
-            isSubType(tp1.normalize, tp2.normalize, depth)
+            EV.eventBlockInform[Boolean](EV.CompareTypes(tp1, tp2, Right, Comp.CTypeSymNonDeferred), EV.CompareDone(tp1, tp2, _, _)) {
+              isSubType(tp1.normalize, tp2.normalize, depth)
+            }
           }
         case _ =>
           fourthTry
@@ -5445,8 +5477,10 @@ trait Types extends api.Types { self: SymbolTable =>
           (rt2.decls forall tp1.specializes)
         }
       case et2: ExistentialType =>
+        // TODO
         et2.withTypeVars(tp1 <:< _, depth) || fourthTry
       case nn2: NotNullType =>
+        // TODO
         tp1.isNotNull && tp1 <:< nn2.underlying
       case mt2: MethodType =>
         tp1 match {
@@ -5461,16 +5495,17 @@ trait Types extends api.Types { self: SymbolTable =>
             }
           // TODO: if mt1.params.isEmpty, consider NullaryMethodType?
           case _ =>
-            EV << EV.FailedSubtyping(tp1, tp2, Right, Comp.CMethod)
+            EV << Failed(tp1, tp2, Right, Comp.CMethod)
             false
         }
       case pt2 @ NullaryMethodType(_) =>
         tp1 match {
           // TODO: consider MethodType mt for which mt.params.isEmpty??
           case pt1 @ NullaryMethodType(_) =>
+            // TODO
             pt1.resultType <:< pt2.resultType
           case _ =>
-            EV << EV.FailedSubtyping(tp1, tp2, Right, Comp.CNullary)
+            EV << Failed(tp1, tp2, Right, Comp.CNullary)
             false
         }
       case TypeBounds(lo2, hi2) =>
@@ -5480,7 +5515,7 @@ trait Types extends api.Types { self: SymbolTable =>
               lo2 <:< lo1 && hi1 <:< hi2
             }
           case _ =>
-            EV << EV.FailedSubtyping(tp1, tp2, Right, Comp.CTypeBounds)
+            EV << Failed(tp1, tp2, Right, Comp.CTypeBounds)
             false
         }
       case _ =>
@@ -5493,32 +5528,41 @@ trait Types extends api.Types { self: SymbolTable =>
     def fourthTry = tp1 match {
       case tr1 @ TypeRef(_, sym1, _) =>
         sym1 match {
-          case NothingClass => true
+          case NothingClass =>
+            EV << EV.NothingSubtype(tp2)
+            true
           case NullClass =>
             tp2 match {
               case TypeRef(_, sym2, _) =>
                 sym2.isClass && (sym2 isNonBottomSubClass ObjectClass) &&
                 !(tp2.normalize.typeSymbol isNonBottomSubClass NotNullClass)
               case _ =>
+                // TODO
                 isSingleType(tp2) && tp1 <:< tp2.widen
             }
           case _: ClassSymbol =>
-            EV.eventBlockInform[Boolean](EV.CompareTypes(tp1, tp2, Right, Comp.CClassSym), EV.CompareDone(tp1, tp2, _, _)) {
               if (isRaw(sym1, tr1.args))
-                isSubType(rawToExistential(tp1), tp2, depth)
+                EV.eventBlockInform[Boolean](EV.CompareTypes(tp1, tp2, Left, Comp.CClassSymRaw), EV.CompareDone(tp1, tp2, _, _)) {
+                  isSubType(rawToExistential(tp1), tp2, depth)
+                }
               else
-                sym1.name == tpnme.REFINE_CLASS_NAME &&
-                isSubType(sym1.info, tp2, depth)
-            }
+                (sym1.name == tpnme.REFINE_CLASS_NAME) && EV.eventBlockInform[Boolean](EV.CompareTypes(tp1, tp2, Left, Comp.CClassSymRefined), EV.CompareDone(tp1, tp2, _, _)) {
+                    isSubType(sym1.info, tp2, depth)
+                  }
           case _: TypeSymbol =>
             if (sym1 hasFlag DEFERRED) {
               val tp1a = tp1.bounds.hi
-              isDifferentTypeConstructor(tp1, tp1a) && tp1a <:< tp2
+              isDifferentTypeConstructor(tp1, tp1a) && 
+                EV.eventBlockInform[Boolean](EV.CompareTypes(tp1a, tp2, Left, Comp.CTypeSymDeferred), EV.CompareDone(tp1a, tp2, _, _)) {
+                  tp1a <:< tp2
+                }
             } else {
-              isSubType(tp1.normalize, tp2.normalize, depth)
+              EV.eventBlockInform[Boolean](EV.CompareTypes(tp1, tp2, Left, Comp.CTypeSymNonDeferred), EV.CompareDone(tp1, tp2, _, _)) {
+                isSubType(tp1.normalize, tp2.normalize, depth)
+              }
             }
           case _ =>
-            EV << EV.FailedSubtyping(tp1, tp2, Left, Comp.CTypeRef)
+            EV << Failed(tp1, tp2, Left, Comp.CTypeRef)
             false
         }
       case RefinedType(parents1, _) =>
@@ -5526,9 +5570,11 @@ trait Types extends api.Types { self: SymbolTable =>
           parents1 exists (_ <:< tp2)
         }
       case _: SingletonType | _: NotNullType =>
-        tp1.underlying <:< tp2
+        EV.eventBlockInform[Boolean](EV.CompareTypes(tp1, tp2, Left, Comp.CSingletonOrNotNull), EV.CompareDone(tp1, tp2, _, _)) {
+          tp1.underlying <:< tp2
+        }
       case _ =>
-        EV << EV.FailedSubtyping(tp1, tp2, Both, Comp.COther)
+        EV << Failed(tp1, tp2, Both, Comp.COther)
         false
     }
 
@@ -5775,7 +5821,7 @@ trait Types extends api.Types { self: SymbolTable =>
         //println("solving "+tvar+" "+up+" "+(if (up) (tvar.constr.hiBounds) else tvar.constr.loBounds)+((if (up) (tvar.constr.hiBounds) else tvar.constr.loBounds) map (_.widen)))
 
         tvar setInst (
-          EV.eventBlockInform(EV.InstantiateGlbOrLub(tvar, up, depth), (ev: Int, tp0: Type) => EV.InstantiateGlbOrLubDone(up, ev, tp0)) {
+          EV.eventBlockInform(EV.InstantiateGlbOrLub(tvar, variance, up, depth), (ev: Int, tp0: Type) => EV.InstantiateGlbOrLubDone(up, ev, tp0)) {
             if (up) {
               if (depth != AnyDepth) glb(tvar.constr.hiBounds, depth) else glb(tvar.constr.hiBounds)
             } else {
@@ -5798,7 +5844,11 @@ trait Types extends api.Types { self: SymbolTable =>
     var bounds = instantiatedBounds(pre, owner, tparams, targs)
     if (targs.exists(_.annotations.nonEmpty))
       bounds = adaptBoundsToAnnotations(bounds, tparams, targs)
-    (bounds corresponds targs)(_ containsType _)
+    ((bounds zip tparams) corresponds targs)((bAndTParam, targ) =>
+      EV.eventBlockInform[Boolean](EV.IsTArgWithinBounds(bAndTParam, targ), EV.TArgWithinBoundsDone(_, _)){
+        bAndTParam._1.containsType(targ)
+      }
+    )
   }
 
   def instantiatedBounds(pre: Type, owner: Symbol, tparams: List[Symbol], targs: List[Type]): List[TypeBounds] =

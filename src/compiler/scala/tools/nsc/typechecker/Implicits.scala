@@ -377,8 +377,7 @@ trait Implicits {
      *  they are: perhaps someone more familiar with the intentional distinctions
      *  can examine the now much smaller concrete implementations below.
      */
-    private def checkCompatibility(fast: Boolean, tp0: Type, pt0: Type): Boolean =
-      EV.eventBlockInform[Boolean](EV.CheckTypesCompatibility(fast, tp0, pt0), EV.CheckedTypesCompatibility(tp0, pt0, _, _)){
+    private def checkCompatibility(fast: Boolean, tp0: Type, pt0: Type): Boolean = {
       @tailrec def loop(tp: Type, pt: Type): Boolean = tp match {
         case mt @ MethodType(params, restpe) =>
           if (mt.isImplicit)
@@ -422,7 +421,9 @@ trait Implicits {
         case ExistentialType(_, qtpe)   => if (fast) loop(qtpe, pt) else normalize(tp) <:< pt // is !fast case needed??
         case _                          => if (fast) isPlausiblySubType(tp, pt) else tp <:< pt
       }
-      loop(tp0, pt0)
+      val res = loop(tp0, pt0)
+      EV << EV.CheckedTypesCompatibility(tp0, pt0, fast, res)
+      res
     }
 
     /** This expresses more cleanly in the negative: there's a linear path

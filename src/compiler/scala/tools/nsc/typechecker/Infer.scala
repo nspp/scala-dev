@@ -354,7 +354,6 @@ trait Infer {
       val tvars = tparams map freshVar
       val instResTp = restpe.instantiateTypeParams(tparams, tvars)
       if ( if (useWeaklyCompatible) isWeaklyCompatible(instResTp, pt) else isCompatible(instResTp, pt) ) {
-        val startEv = EV <<< EV.CompatibleTypes(instResTp, pt, tparams)
         try {
           // If the restpe is an implicit method, and the expected type is fully defined
           // optimize type variables wrt to the implicit formals only; ignore the result type.
@@ -368,11 +367,9 @@ trait Infer {
           //println("try to solve "+tvars+" "+tparams)
           val res = (solvedTypes(tvars, tparams, tparams map varianceInType(varianceType),
                       false, lubDepth(List(restpe, pt))), tvars)
-          EV >>> EV.InferDone(startEv.id)
           res
         } catch {
           case ex: NoInstance =>
-            EV >>> EV.InferDone(startEv.id)
             (null, null)
         }
       } else {
@@ -433,7 +430,9 @@ trait Infer {
       val tvars = tparams map freshVar
       if (isConservativelyCompatible(restpe.instantiateTypeParams(tparams, tvars), pt))
         map2(tparams, tvars)((tparam, tvar) =>
-          instantiateToBound(tvar, varianceInTypes(formals)(tparam)))
+          EV.eventBlock(EV.InstantiateTVarToBound(tvar), EV.InferDone(_)) {
+            instantiateToBound(tvar, varianceInTypes(formals)(tparam))
+          })
       else {
         EV << EV.IncompatibleResultAndPrototype(restpe, pt)
         tvars map (tvar => WildcardType)

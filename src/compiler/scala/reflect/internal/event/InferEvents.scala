@@ -82,6 +82,18 @@ trait InferEventsUniverse {
       def participants = List(tvar, reason)
     }
     
+    case class ModifyTypeConstraintForTVar(tvar: TypeVar, tconst: TypeConstraint)
+      extends Event with InferEvent {
+      override def tag = super.tag + "-update-type-constraint"
+      def participants = List(tvar, tconst)
+    }
+    
+    case class InstantiateTVarToBound(tvar: TypeVar)
+      extends Event with InferEvent {
+      override def tag = super.tag + "-instantiate-to-bound"
+      def participants = List(tvar)
+    }
+    
     case class InstantiateTypeVar(tvar: TypeVar) extends Event with InferEvent {
       override def tag = super.tag + "-instantiate-typevar"
       def participants = List(tvar)
@@ -98,7 +110,7 @@ trait InferEventsUniverse {
       def participants = List(restpe)
     }
 
-    case class InstantiateGlbOrLub(tvar: TypeVar, up: Boolean, depth: Int)
+    case class InstantiateGlbOrLub(tvar: TypeVar, variance: Int, up: Boolean, depth: Int)
       extends Event with InferEvent {
       override def tag = super.tag + "-calculate-glborlub-for-tvar-inst"
       def participants = List(tvar)

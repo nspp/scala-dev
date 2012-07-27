@@ -77,7 +77,7 @@ trait TyperEventsUniverse {
       override def tag = super.tag + "-class"
     }
 
-    case class ClassTyper(tree: Tree) extends TreeEvent with ClassTyperEvent {
+    case class ClassTyper(tree: ClassDef) extends TreeEvent with ClassTyperEvent {
     }
 
     // Module events --------------------
@@ -85,7 +85,7 @@ trait TyperEventsUniverse {
       override def tag = super.tag + "-object"
     }
 
-    case class ModuleTyper(tree: Tree) extends TreeEvent with ModuleTyperEvent {
+    case class ModuleTyper(tree: ModuleDef) extends TreeEvent with ModuleTyperEvent {
     }
 
     case class InitializedCompanionClassConstrs(linked: Symbol)
@@ -156,7 +156,7 @@ trait TyperEventsUniverse {
     }
 
       // TODO should take all the parameters of a valdef
-    case class ValDefTyper(valdef: Tree)
+    case class ValDefTyper(valdef: ValDef)
       extends TreeEvent with ValDefTyperEvent {
       def tree = valdef
       override def tag = "type-value-def"
@@ -167,7 +167,7 @@ trait TyperEventsUniverse {
       override def tag = super.tag + "-defdef"
     }
 
-    case class DefDefTyper(defdef: Tree)
+    case class DefDefTyper(defdef: DefDef)
       extends TreeEvent with DefDefTyperEvent {
       def tree = defdef
       override def tag = "type-definition"
@@ -179,7 +179,7 @@ trait TyperEventsUniverse {
     }
 
       // TODO should take all the parameters of a typedef
-    case class TypeDefTyper(typedef: Tree)
+    case class TypeDefTyper(typedef: TypeDef)
       extends TreeEvent with TypeDefTyperEvent {
       def tree = typedef
     }
@@ -189,7 +189,7 @@ trait TyperEventsUniverse {
       override def tag = super.tag + "-labeldef"
     }
 
-    case class LabelDefTyper(tree: Tree)
+    case class LabelDefTyper(tree: LabelDef)
       extends TreeEvent with LabelDefTyperEvent {
     }
 
@@ -248,7 +248,7 @@ trait TyperEventsUniverse {
       override def tag = super.tag + "-bind"
     }
 
-    case class BindTyper(body: Tree)
+    case class BindTyper(body: Bind)
       extends TreeEvent with BindTyperEvent {
       def tree = body
     }
@@ -1264,6 +1264,15 @@ trait TyperEventsUniverse {
     // Use case?
     case class TypeUseCaseStatement(stat: Tree)
       extends Explanation with TyperExplanation with StatementExplanation
+      
+    case class TypeCasePattern(pat: Tree)
+      extends Explanation with TyperExplanation
+      
+    case class TypeCaseGuard(guard: Tree)
+      extends Explanation with TyperExplanation
+      
+    case class TypeCaseBody(body: Tree)
+      extends Explanation with TyperExplanation
 
 
     // Other [adapt]

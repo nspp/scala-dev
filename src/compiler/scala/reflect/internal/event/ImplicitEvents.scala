@@ -143,14 +143,9 @@ trait ImplicitEventsUniverse {
       def references = List(info.sym)
     }
     
-    case class CheckTypesCompatibility(fast: Boolean, tp: Type, pt: Type)
-      extends Event with ImplicitEvent {
-      override def tag = super.tag + "-check-types-comp"
-      def participants = List(tp, pt)
-    }
     
-    case class CheckedTypesCompatibility(tp: Type, pt: Type, originEvent: Int, res: Boolean)
-      extends Event with ImplicitEvent with DoneBlock {
+    case class CheckedTypesCompatibility(tp: Type, pt: Type, fast: Boolean, res: Boolean)
+      extends Event with ImplicitEvent {
       override def tag = super.tag + "-checked-types-comp"
       def participants = List(tp, pt)
     }

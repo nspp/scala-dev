@@ -2130,7 +2130,7 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
       for (Apply(_, xs) <- cdef.pat ; x <- xs dropRight 1 ; if treeInfo isStar x)
         StarPositionInPatternError(x)
 
-      val pat1 = typedPattern(cdef.pat, pattpe)
+      val pat1 = typedPattern(cdef.pat, pattpe)(EV.TypeCasePattern(cdef.pat))
       // When case classes have more than two parameter lists, the pattern ends
       // up typed as a method.  We only pattern match on the first parameter
       // list, so substitute the final result type of the method, i.e. the type
@@ -2145,8 +2145,8 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
       }
 
       val guard1: Tree = if (cdef.guard == EmptyTree) EmptyTree
-                         else typed(cdef.guard, BooleanClass.tpe)(EV.DefaultExplanation)
-      var body1: Tree = typed(cdef.body, pt)(EV.DefaultExplanation)
+                         else typed(cdef.guard, BooleanClass.tpe)(EV.TypeCaseGuard(cdef.guard))
+      var body1: Tree = typed(cdef.body, pt)(EV.TypeCaseBody(cdef.body))
 
       val contextWithTypeBounds = context.nextEnclosing(_.tree.isInstanceOf[CaseDef])
       if (contextWithTypeBounds.savedTypeBounds nonEmpty) {
@@ -4452,8 +4452,8 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
           treeCopy.Star(tree, typed(elem, mode, pt)) setType makeFullyDefined(pt)
           }
 
-        case Bind(name, body) =>
-          typer1Event(EV.BindTyper(body)){
+        case bind@Bind(name, body) =>
+          typer1Event(EV.BindTyper(bind)){
           typedBind(name, body)
           }
 
@@ -4938,7 +4938,7 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
       typed(tree, EXPRmode | FUNmode | POLYmode | TAPPmode, WildcardType)
 
     /** Types a pattern with prototype <code>pt</code> */
-    def typedPattern(tree: Tree, pt: Type): Tree = {
+    def typedPattern(tree: Tree, pt: Type)(implicit e: EV.Explanation): Tree = {
       // We disable implicits because otherwise some constructs will
       // type check which should not.  The pattern matcher does not
       // perform implicit conversions in an attempt to consummate a match.
