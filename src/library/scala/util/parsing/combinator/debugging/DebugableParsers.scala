@@ -288,9 +288,7 @@ trait DebugableParsers extends LocationAwareParser with Controllers {
     }
 
     def step : Unit = {
-      println("scala 0")
       contr.synchronized {
-        println("scala 1")
         // Stop the controller
 
         contr.request.synchronized {
@@ -299,8 +297,7 @@ trait DebugableParsers extends LocationAwareParser with Controllers {
           // Notify the request that it has been filled
           contr.request.notify
         }
-        println("scala 2")
-        while (contr.request.field == Builder.z) { contr.wait; println("test") }
+        while (contr.request.field == Builder.z) contr.wait
       }
     }
 
