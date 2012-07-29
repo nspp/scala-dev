@@ -24,9 +24,9 @@ trait LocationAwareParser {
       // Set next
       nextLeaf = Leaf(loc, which.toString, Parsed)
 
-      Builder.print
-      println("(word)")
-      println("")
+      /* Builder.print */
+      /* println("(word)") */
+      /* println("") */
     }
 
     def tunnel : Unit = {
@@ -53,9 +53,9 @@ trait LocationAwareParser {
       // Now replace head with new item and enter
       z = z.down.get.replaceWith(item)
 
-      Builder.print
-      println("(or)")
-      println("")
+      /* Builder.print */
+      /* println("(or)") */
+      /* println("") */
     }
 
     // Replace first element of list with And( Word(), Word(), ... , Word() );
@@ -73,9 +73,9 @@ trait LocationAwareParser {
       else z = z.down.get.replaceWith(item)
       // Now replace head with new item and enter
 
-      Builder.print
-      println("(and)")
-      println("")
+      /* Builder.print */
+      /* println("(and)") */
+      /* println("") */
     }
 
     // If an element of an And tree failed, we mark it as failed and go up
@@ -218,6 +218,7 @@ trait LocationAwareParser {
     def ignore : Boolean = s match {
       case s if(s.indexOf("Parser") >= 0)         => true
       case s if(s.indexOf("parser-map-") >= 0)    => true
+      case s if(s != "" && s.head == '`')         => true
       case otherwise                              => false
     }
     s match {
@@ -260,8 +261,8 @@ trait DebugableParsers extends LocationAwareParser with Controllers {
     def enterRes(in: Input): Unit = {
       if (debug && location != NoParserLocation) {
 
-        println("Name:  \t " + name)
-        println("Method:\t" + printMethod(location))
+        // println("Name:  \t " + name)
+        // println("Method:\t" + printMethod(location))
 
 
         // Redefine name for easier reading
@@ -274,8 +275,8 @@ trait DebugableParsers extends LocationAwareParser with Controllers {
         Dispatcher.incLevel
         Dispatcher.go(p)
 
-        println("Level: \t" + Dispatcher.getLevel)
-        println("")
+        //println("Level: \t" + Dispatcher.getLevel)
+        //println("")
 
         // Check if we are taking a step
         p match {
@@ -284,9 +285,6 @@ trait DebugableParsers extends LocationAwareParser with Controllers {
         }
 
       }
-      /* else { */
-      /*   println("NoParserLocation with name: " + name) */
-      /* } */
     }
 
     def step : Unit = {

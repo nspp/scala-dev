@@ -13,7 +13,6 @@ trait Controllers {
 
   class Controller {
     var request : Request = null
-    def step : Unit = println("Taking a step")
   }
 
 /* For running we will do it roughly like this (not go through the 'main' method as we still have to add the controller): */
