@@ -2316,6 +2316,7 @@ abstract class GenASM extends SubComponent with BytecodeWriters {
 
       def genCallMethod(call: CALL_METHOD) {
         val CALL_METHOD(method, style) = call
+        EV << (EV.CallMethod(this.method.symbol, method) withPos call.pos)
         val siteSymbol  = clasz.symbol
         val hostSymbol  = call.hostClass
         val methodOwner = method.owner

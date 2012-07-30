@@ -2,7 +2,6 @@
 
 import scala.tools.nsc._
 import event._
-import symtab.Flags._
 import scala.collection.{ mutable, immutable }
 import mutable.{ ListBuffer, HashSet }
 
@@ -29,9 +28,9 @@ object src {
     !reporter.hasErrors
   }
 
-  val mutable = "/scala/trunk/src/library/scala/collection/mutable/"
-  val patmat = "/scala/trunk/src/compiler/scala/tools/nsc/matching/"
-  val global = "/scala/trunk/src/compiler/scala/tools/nsc/Global.scala"
+  val mutable = "/src/library/scala/collection/mutable/"
+  val patmat = "/src/compiler/scala/tools/nsc/matching/"
+  val global = "/src/compiler/scala/tools/nsc/Global.scala"
 }
 
 class Logger(fmt: String) {
