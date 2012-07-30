@@ -9,6 +9,7 @@ trait Controllers {
 
   class Request {
     var field : AndOrZipper = null
+    var isDone : Boolean = false
   }
 
   class Controller {

@@ -301,6 +301,20 @@ trait DebugableParsers extends LocationAwareParser with Controllers {
       }
     }
 
+    def endStep : Unit = {
+      contr.synchronized {
+        // Stop the controller
+
+        contr.request.synchronized {
+          // Once we resume, fill in some information
+          contr.request.field = Builder.z
+          contr.request.isDone = true
+          // Notify the request that it has been filled
+          contr.request.notify
+        }
+      }
+    }
+
     def exitRes[U >: T](res: ParseResult[U]): Unit = {
       if (debug && location != NoParserLocation) {
 
@@ -315,6 +329,10 @@ trait DebugableParsers extends LocationAwareParser with Controllers {
           }
         }
         println("Level: \t" + Dispatcher.getLevel)
+
+        // If level is 0, then we are done
+        if (Dispatcher.getLevel == 0) endStep
+
       }
     }
 
