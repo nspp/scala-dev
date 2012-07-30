@@ -6,10 +6,10 @@
 **                          |/                                          **
 \*                                                                      */
 
-import annotation.bridge
 
 /**
  * Core Scala types. They are always available without an explicit import.
+ * @contentDiagram hideNodes "scala.Serializable"
  */
 package object scala {
   type Throwable = java.lang.Throwable
@@ -36,6 +36,9 @@ package object scala {
 
   @deprecated("instead of `@serializable class C`, use `class C extends Serializable`", "2.9.0")
   type serializable = annotation.serializable
+
+  @deprecated("instead of `@cloneable class C`, use `class C extends Cloneable`", "2.10.0")
+  type cloneable = annotation.cloneable
 
   type TraversableOnce[+A] = scala.collection.TraversableOnce[A]
 
@@ -64,6 +67,9 @@ package object scala {
   type ::[A] = scala.collection.immutable.::[A]
   val :: = scala.collection.immutable.::
 
+  val +: = scala.collection.+:
+  val :+ = scala.collection.:+
+
   type Stream[+A] = scala.collection.immutable.Stream[A]
   val Stream = scala.collection.immutable.Stream
   val #:: = scala.collection.immutable.Stream.#::
@@ -76,15 +82,6 @@ package object scala {
 
   type Range = scala.collection.immutable.Range
   val Range = scala.collection.immutable.Range
-
-  // Migrated from Predef
-  @deprecated("Use Thread.currentThread instead", "2.9.0")
-  def currentThread = java.lang.Thread.currentThread()
-
-  // Moved back into Predef to avoid unnecessary indirection by
-  // way of the scala package object within the standard library,
-  // but bridged for compatibility.
-  @bridge def $scope = scala.xml.TopScope
 
   // Numeric types which were moved into scala.math.*
 
@@ -112,6 +109,15 @@ package object scala {
   type PartialOrdering[T] = scala.math.PartialOrdering[T]
   type PartiallyOrdered[T] = scala.math.PartiallyOrdered[T]
 
+  type Either[+A, +B] = scala.util.Either[A, B]
+  val Either = scala.util.Either
+
+  type Left[+A, +B] = scala.util.Left[A, B]
+  val Left = scala.util.Left
+
+  type Right[+A, +B] = scala.util.Right[A, B]
+  val Right = scala.util.Right
+
   // Annotations which we might move to annotation.*
 /*
   type SerialVersionUID = annotation.SerialVersionUID
@@ -129,13 +135,4 @@ package object scala {
   type unchecked = annotation.unchecked.unchecked
   type volatile = annotation.volatile
   */
-
-  @deprecated("use scala.annotation.Annotation instead", "2.9.0")
-  type Annotation = scala.annotation.Annotation
-  @deprecated("use scala.annotation.ClassfileAnnotation instead", "2.9.0")
-  type ClassfileAnnotation = scala.annotation.ClassfileAnnotation
-  @deprecated("use scala.annotation.StaticAnnotation instead", "2.9.0")
-  type StaticAnnotation = scala.annotation.StaticAnnotation
-  @deprecated("use scala.annotation.TypeConstraint instead", "2.9.0")
-  type TypeConstraint = scala.annotation.TypeConstraint
 }

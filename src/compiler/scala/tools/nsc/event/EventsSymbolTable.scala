@@ -29,7 +29,6 @@ import scala.reflect.internal.event.{ EventsUniverse, Events }
 trait EventsSymbolTable extends EventsUniverse
                         with EventStrings
                         with Processing
-                        with symtab.Positions
                         with GeneralEvents {
   outer: SymbolTable =>
 

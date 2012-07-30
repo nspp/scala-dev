@@ -7,8 +7,8 @@ package interactive
 package tests.core
 
 import scala.tools.nsc.interactive.Response
-import scala.tools.nsc.util.Position
-import scala.tools.nsc.util.SourceFile
+import scala.reflect.internal.util.Position
+import scala.reflect.internal.util.SourceFile
 
 /**
  * A trait for defining commands that can be queried to the
@@ -101,13 +101,13 @@ trait AskTypeAt extends AskCommand {
 trait AskType extends AskCommand {
   import compiler.Tree
 
-  private[tests] def askType(source: SourceFile, forceReload: Boolean)(implicit reporter: Reporter): Response[Tree] = {
+  protected def askType(source: SourceFile, forceReload: Boolean)(implicit reporter: Reporter): Response[Tree] = {
     ask {
       compiler.askType(source, forceReload, _)
     }
   }
 
-  private[tests] def askType(sources: Seq[SourceFile], forceReload: Boolean)(implicit reporter: Reporter): Seq[Response[Tree]] = {
+  protected def askType(sources: Seq[SourceFile], forceReload: Boolean)(implicit reporter: Reporter): Seq[Response[Tree]] = {
     for(source <- sources) yield
       askType(source, forceReload)
   }

@@ -29,12 +29,13 @@ abstract class TreeBuilder {
   def rootId(name: Name)       = gen.rootId(name)
   def rootScalaDot(name: Name) = gen.rootScalaDot(name)
   def scalaDot(name: Name)     = gen.scalaDot(name)
-  def scalaAnyRefConstr        = gen.scalaAnyRefConstr
-  def scalaUnitConstr          = gen.scalaUnitConstr
-  def scalaScalaObjectConstr   = gen.scalaScalaObjectConstr
-  def productConstr            = gen.productConstr
+  def scalaAnyRefConstr        = scalaDot(tpnme.AnyRef)
+  def scalaAnyValConstr        = scalaDot(tpnme.AnyVal)
+  def scalaAnyConstr           = scalaDot(tpnme.Any)
+  def scalaUnitConstr          = scalaDot(tpnme.Unit)
+  def productConstr            = scalaDot(tpnme.Product)
   def productConstrN(n: Int)   = scalaDot(newTypeName("Product" + n))
-  def serializableConstr       = gen.serializableConstr
+  def serializableConstr       = scalaDot(tpnme.Serializable)
 
   def convertToTypeName(t: Tree) = gen.convertToTypeName(t)
 
@@ -190,7 +191,7 @@ abstract class TreeBuilder {
       } else {
         val x = freshTermName()
         Block(
-          List(ValDef(Modifiers(SYNTHETIC), x, TypeTree(), stripParens(left))),
+          List(ValDef(Modifiers(SYNTHETIC | HIDDEN), x, TypeTree(), stripParens(left))),
           Apply(atPos(opPos union right.pos) { Select(stripParens(right), op.encode) }, List(Ident(x))))
       }
     } else {
@@ -261,29 +262,25 @@ abstract class TreeBuilder {
     else if (stats.length == 1) stats.head
     else Block(stats.init, stats.last)
 
+  def makeFilter(tree: Tree, condition: Tree, scrutineeName: String): Tree = {
+    val cases = List(
+      CaseDef(condition, EmptyTree, Literal(Constant(true))),
+      CaseDef(Ident(nme.WILDCARD), EmptyTree, Literal(Constant(false)))
+    )
+    val matchTree = makeVisitor(cases, false, scrutineeName)
+
+    atPos(tree.pos)(Apply(Select(tree, nme.withFilter), matchTree :: Nil))
+  }
+
   /** Create tree for for-comprehension generator <val pat0 <- rhs0> */
   def makeGenerator(pos: Position, pat: Tree, valeq: Boolean, rhs: Tree): Enumerator = {
     val pat1 = patvarTransformer.transform(pat)
     val rhs1 =
-      if (valeq) rhs
-      else matchVarPattern(pat1) match {
-        case Some(_) =>
-          rhs
-        case None =>
-          atPos(rhs.pos) {
-            Apply(
-              Select(rhs, nme.filter),
-              List(
-                makeVisitor(
-                  List(
-                    CaseDef(pat1.duplicate, EmptyTree, Literal(Constant(true))),
-                    CaseDef(Ident(nme.WILDCARD), EmptyTree, Literal(Constant(false)))),
-                  false,
-                  nme.CHECK_IF_REFUTABLE_STRING
-                )))
-          }
-      }
-    if (valeq) ValEq(pos, pat1, rhs1) else ValFrom(pos, pat1, rhs1)
+      if (valeq || treeInfo.isVariablePattern(pat)) rhs
+      else makeFilter(rhs, pat1.duplicate, nme.CHECK_IF_REFUTABLE_STRING)
+
+    if (valeq) ValEq(pos, pat1, rhs1)
+    else ValFrom(pos, pat1, rhs1)
   }
 
   def makeParam(pname: TermName, tpe: Tree) =
@@ -491,7 +488,7 @@ abstract class TreeBuilder {
   def makeCatchFromExpr(catchExpr: Tree): CaseDef = {
     val binder   = freshTermName("x")
     val pat      = Bind(binder, Typed(Ident(nme.WILDCARD), Ident(tpnme.Throwable)))
-    val catchDef = ValDef(NoMods, freshTermName("catchExpr"), TypeTree(), catchExpr)
+    val catchDef = ValDef(Modifiers(HIDDEN), freshTermName("catchExpr"), TypeTree(), catchExpr)
     val catchFn  = Ident(catchDef.name)
     val body     = atPos(catchExpr.pos.makeTransparent)(Block(
       List(catchDef),
@@ -507,37 +504,6 @@ abstract class TreeBuilder {
   /** Create tree for pattern definition <val pat0 = rhs> */
   def makePatDef(pat: Tree, rhs: Tree): List[Tree] =
     makePatDef(Modifiers(0), pat, rhs)
-
-  /** For debugging only.  Desugar a match statement like so:
-   *  val x = scrutinee
-   *  x match {
-   *    case case1 => ...
-   *    case _ => x match {
-   *       case case2 => ...
-   *       case _ => x match ...
-   *    }
-   *  }
-   *
-   *  This way there are never transitions between nontrivial casedefs.
-   *  Of course many things break: exhaustiveness and unreachable checking
-   *  do not work, no switches will be generated, etc.
-   */
-  def makeSequencedMatch(selector: Tree, cases: List[CaseDef]): Tree = {
-    require(cases.nonEmpty)
-
-    val selectorName = freshTermName()
-    val valdef = atPos(selector.pos)(ValDef(Modifiers(PrivateLocal | SYNTHETIC), selectorName, TypeTree(), selector))
-    val nselector = Ident(selectorName)
-
-    def loop(cds: List[CaseDef]): Match = {
-      def mkNext = CaseDef(Ident(nme.WILDCARD), EmptyTree, loop(cds.tail))
-
-      if (cds.size == 1) Match(nselector, cds)
-      else Match(selector, List(cds.head, mkNext))
-    }
-
-    Block(List(valdef), loop(cases))
-  }
 
   /** Create tree for pattern definition <mods val pat0 = rhs> */
   def makePatDef(mods: Modifiers, pat: Tree, rhs: Tree): List[Tree] = matchVarPattern(pat) match {
@@ -555,14 +521,35 @@ abstract class TreeBuilder {
       //                  val/var x_1 = t$._1
       //                  ...
       //                  val/var x_N = t$._N
-      val pat1 = patvarTransformer.transform(pat)
+
+      val rhsUnchecked = gen.mkUnchecked(rhs)
+
+      // TODO: clean this up -- there is too much information packked into makePatDef's `pat` argument
+      // when it's a simple identifier (case Some((name, tpt)) -- above),
+      // pat should have the type ascription that was specified by the user
+      // however, in `case None` (here), we must be careful not to generate illegal pattern trees (such as `(a, b): Tuple2[Int, String]`)
+      // i.e., this must hold: pat1 match { case Typed(expr, tp) => assert(expr.isInstanceOf[Ident]) case _ => }
+      // if we encounter such an erroneous pattern, we strip off the type ascription from pat and propagate the type information to rhs
+      val (pat1, rhs1) = patvarTransformer.transform(pat) match {
+        // move the Typed ascription to the rhs
+        case Typed(expr, tpt) if !expr.isInstanceOf[Ident] =>
+          val rhsTypedUnchecked =
+            if (tpt.isEmpty) rhsUnchecked
+            else Typed(rhsUnchecked, tpt) setPos (rhs.pos union tpt.pos)
+          (expr, rhsTypedUnchecked)
+        case ok =>
+          (ok, rhsUnchecked)
+      }
       val vars = getVariables(pat1)
       val matchExpr = atPos((pat1.pos union rhs.pos).makeTransparent) {
         Match(
-          gen.mkUnchecked(rhs),
+          rhs1,
           List(
             atPos(pat1.pos) {
-              CaseDef(pat1, EmptyTree, makeTupleTerm(vars map (_._1) map Ident, true))
+              def mkIdent(name: Name) = Ident(name)
+              CaseDef(pat1, EmptyTree, makeTupleTerm(vars map (_._1) map mkIdent, true))
+              // [Eugene++] no longer compiles after I moved the `Ident` case class into scala.reflect.internal
+              // CaseDef(pat1, EmptyTree, makeTupleTerm(vars map (_._1) map Ident, true))
             }
           ))
       }
@@ -575,7 +562,7 @@ abstract class TreeBuilder {
           val tmp = freshTermName()
           val firstDef =
             atPos(matchExpr.pos) {
-              ValDef(Modifiers(PrivateLocal | SYNTHETIC | (mods.flags & LAZY)),
+              ValDef(Modifiers(PrivateLocal | SYNTHETIC | HIDDEN | (mods.flags & LAZY)),
                      tmp, TypeTree(), matchExpr)
             }
           var cnt = 0

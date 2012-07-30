@@ -8,7 +8,7 @@
 
 package scala
 
-import collection.mutable.ArrayBuffer
+import language.experimental.macros
 
 /** A class to support string interpolation.
  *  This class supports string interpolation as outlined in Scala SIP-11.
@@ -42,7 +42,7 @@ case class StringContext(parts: String*) {
    *  @throws A `StringContext.InvalidEscapeException` if if a `parts` string contains a backslash (`\`) character
    *          that does not start a valid escape sequence.
    */
-  def s(args: Any*) = {
+  def s(args: Any*): String = {
     checkLengths(args: _*)
     val pi = parts.iterator
     val ai = args.iterator
@@ -79,43 +79,11 @@ case class StringContext(parts: String*) {
    *      start a format specifier), then the string format specifier `%s` is inserted.
    *
    *   2. Any `%` characters not in formatting positions are left in the resulting
-   *      string literally. This is achieved by replacing each such occurrence by a string
-   *      format specifier `%s` and adding a corresponding argument string `"%"`.
+   *      string literally. This is achieved by replacing each such occurrence by the
+   *      format specifier `%%`.
    */
-  def f(args: Any*) = {
-    checkLengths(args: _*)
-    val pi = parts.iterator
-    val ai = args.iterator
-    val bldr = new java.lang.StringBuilder
-    val args1 = new ArrayBuffer[Any]
-    def copyString(first: Boolean): Unit = {
-      val str = treatEscapes(pi.next())
-      val strIsEmpty = str.length == 0
-      var start = 0
-      var idx = 0
-      if (!first) {
-        if (strIsEmpty || (str charAt 0) != '%')
-          bldr append "%s"
-        idx = 1
-      }
-      val len = str.length
-      while (idx < len) {
-        if (str(idx) == '%') {
-          bldr append (str substring (start, idx)) append "%s"
-          args1 += "%"
-          start = idx + 1
-        }
-        idx += 1
-      }
-      if (!strIsEmpty) bldr append (str substring (start, idx))
-    }
-    copyString(first = true)
-    while (pi.hasNext) {
-      args1 += ai.next()
-      copyString(first = false)
-    }
-    bldr.toString format (args1: _*)
-  }
+  // The implementation is magically hardwired into `scala.tools.reflect.MacroImplementations.macro_StringInterpolation_f`
+  def f(args: Any*): String = macro ???
 }
 
 object StringContext {
@@ -134,7 +102,7 @@ object StringContext {
    *   escape:  `\\`, `\"`, `\'`
    *   octal:   `\d` `\dd` `\ddd` where `d` is an octal digit between `0` and `7`.
    *
-   *  @param  A string that may contain escape sequences
+   *  @param  str  A string that may contain escape sequences
    *  @return The string with all escape sequences expanded.
    */
   def treatEscapes(str: String): String = {
@@ -144,7 +112,7 @@ object StringContext {
     var cur = 0
     var idx = 0
     def output(ch: Char) = {
-      bldr append str substring (start, cur)
+      bldr append str.substring (start, cur)
       bldr append ch
       start = idx
     }

@@ -36,8 +36,10 @@ import collection.parallel.Task
  *
  *  @author Aleksandar Prokopec
  *  @since 2.9
- *
- *  @define Coll immutable.ParHashMap
+ *  @see  [[http://docs.scala-lang.org/overviews/parallel-collections/concrete-parallel-collections.html#parallel_hash_tries Scala's Parallel Collections Library overview]]
+ *  section on Parallel Hash Tries for more information.
+  *
+ *  @define Coll `immutable.ParHashMap`
  *  @define coll immutable parallel hash map
  */
 @SerialVersionUID(1L)
@@ -116,7 +118,9 @@ self =>
     def remaining = sz - i
     override def toString = "HashTrieIterator(" + sz + ")"
   }
-
+  
+  /* debug */
+  
   private[parallel] def printDebugInfo() {
     println("Parallel hash trie")
     println("Top level inner trie type: " + trie.getClass)
@@ -136,7 +140,7 @@ self =>
 
 
 /** $factoryInfo
- *  @define Coll immutable.ParHashMap
+ *  @define Coll `immutable.ParHashMap`
  *  @define coll immutable parallel hash map
  */
 object ParHashMap extends ParMapFactory[ParHashMap] {
@@ -198,7 +202,7 @@ extends collection.parallel.BucketCombiner[(K, V), ParHashMap[K, V], (K, V), Has
   def groupByKey[Repr](cbf: () => Combiner[V, Repr]): ParHashMap[K, Repr] = {
     val bucks = buckets.filter(_ != null).map(_.headPtr)
     val root = new Array[HashMap[K, AnyRef]](bucks.length)
-
+    
     combinerTaskSupport.executeAndWaitResult(new CreateGroupedTrie(cbf, bucks, root, 0, bucks.length))
 
     var bitmap = 0
@@ -302,8 +306,7 @@ extends collection.parallel.BucketCombiner[(K, V), ParHashMap[K, V], (K, V), Has
         unrolled = unrolled.next
       }
 
-      evaluateCombiners(trie)
-      trie.asInstanceOf[HashMap[K, Repr]]
+      evaluateCombiners(trie).asInstanceOf[HashMap[K, Repr]]
     }
     private def evaluateCombiners(trie: HashMap[K, Combiner[V, Repr]]): HashMap[K, Repr] = trie match {
       case hm1: HashMap.HashMap1[_, _] =>

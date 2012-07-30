@@ -19,6 +19,10 @@ import symtab.Flags._
  *  of class-members which are private up to an enclosing non-package
  *  class, in order to avoid overriding conflicts.
  *
+ *  This phase also sets SPECIALIZED flag on type parameters with
+ *  `@specialized` annotation. We put this logic here because the
+ *  flag must be set before pickling.
+ *
  *  @author  Martin Odersky
  *  @version 1.0
  */
@@ -53,8 +57,8 @@ abstract class SuperAccessors extends transform.Transform with transform.TypingT
       val clazz              = qual.symbol
       val supername          = nme.superName(name)
       val superAcc = clazz.info.decl(supername).suchThat(_.alias == sym) orElse {
-        debuglog("add super acc " + sym + sym.locationString + " to `" + clazz);//debug
-        val acc = clazz.newMethod(supername, sel.pos, SUPERACCESSOR | PRIVATE) setAlias sym
+        debuglog(s"add super acc ${sym.fullLocationString} to $clazz")
+        val acc = clazz.newMethod(supername, sel.pos, SUPERACCESSOR | PRIVATE | HIDDEN) setAlias sym
         val tpe = clazz.thisType memberType sym match {
           case t if sym.isModule && !sym.isMethod => NullaryMethodType(t)
           case t                                  => t
@@ -121,10 +125,18 @@ abstract class SuperAccessors extends transform.Transform with transform.TypingT
       if (sym.isDeferred) {
         val member = sym.overridingSymbol(clazz);
         if (mix != tpnme.EMPTY || member == NoSymbol ||
-            !((member hasFlag ABSOVERRIDE) && member.isIncompleteIn(clazz)))
+            !(member.isAbstractOverride && member.isIncompleteIn(clazz)))
           unit.error(sel.pos, ""+sym.fullLocationString+" is accessed from super. It may not be abstract "+
                                "unless it is overridden by a member declared `abstract' and `override'");
+      } else if (mix == tpnme.EMPTY && !sym.owner.isTrait){
+        // SI-4989 Check if an intermediate class between `clazz` and `sym.owner` redeclares the method as abstract.
+        val intermediateClasses = clazz.info.baseClasses.tail.takeWhile(_ != sym.owner)
+        intermediateClasses.map(sym.overridingSymbol).find(s => s.isDeferred && !s.isAbstractOverride && !s.owner.isTrait).foreach {
+          absSym =>
+            unit.error(sel.pos, s"${sym.fullLocationString} cannot be directly accessed from ${clazz} because ${absSym.owner} redeclares it as abstract")
+        }
       }
+
       if (name.isTermName && mix == tpnme.EMPTY && (clazz.isTrait || clazz != currentClass || !validCurrentOwner))
         ensureAccessor(sel)
       else sel
@@ -134,7 +146,7 @@ abstract class SuperAccessors extends transform.Transform with transform.TypingT
     // otherwise lead to either a compiler crash or runtime failure.
     private lazy val isDisallowed = {
       import definitions._
-      Set(Any_isInstanceOf, Object_isInstanceOf, Any_asInstanceOf, Object_asInstanceOf, Object_==, Object_!=, Object_##)
+      Set[Symbol](Any_isInstanceOf, Object_isInstanceOf, Any_asInstanceOf, Object_asInstanceOf, Object_==, Object_!=, Object_##)
     }
 
     override def transform(tree: Tree): Tree = {
@@ -200,6 +212,15 @@ abstract class SuperAccessors extends transform.Transform with transform.TypingT
         case TypeApply(sel @ Select(This(_), name), args) =>
           mayNeedProtectedAccessor(sel, args, false)
 
+        // set a flag for all type parameters with `@specialized` annotation so it can be pickled
+        case typeDef: TypeDef if typeDef.symbol.deSkolemize.hasAnnotation(definitions.SpecializedClass) =>
+          debuglog("setting SPECIALIZED flag on typeDef.symbol.deSkolemize where typeDef = " + typeDef)
+          // we need to deSkolemize symbol so we get the same symbol as others would get when
+          // inspecting type parameter from "outside"; see the discussion of skolems here:
+          // https://groups.google.com/d/topic/scala-internals/0j8laVNTQsI/discussion
+          typeDef.symbol.deSkolemize.setFlag(SPECIALIZED)
+          typeDef
+
         case sel @ Select(qual @ This(_), name) =>
           // warn if they are selecting a private[this] member which
           // also exists in a superclass, because they may be surprised
@@ -246,7 +267,7 @@ abstract class SuperAccessors extends transform.Transform with transform.TypingT
               && sym.isProtected
               && sym.enclClass != currentClass
               && !sym.owner.isTrait
-              && (sym.owner.enclosingPackageClass != currentPackage)
+              && (sym.owner.enclosingPackageClass != currentClass.enclosingPackageClass)
               && (qual.symbol.info.member(sym.name) ne NoSymbol)
             )
             if (shouldEnsureAccessor) {
@@ -259,12 +280,16 @@ abstract class SuperAccessors extends transform.Transform with transform.TypingT
 
         case sel @ Select(Super(_, mix), name) =>
           if (sym.isValue && !sym.isMethod || sym.hasAccessorFlag) {
-            unit.error(tree.pos, "super may be not be used on "+ sym.accessedOrSelf)
+            if (!settings.overrideVars.value)
+              unit.error(tree.pos, "super may be not be used on "+ sym.accessedOrSelf)
           }
           else if (isDisallowed(sym)) {
             unit.error(tree.pos, "super not allowed here: use this." + name.decode + " instead")
           }
           transformSuperSelect(sel)
+
+        case DefDef(mods, name, tparams, vparamss, tpt, rhs) if tree.symbol.isMethodWithExtension =>
+          treeCopy.DefDef(tree, mods, name, tparams, vparamss, tpt, withInvalidOwner(transform(rhs)))
 
         case TypeApply(sel @ Select(qual, name), args) =>
           mayNeedProtectedAccessor(sel, args, true)
@@ -345,7 +370,7 @@ abstract class SuperAccessors extends transform.Transform with transform.TypingT
       }
 
       val protAcc = clazz.info.decl(accName).suchThat(s => s == NoSymbol || s.tpe =:= accType(s)) orElse {
-        val newAcc = clazz.newMethod(nme.protName(sym.originalName), tree.pos)
+        val newAcc = clazz.newMethod(nme.protName(sym.originalName), tree.pos, newFlags = HIDDEN)
         newAcc setInfoAndEnter accType(newAcc)
 
         val code = DefDef(newAcc, {
@@ -356,7 +381,7 @@ abstract class SuperAccessors extends transform.Transform with transform.TypingT
           args.foldLeft(base)(Apply(_, _))
         })
 
-        debuglog("" + code)
+        debuglog("created protected accessor: " + code)
         storeAccessorDefinition(clazz, code)
         newAcc
       }
@@ -368,7 +393,7 @@ abstract class SuperAccessors extends transform.Transform with transform.TypingT
           case _          => mkApply(TypeApply(selection, targs))
         }
       }
-      debuglog("Replaced " + tree + " with " + res)
+      debuglog(s"Replaced $tree with $res")
       if (hasArgs) localTyper.typedOperator(res) else localTyper.typed(res)
     }
 
@@ -407,7 +432,7 @@ abstract class SuperAccessors extends transform.Transform with transform.TypingT
 
       val accName = nme.protSetterName(field.originalName)
       val protectedAccessor = clazz.info decl accName orElse {
-        val protAcc      = clazz.newMethod(accName, field.pos)
+        val protAcc      = clazz.newMethod(accName, field.pos, newFlags = HIDDEN)
         val paramTypes   = List(clazz.typeOfThis, field.tpe)
         val params       = protAcc newSyntheticValueParams paramTypes
         val accessorType = MethodType(params, UnitClass.tpe)
@@ -447,7 +472,7 @@ abstract class SuperAccessors extends transform.Transform with transform.TypingT
         && sym.isJavaDefined
         && !sym.isDefinedInPackage
         && !accessibleThroughSubclassing
-        && (sym.enclosingPackageClass != currentPackage)
+        && (sym.enclosingPackageClass != currentClass.enclosingPackageClass)
         && (sym.enclosingPackageClass == sym.accessBoundary(sym.enclosingPackageClass))
       )
       val host = hostForAccessorOf(sym, clazz)

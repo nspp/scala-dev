@@ -11,7 +11,8 @@ import mutable.{LinkedHashMap, SynchronizedMap, HashSet, SynchronizedSet}
 import scala.concurrent.SyncVar
 import scala.util.control.ControlThrowable
 import scala.tools.nsc.io.{ AbstractFile, LogReplay, Logger, NullLogger, Replayer }
-import scala.tools.nsc.util.{ SourceFile, BatchSourceFile, Position, RangePosition, NoPosition, WorkScheduler, MultiHashMap }
+import scala.tools.nsc.util.{ WorkScheduler, MultiHashMap }
+import scala.reflect.internal.util.{ SourceFile, BatchSourceFile, Position, RangePosition, NoPosition }
 import scala.tools.nsc.reporters._
 import scala.tools.nsc.symtab._
 import scala.tools.nsc.ast._
@@ -19,6 +20,7 @@ import scala.tools.nsc.io.Pickler._
 import scala.tools.nsc.typechecker.DivergentImplicit
 import scala.annotation.tailrec
 import symtab.Flags.{ACCESSOR, PARAMACCESSOR}
+import language.implicitConversions
 
 /** The main class of the presentation compiler in an interactive environment such as an IDE
  */
@@ -351,6 +353,10 @@ class Global(settings: Settings, _reporter: Reporter, projectName: String = "")
               case item: WorkItem => Some(item.raiseMissing())
               case _ => Some(())
             }
+
+            // don't forget to service interrupt requests
+            val iqs = scheduler.dequeueAllInterrupts(_.execute())
+
             debugLog("ShutdownReq: cleaning work queue (%d items)".format(units.size))
             debugLog("Cleanup up responses (%d loadedType pending, %d parsedEntered pending)"
                 .format(waitLoadedTypeResponses.size, getParsedEnteredResponses.size))
@@ -434,6 +440,7 @@ class Global(settings: Settings, _reporter: Reporter, projectName: String = "")
   private def newRunnerThread(): Thread = {
     threadId += 1
     compileRunner = new PresentationCompilerThread(this, projectName)
+    compileRunner.setDaemon(true)
     compileRunner.start()
     compileRunner
   }
@@ -478,8 +485,8 @@ class Global(settings: Settings, _reporter: Reporter, projectName: String = "")
       } catch {
         case ex: FreshRunReq => throw ex           // propagate a new run request
         case ShutdownReq     => throw ShutdownReq  // propagate a shutdown request
-
-        case ex =>
+        case ex: ControlThrowable => throw ex
+        case ex: Throwable =>
           println("[%s]: exception during background compile: ".format(unit.source) + ex)
           ex.printStackTrace()
           for (r <- waitLoadedTypeResponses(unit.source)) {
@@ -529,6 +536,7 @@ class Global(settings: Settings, _reporter: Reporter, projectName: String = "")
     unit.defined.clear()
     unit.synthetics.clear()
     unit.toCheck.clear()
+    unit.checkedFeatures = Set()
     unit.targetPos = NoPosition
     unit.contexts.clear()
     unit.problems.clear()
@@ -619,7 +627,7 @@ class Global(settings: Settings, _reporter: Reporter, projectName: String = "")
         response raise ex
         throw ex
 
-      case ex =>
+      case ex: Throwable =>
         if (debugIDE) {
           println("exception thrown during response: "+ex)
           ex.printStackTrace()
@@ -747,7 +755,9 @@ class Global(settings: Settings, _reporter: Reporter, projectName: String = "")
             val tp1 = pre.memberType(alt) onTypeError NoType
             val tp2 = adaptToNewRunMap(sym.tpe) substSym (originalTypeParams, sym.owner.typeParams)
             matchesType(tp1, tp2, false)
-          } catch {
+          }
+          catch {
+            case ex: ControlThrowable => throw ex
             case ex: Throwable =>
               println("error in hyperlinking: " + ex)
               ex.printStackTrace()
@@ -923,7 +933,7 @@ class Global(settings: Settings, _reporter: Reporter, projectName: String = "")
       val implicitlyAdded = viaView != NoSymbol
       members.add(sym, pre, implicitlyAdded) { (s, st) =>
         new TypeMember(s, st,
-          context.isAccessible(s, pre, superAccess && !implicitlyAdded),
+          context.isAccessible(if (s.hasGetter) s.getter(s.owner) else s, pre, superAccess && !implicitlyAdded),
           inherited,
           viaView)
       }
@@ -956,7 +966,7 @@ class Global(settings: Settings, _reporter: Reporter, projectName: String = "")
         if (ownerTpe.isErroneous) List()
         else new ImplicitSearch(
           tree, functionType(List(ownerTpe), AnyClass.tpe), isView = true,
-          context.makeImplicit(reportAmbiguousErrors = false)).allImplicits
+          context0 = context.makeImplicit(reportAmbiguousErrors = false)).allImplicits
       for (view <- applicableViews) {
         val vtree = viewApply(view)
         val vpre = stabilizedType(vtree)
@@ -1056,7 +1066,7 @@ class Global(settings: Settings, _reporter: Reporter, projectName: String = "")
      *  @return true iff typechecked correctly
      */
     private def applyPhase(phase: Phase, unit: CompilationUnit) {
-      atPhase(phase) { phase.asInstanceOf[GlobalPhase] applyPhase unit }
+      enteringPhase(phase) { phase.asInstanceOf[GlobalPhase] applyPhase unit }
     }
   }
 

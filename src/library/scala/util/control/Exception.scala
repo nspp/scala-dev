@@ -9,7 +9,10 @@
 package scala.util.control
 
 import collection.immutable.List
+import reflect.{ ClassTag, classTag }
 import java.lang.reflect.InvocationTargetException
+import language.implicitConversions
+
 
 /** Classes representing the components of exception handling.
  *  Each class is independently composable.  Some example usages:
@@ -28,9 +31,9 @@ import java.lang.reflect.InvocationTargetException
 object Exception {
   type Catcher[+T] = PartialFunction[Throwable, T]
 
-  def mkCatcher[Ex <: Throwable: ClassManifest, T](isDef: Ex => Boolean, f: Ex => T) = new Catcher[T] {
+  def mkCatcher[Ex <: Throwable: ClassTag, T](isDef: Ex => Boolean, f: Ex => T) = new Catcher[T] {
     private def downcast(x: Throwable): Option[Ex] =
-      if (classManifest[Ex].erasure.isAssignableFrom(x.getClass)) Some(x.asInstanceOf[Ex])
+      if (classTag[Ex].runtimeClass.isAssignableFrom(x.getClass)) Some(x.asInstanceOf[Ex])
       else None
 
     def isDefinedAt(x: Throwable) = downcast(x) exists isDef
@@ -39,7 +42,7 @@ object Exception {
 
   def mkThrowableCatcher[T](isDef: Throwable => Boolean, f: Throwable => T) = mkCatcher(isDef, f)
 
-  implicit def throwableSubtypeToCatcher[Ex <: Throwable: ClassManifest, T](pf: PartialFunction[Ex, T]) =
+  implicit def throwableSubtypeToCatcher[Ex <: Throwable: ClassTag, T](pf: PartialFunction[Ex, T]) =
     mkCatcher(pf.isDefinedAt _, pf.apply _)
 
   /** !!! Not at all sure of every factor which goes into this,
@@ -230,8 +233,5 @@ object Exception {
     classes exists (_ isAssignableFrom x.getClass)
 
   private def pfFromExceptions(exceptions: Class[_]*): PartialFunction[Throwable, Nothing] =
-    new scala.runtime.AbstractPartialFunction[Throwable, Nothing] {
-      def apply(x: Throwable) = throw x
-      def _isDefinedAt(x: Throwable) = wouldMatch(x, exceptions)
-    }
+    { case x if wouldMatch(x, exceptions) => throw x }
 }

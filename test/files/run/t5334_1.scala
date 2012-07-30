@@ -1,14 +1,15 @@
-import scala.tools.nsc.reporters._
-import scala.tools.nsc.Settings
-import reflect.runtime.Mirror.ToolBox
+import scala.reflect.runtime.universe._
+import scala.reflect.runtime.{universe => ru}
+import scala.reflect.runtime.{currentMirror => cm}
+import scala.tools.reflect.ToolBox
 
 object Test extends App {
-  val code = scala.reflect.Code.lift{
+  val code = reify {
     class C { override def toString = "C" }
-    new C
+    val ret = new C
+    ret.asInstanceOf[Object]
   };
 
-  val reporter = new ConsoleReporter(new Settings)
-  val toolbox = new ToolBox(reporter)
+  val toolbox = cm.mkToolBox()
   println(toolbox.runExpr(code.tree))
 }

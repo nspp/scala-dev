@@ -58,13 +58,13 @@ import annotation.{migration, bridge}
  *  mutates the collection in place, unlike similar but
  *  undeprecated methods throughout the collections hierarchy.
  */
-@cloneable
 trait BufferLike[A, +This <: BufferLike[A, This] with Buffer[A]]
                 extends Growable[A]
                    with Shrinkable[A]
                    with Scriptable[A]
                    with Subtractable[A, This]
                    with SeqLike[A, This]
+                   with scala.Cloneable
 { self : This =>
 
   // Abstract methods from Seq:
@@ -223,9 +223,6 @@ trait BufferLike[A, +This <: BufferLike[A, This] with Buffer[A]]
   @migration("`++` creates a new buffer. Use `++=` to add an element from this buffer and return that buffer itself.", "2.8.0")
   def ++(xs: GenTraversableOnce[A]): This = clone() ++= xs.seq
 
-  @bridge
-  def ++(xs: TraversableOnce[A]): This = ++(xs: GenTraversableOnce[A])
-
   /** Creates a new collection with all the elements of this collection except `elem`.
    *
    *  @param elem  the element to remove.
@@ -255,6 +252,4 @@ trait BufferLike[A, +This <: BufferLike[A, This] with Buffer[A]]
    */
   @migration("`--` creates a new buffer. Use `--=` to remove an element from this buffer and return that buffer itself.", "2.8.0")
   override def --(xs: GenTraversableOnce[A]): This = clone() --= xs.seq
-
-  @bridge def --(xs: TraversableOnce[A]): This = --(xs: GenTraversableOnce[A])
 }

@@ -14,7 +14,6 @@ package immutable
 import generic._
 import immutable.{RedBlackTree => RB}
 import mutable.Builder
-import annotation.bridge
 
 /** $factoryInfo
  *  @define Coll immutable.TreeMap
@@ -132,7 +131,7 @@ class TreeMap[A, +B] private (tree: RB.Tree[A, B])(implicit val ordering: Orderi
    *  @param value   the value to be associated with `key`
    *  @return        a new $coll with the updated binding
    */
-  override def updated [B1 >: B](key: A, value: B1): TreeMap[A, B1] = new TreeMap(RB.update(tree, key, value))
+  override def updated [B1 >: B](key: A, value: B1): TreeMap[A, B1] = new TreeMap(RB.update(tree, key, value, true))
 
   /** Add a key/value pair to this map.
    *  @tparam   B1   type of the value of the new binding, a supertype of `B`
@@ -162,8 +161,6 @@ class TreeMap[A, +B] private (tree: RB.Tree[A, B])(implicit val ordering: Orderi
   override def ++[B1 >: B] (xs: GenTraversableOnce[(A, B1)]): TreeMap[A, B1] =
     ((repr: TreeMap[A, B1]) /: xs.seq) (_ + _)
 
-  @bridge def ++[B1 >: B] (xs: TraversableOnce[(A, B1)]): TreeMap[A, B1] = ++(xs: GenTraversableOnce[(A, B1)])
-
   /** A new TreeMap with the entry added is returned,
    *  assuming that key is <em>not</em> in the TreeMap.
    *
@@ -174,7 +171,7 @@ class TreeMap[A, +B] private (tree: RB.Tree[A, B])(implicit val ordering: Orderi
    */
   def insert [B1 >: B](key: A, value: B1): TreeMap[A, B1] = {
     assert(!RB.contains(tree, key))
-    new TreeMap(RB.update(tree, key, value))
+    new TreeMap(RB.update(tree, key, value, true))
   }
 
   def - (key:A): TreeMap[A, B] =

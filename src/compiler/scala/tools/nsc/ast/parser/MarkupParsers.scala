@@ -9,7 +9,8 @@ package ast.parser
 import scala.collection.mutable
 import mutable.{ Buffer, ArrayBuffer, ListBuffer }
 import scala.util.control.ControlThrowable
-import scala.tools.nsc.util.{SourceFile,CharArrayReader}
+import scala.tools.nsc.util.CharArrayReader
+import scala.reflect.internal.util.SourceFile
 import scala.xml.{ Text, TextBuffer }
 import scala.xml.parsing.MarkupParserCommon
 import scala.xml.Utility.{ isNameStart, isNameChar, isSpace }
@@ -267,7 +268,7 @@ trait MarkupParsers {
       val (qname, attrMap) = xTag(())
       if (ch == '/') { // empty element
         xToken("/>")
-        handle.element(r2p(start, start, curOffset), qname, attrMap, new ListBuffer[Tree])
+        handle.element(r2p(start, start, curOffset), qname, attrMap, true, new ListBuffer[Tree])
       }
       else { // handle content
         xToken('>')
@@ -281,7 +282,7 @@ trait MarkupParsers {
         val pos = r2p(start, start, curOffset)
         qname match {
           case "xml:group" => handle.group(pos, ts)
-          case _ => handle.element(pos, qname, attrMap, ts)
+          case _ => handle.element(pos, qname, attrMap, false, ts)
         }
       }
     }
@@ -397,7 +398,7 @@ trait MarkupParsers {
 
     /** xScalaPatterns  ::= patterns
      */
-    def xScalaPatterns: List[Tree] = escapeToScala(parser.seqPatterns(), "pattern")
+    def xScalaPatterns: List[Tree] = escapeToScala(parser.xmlSeqPatterns(), "pattern")
 
     def reportSyntaxError(pos: Int, str: String) = parser.syntaxError(pos, str)
     def reportSyntaxError(str: String) {

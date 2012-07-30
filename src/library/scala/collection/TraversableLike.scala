@@ -13,6 +13,7 @@ import mutable.{ Builder }
 import annotation.{tailrec, migration, bridge}
 import annotation.unchecked.{ uncheckedVariance => uV }
 import parallel.ParIterable
+import language.higherKinds
 
 /** A template trait for traversable collections of type `Traversable[A]`.
  *
@@ -64,7 +65,8 @@ import parallel.ParIterable
  *  @define Coll Traversable
  *  @define coll traversable collection
  */
-trait TraversableLike[+A, +Repr] extends HasNewBuilder[A, Repr]
+trait TraversableLike[+A, +Repr] extends Any
+                                    with HasNewBuilder[A, Repr]
                                     with FilterMonadic[A, Repr]
                                     with TraversableOnce[A]
                                     with GenTraversableLike[A, Repr]
@@ -83,6 +85,8 @@ trait TraversableLike[+A, +Repr] extends HasNewBuilder[A, Repr]
    */
   def repr: Repr = this.asInstanceOf[Repr]
 
+  final def isTraversableAgain: Boolean = true
+  
   /** The underlying collection seen as an instance of `$Coll`.
    *  By default this is implemented as the current collection object itself,
    *  but this can be overridden.
@@ -102,10 +106,6 @@ trait TraversableLike[+A, +Repr] extends HasNewBuilder[A, Repr]
 
   /** Applies a function `f` to all elements of this $coll.
    *
-   *    Note: this method underlies the implementation of most other bulk operations.
-   *    It's important to implement this method in an efficient way.
-   *
-   *
    *  @param  f   the function that is applied for its side-effect to every element.
    *              The result of function `f` is discarded.
    *
@@ -114,6 +114,11 @@ trait TraversableLike[+A, +Repr] extends HasNewBuilder[A, Repr]
    *              but this is not necessary.
    *
    *  @usecase def foreach(f: A => Unit): Unit
+   *    @inheritdoc
+   *
+   *    Note: this method underlies the implementation of most other bulk operations.
+   *    It's important to implement this method in an efficient way.
+   *
    */
   def foreach[U](f: A => U): Unit
 
@@ -153,10 +158,6 @@ trait TraversableLike[+A, +Repr] extends HasNewBuilder[A, Repr]
     b.result
   }
 
-  @bridge
-  def ++[B >: A, That](that: TraversableOnce[B])(implicit bf: CanBuildFrom[Repr, B, That]): That =
-    ++(that: GenTraversableOnce[B])(bf)
-
   /** As with `++`, returns a new collection containing the elements from the left operand followed by the
    *  elements from the right operand.
    *
@@ -164,17 +165,6 @@ trait TraversableLike[+A, +Repr] extends HasNewBuilder[A, Repr]
    *  the resulting collection rather than the left one.
    *  Mnemonic: the COLon is on the side of the new COLlection type.
    *
-   *  Example:
-   *  {{{
-   *     scala> val x = List(1)
-   *     x: List[Int] = List(1)
-   *
-   *     scala> val y = LinkedList(2)
-   *     y: scala.collection.mutable.LinkedList[Int] = LinkedList(2)
-   *
-   *     scala> val z = x ++: y
-   *     z: scala.collection.mutable.LinkedList[Int] = LinkedList(1, 2)
-   *  }}}
    *  @param that   the traversable to append.
    *  @tparam B     the element type of the returned collection.
    *  @tparam That  $thatinfo
@@ -183,9 +173,22 @@ trait TraversableLike[+A, +Repr] extends HasNewBuilder[A, Repr]
    *                of this $coll followed by all elements of `that`.
    *
    *  @usecase def ++:[B](that: TraversableOnce[B]): $Coll[B]
+   *    @inheritdoc
+   * 
+   *    Example:
+   *    {{{
+   *      scala> val x = List(1)
+   *      x: List[Int] = List(1)
    *
-   *  @return       a new $coll which contains all elements of this $coll
-   *                followed by all elements of `that`.
+   *      scala> val y = LinkedList(2)
+   *      y: scala.collection.mutable.LinkedList[Int] = LinkedList(2)
+   *
+   *      scala> val z = x ++: y
+   *      z: scala.collection.mutable.LinkedList[Int] = LinkedList(1, 2)
+   *    }}}
+   *
+   *    @return       a new $coll which contains all elements of this $coll
+   *                  followed by all elements of `that`.
    */
   def ++:[B >: A, That](that: TraversableOnce[B])(implicit bf: CanBuildFrom[Repr, B, That]): That = {
     val b = bf(repr)
@@ -283,11 +286,12 @@ trait TraversableLike[+A, +Repr] extends HasNewBuilder[A, Repr]
    *                The order of the elements is preserved.
    *
    *  @usecase def filterMap[B](f: A => Option[B]): $Coll[B]
+   *    @inheritdoc
    *
-   *  @param pf     the partial function which filters and maps the $coll.
-   *  @return       a new $coll resulting from applying the given option-valued function
-   *                `f` to each element and collecting all defined results.
-   *                The order of the elements is preserved.
+   *    @param pf     the partial function which filters and maps the $coll.
+   *    @return       a new $coll resulting from applying the given option-valued function
+   *                  `f` to each element and collecting all defined results.
+   *                  The order of the elements is preserved.
   def filterMap[B, That](f: A => Option[B])(implicit bf: CanBuildFrom[Repr, B, That]): That = {
     val b = bf(repr)
     for (x <- this)
@@ -482,7 +486,7 @@ trait TraversableLike[+A, +Repr] extends HasNewBuilder[A, Repr]
     if (n <= 0) {
       val b = newBuilder
       b.sizeHint(this)
-      b ++= thisCollection result
+      (b ++= thisCollection).result
     }
     else sliceWithKnownDelta(n, Int.MaxValue, -n)
 
@@ -587,8 +591,6 @@ trait TraversableLike[+A, +Repr] extends HasNewBuilder[A, Repr]
    *  Copying will stop once either the end of the current $coll is reached,
    *  or the end of the array is reached, or `len` elements have been copied.
    *
-   *  $willNotTerminateInf
-   *
    *  @param  xs     the array to fill.
    *  @param  start  the starting index.
    *  @param  len    the maximal number of elements to copy.
@@ -596,6 +598,9 @@ trait TraversableLike[+A, +Repr] extends HasNewBuilder[A, Repr]
    *
    *
    *  @usecase def copyToArray(xs: Array[A], start: Int, len: Int): Unit
+   *    @inheritdoc
+   *
+   *    $willNotTerminateInf
    */
   def copyToArray[B >: A](xs: Array[B], start: Int, len: Int) {
     var i = start
@@ -612,6 +617,13 @@ trait TraversableLike[+A, +Repr] extends HasNewBuilder[A, Repr]
   def toTraversable: Traversable[A] = thisCollection
   def toIterator: Iterator[A] = toStream.iterator
   def toStream: Stream[A] = toBuffer.toStream
+  // Override to provide size hint.
+  override def to[Col[_]](implicit cbf: CanBuildFrom[Nothing, A, Col[A @uV]]): Col[A @uV] = {
+    val b = cbf()
+    b.sizeHint(this)
+    b ++= thisCollection
+    b.result
+  }
 
   /** Converts this $coll to a string.
    *
@@ -693,10 +705,11 @@ trait TraversableLike[+A, +Repr] extends HasNewBuilder[A, Repr]
      *                that satisfies predicate `p` and collecting the results.
      *
      *  @usecase def map[B](f: A => B): $Coll[B]
+     *    @inheritdoc
      *
-     *  @return       a new $coll resulting from applying the given function
-     *                `f` to each element of the outer $coll that satisfies
-     *                predicate `p` and collecting the results.
+     *    @return       a new $coll resulting from applying the given function
+     *                  `f` to each element of the outer $coll that satisfies
+     *                  predicate `p` and collecting the results.
      */
     def map[B, That](f: A => B)(implicit bf: CanBuildFrom[Repr, B, That]): That = {
       val b = bf(repr)
@@ -709,9 +722,6 @@ trait TraversableLike[+A, +Repr] extends HasNewBuilder[A, Repr]
      *  outer $coll containing this `WithFilter` instance that satisfy
      *  predicate `p` and concatenating the results.
      *
-     *  The type of the resulting collection will be guided by the static type
-     *  of the outer $coll.
-     *
      *  @param f      the function to apply to each element.
      *  @tparam B     the element type of the returned collection.
      *  @tparam That  $thatinfo
@@ -722,11 +732,15 @@ trait TraversableLike[+A, +Repr] extends HasNewBuilder[A, Repr]
      *                concatenating the results.
      *
      *  @usecase def flatMap[B](f: A => TraversableOnce[B]): $Coll[B]
+     *    @inheritdoc
      *
-     *  @return       a new $coll resulting from applying the given
-     *                collection-valued function `f` to each element of the
-     *                outer $coll that satisfies predicate `p` and concatenating
-     *                the results.
+     *    The type of the resulting collection will be guided by the static type
+     *    of the outer $coll.
+     *
+     *    @return       a new $coll resulting from applying the given
+     *                  collection-valued function `f` to each element of the
+     *                  outer $coll that satisfies predicate `p` and concatenating
+     *                  the results.
      */
     def flatMap[B, That](f: A => GenTraversableOnce[B])(implicit bf: CanBuildFrom[Repr, B, That]): That = {
       val b = bf(repr)
@@ -746,6 +760,7 @@ trait TraversableLike[+A, +Repr] extends HasNewBuilder[A, Repr]
      *              but this is not necessary.
      *
      *  @usecase def foreach(f: A => Unit): Unit
+     *    @inheritdoc
      */
     def foreach[U](f: A => U): Unit =
       for (x <- self)
@@ -766,6 +781,6 @@ trait TraversableLike[+A, +Repr] extends HasNewBuilder[A, Repr]
   // A helper for tails and inits.
   private def iterateUntilEmpty(f: Traversable[A @uV] => Traversable[A @uV]): Iterator[Repr] = {
     val it = Iterator.iterate(thisCollection)(f) takeWhile (x => !x.isEmpty)
-    it ++ Iterator(Nil) map (newBuilder ++= _ result)
+    it ++ Iterator(Nil) map (x => (newBuilder ++= x).result)
   }
 }

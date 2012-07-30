@@ -157,9 +157,9 @@ class FastScalac extends Scalac {
 
     val scalaHome: String = try {
       val url = ScalaClassLoader.originOfClass(classOf[FastScalac]).get
-      File(url.getFile).jfile.getParentFile.getParentFile getAbsolutePath
+      File(url.getFile).jfile.getParentFile.getParentFile.getAbsolutePath
     } catch {
-      case _ =>
+      case _: Throwable =>
         buildError("Compilation failed because of an internal compiler error;"+
                    " couldn't determine value for -Dscala.home=<value>")
     }

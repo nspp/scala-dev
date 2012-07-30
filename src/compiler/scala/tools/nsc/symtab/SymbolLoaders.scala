@@ -12,7 +12,7 @@ import scala.tools.nsc.util.{ ClassPath }
 import classfile.ClassfileParser
 import reflect.internal.Flags._
 import reflect.internal.MissingRequirementError
-import util.Statistics._
+import reflect.internal.util.Statistics
 import scala.tools.nsc.io.{ AbstractFile, MsilFile }
 
 /** This class ...
@@ -23,6 +23,7 @@ import scala.tools.nsc.io.{ AbstractFile, MsilFile }
 abstract class SymbolLoaders {
   val global: Global
   import global._
+  import SymbolLoadersStats._
 
   protected def enterIfNew(owner: Symbol, member: Symbol, completer: SymbolLoader): Symbol = {
     assert(owner.info.decls.lookup(member.name) == NoSymbol, owner.fullName + "." + member.name)
@@ -30,15 +31,10 @@ abstract class SymbolLoaders {
     member
   }
 
-  private def realOwner(root: Symbol): Symbol = {
-    if (root.isRoot) definitions.EmptyPackageClass else root
-  }
-
   /** Enter class with given `name` into scope of `root`
    *  and give them `completer` as type.
    */
-  def enterClass(root: Symbol, name: String, completer: SymbolLoader): Symbol = {
-    val owner = realOwner(root)
+  def enterClass(owner: Symbol, name: String, completer: SymbolLoader): Symbol = {
     val clazz = owner.newClass(newTypeName(name))
     clazz setInfo completer
     enterIfNew(owner, clazz, completer)
@@ -47,12 +43,51 @@ abstract class SymbolLoaders {
   /** Enter module with given `name` into scope of `root`
    *  and give them `completer` as type.
    */
-  def enterModule(root: Symbol, name: String, completer: SymbolLoader): Symbol = {
-    val owner = realOwner(root)
+  def enterModule(owner: Symbol, name: String, completer: SymbolLoader): Symbol = {
     val module = owner.newModule(newTermName(name))
     module setInfo completer
     module.moduleClass setInfo moduleClassLoader
     enterIfNew(owner, module, completer)
+  }
+
+  /** Enter package with given `name` into scope of `root`
+   *  and give them `completer` as type.
+   */
+  def enterPackage(root: Symbol, name: String, completer: SymbolLoader): Symbol = {
+    val pname = newTermName(name)
+    val preExisting = root.info.decls lookup pname
+    if (preExisting != NoSymbol) {
+      // Some jars (often, obfuscated ones) include a package and
+      // object with the same name. Rather than render them unusable,
+      // offer a setting to resolve the conflict one way or the other.
+      // This was motivated by the desire to use YourKit probes, which
+      // require yjp.jar at runtime. See SI-2089.
+      if (settings.termConflict.isDefault)
+        throw new TypeError(
+          root+" contains object and package with same name: "+
+          name+"\none of them needs to be removed from classpath"
+        )
+      else if (settings.termConflict.value == "package") {
+        global.warning(
+          "Resolving package/object name conflict in favor of package " +
+          preExisting.fullName + ".  The object will be inaccessible."
+        )
+        root.info.decls.unlink(preExisting)
+      }
+      else {
+        global.warning(
+          "Resolving package/object name conflict in favor of object " +
+          preExisting.fullName + ".  The package will be inaccessible."
+        )
+        return NoSymbol
+      }
+    }
+    // todo: find out initialization sequence for pkg/pkg.moduleClass is different from enterModule
+    val pkg = root.newPackage(pname)
+    pkg.moduleClass setInfo completer
+    pkg setInfo pkg.moduleClass.tpe
+    root.info.decls enter pkg
+    pkg
   }
 
   /** Enter class and module with given `name` into scope of `root`
@@ -126,9 +161,13 @@ abstract class SymbolLoaders {
         ok = false
         if (settings.debug.value) ex.printStackTrace()
         val msg = ex.getMessage()
-        globalError(
-          if (msg eq null) "i/o error while loading " + root.name
-          else "error while loading " + root.name + ", " + msg);
+        // SI-5593 Scaladoc's current strategy is to visit all packages in search of user code that can be documented
+        // therefore, it will rummage through the classpath triggering errors whenever it encounters package objects
+        // that are not in their correct place (see bug for details)
+        if (!settings.isScaladoc)
+          globalError(
+            if (msg eq null) "i/o error while loading " + root.name
+            else "error while loading " + root.name + ", " + msg);
       }
       try {
         val start = currentTime
@@ -171,54 +210,23 @@ abstract class SymbolLoaders {
   class PackageLoader(classpath: ClassPath[platform.BinaryRepr]) extends SymbolLoader {
     protected def description = "package loader "+ classpath.name
 
-    def enterPackage(root: Symbol, name: String, completer: SymbolLoader) {
-      val preExisting = root.info.decls.lookup(newTermName(name))
-      if (preExisting != NoSymbol) {
-        // Some jars (often, obfuscated ones) include a package and
-        // object with the same name. Rather than render them unusable,
-        // offer a setting to resolve the conflict one way or the other.
-        // This was motivated by the desire to use YourKit probes, which
-        // require yjp.jar at runtime. See SI-2089.
-        if (settings.termConflict.isDefault)
-          throw new TypeError(
-            root+" contains object and package with same name: "+
-            name+"\none of them needs to be removed from classpath"
-          )
-        else if (settings.termConflict.value == "package") {
-          global.warning(
-            "Resolving package/object name conflict in favor of package " +
-            preExisting.fullName + ".  The object will be inaccessible."
-          )
-          root.info.decls.unlink(preExisting)
-        }
-        else {
-          global.warning(
-            "Resolving package/object name conflict in favor of object " +
-            preExisting.fullName + ".  The package will be inaccessible."
-          )
-          return
-        }
-      }
-      val pkg = root.newPackage(newTermName(name))
-      pkg.moduleClass.setInfo(completer)
-      pkg.setInfo(pkg.moduleClass.tpe)
-      root.info.decls.enter(pkg)
-    }
-
     protected def doComplete(root: Symbol) {
       assert(root.isPackageClass, root)
       root.setInfo(new PackageClassInfoType(newScope, root))
 
       val sourcepaths = classpath.sourcepaths
-      for (classRep <- classpath.classes if platform.doLoad(classRep)) {
-        initializeFromClassPath(root, classRep)
+      if (!root.isRoot) {
+        for (classRep <- classpath.classes if platform.doLoad(classRep)) {
+          initializeFromClassPath(root, classRep)
+        }
       }
+      if (!root.isEmptyPackageClass) {
+        for (pkg <- classpath.packages) {
+          enterPackage(root, pkg.name, new PackageLoader(pkg))
+        }
 
-      for (pkg <- classpath.packages) {
-        enterPackage(root, pkg.name, new PackageLoader(pkg))
+        openPackageModule(root)
       }
-
-      openPackageModule(root)
     }
   }
 
@@ -236,9 +244,19 @@ abstract class SymbolLoaders {
     protected def description = "class file "+ classfile.toString
 
     protected def doComplete(root: Symbol) {
-      val start = startTimer(classReadNanos)
+      val start = Statistics.startTimer(classReadNanos)
       classfileParser.parse(classfile, root)
-      stopTimer(classReadNanos, start)
+      if (root.associatedFile eq null) {
+        root match {
+          // In fact, the ModuleSymbol forwards its setter to the module class
+          case _: ClassSymbol | _: ModuleSymbol =>
+            debuglog("ClassfileLoader setting %s.associatedFile = %s".format(root.name, classfile))
+            root.associatedFile = classfile
+          case _ =>
+            debuglog("Not setting associatedFile to %s because %s is a %s".format(classfile, root.name, root.shortSymbolClass))
+        }
+      }
+      Statistics.stopTimer(classReadNanos, start)
     }
     override def sourcefile: Option[AbstractFile] = classfileParser.srcfile
   }
@@ -273,4 +291,9 @@ abstract class SymbolLoaders {
   /** used from classfile parser to avoid cyclies */
   var parentsLevel = 0
   var pendingLoadActions: List[() => Unit] = Nil
+}
+
+object SymbolLoadersStats {
+  import reflect.internal.TypesStats.typerNanos
+  val classReadNanos = Statistics.newSubTimer  ("time classfilereading", typerNanos)
 }

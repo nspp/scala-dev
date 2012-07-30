@@ -9,7 +9,7 @@ trait CPSUtils {
   import global._
   import definitions._
 
-  var cpsEnabled = true
+  var cpsEnabled = false
   val verbose: Boolean = System.getProperty("cpsVerbose", "false") == "true"
   def vprintln(x: =>Any): Unit = if (verbose) println(x)
 
@@ -24,20 +24,22 @@ trait CPSUtils {
     val shift           = newTermName("shift")
     val shiftR          = newTermName("shiftR")
     val shiftSuffix     = newTermName("$shift")
+    val shiftUnit0      = newTermName("shiftUnit0")
     val shiftUnit       = newTermName("shiftUnit")
     val shiftUnitR      = newTermName("shiftUnitR")
   }
 
-  lazy val MarkerCPSSym        = definitions.getRequiredClass("scala.util.continuations.cpsSym")
-  lazy val MarkerCPSTypes      = definitions.getRequiredClass("scala.util.continuations.cpsParam")
-  lazy val MarkerCPSSynth      = definitions.getRequiredClass("scala.util.continuations.cpsSynth")
-  lazy val MarkerCPSAdaptPlus  = definitions.getRequiredClass("scala.util.continuations.cpsPlus")
-  lazy val MarkerCPSAdaptMinus = definitions.getRequiredClass("scala.util.continuations.cpsMinus")
+  lazy val MarkerCPSSym        = rootMirror.getRequiredClass("scala.util.continuations.cpsSym")
+  lazy val MarkerCPSTypes      = rootMirror.getRequiredClass("scala.util.continuations.cpsParam")
+  lazy val MarkerCPSSynth      = rootMirror.getRequiredClass("scala.util.continuations.cpsSynth")
+  lazy val MarkerCPSAdaptPlus  = rootMirror.getRequiredClass("scala.util.continuations.cpsPlus")
+  lazy val MarkerCPSAdaptMinus = rootMirror.getRequiredClass("scala.util.continuations.cpsMinus")
 
-  lazy val Context = definitions.getRequiredClass("scala.util.continuations.ControlContext")
-  lazy val ModCPS = definitions.getRequiredModule("scala.util.continuations")
+  lazy val Context = rootMirror.getRequiredClass("scala.util.continuations.ControlContext")
+  lazy val ModCPS = rootMirror.getRequiredPackage("scala.util.continuations")
 
   lazy val MethShiftUnit  = definitions.getMember(ModCPS, cpsNames.shiftUnit)
+  lazy val MethShiftUnit0 = definitions.getMember(ModCPS, cpsNames.shiftUnit0)
   lazy val MethShiftUnitR = definitions.getMember(ModCPS, cpsNames.shiftUnitR)
   lazy val MethShift      = definitions.getMember(ModCPS, cpsNames.shift)
   lazy val MethShiftR     = definitions.getMember(ModCPS, cpsNames.shiftR)

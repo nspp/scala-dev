@@ -25,6 +25,20 @@ private[actors] class MQueue[Msg >: Null](protected val label: String) {
     _size += diff
   }
 
+  def prepend(other: MQueue[Msg]) {
+    if (!other.isEmpty) {
+      other.last.next = first
+      first = other.first
+    }
+  }
+
+  def clear() {
+    first = null
+    last = null
+    _size = 0
+  }
+
+
   def append(msg: Msg, session: OutputChannel[Any]) {
     changeSize(1) // size always increases by 1
     val el = new MQueueElement(msg, session)
@@ -107,7 +121,7 @@ private[actors] class MQueue[Msg >: Null](protected val label: String) {
    *  or `'''null'''` if `p` fails for all of them.
    */
   def extractFirst(p: (Msg, OutputChannel[Any]) => Boolean): MQueueElement[Msg] =
-    removeInternal(0)(p) orNull
+    removeInternal(0)(p).orNull
 
   def extractFirst(pf: PartialFunction[Msg, Any]): MQueueElement[Msg] = {
     if (isEmpty)    // early return

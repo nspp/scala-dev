@@ -4,7 +4,7 @@ import java.io.{PrintStream, OutputStreamWriter, Writer}
 
 import scala.runtime.ScalaRunTime.stringOf
 import java.lang.reflect.InvocationTargetException
-import scala.reflect.ReflectionUtils._
+import scala.reflect.runtime.ReflectionUtils._
 
 object Executor {
 
@@ -28,7 +28,7 @@ object Executor {
     Console.setOut(newOut)
     Console.setErr(newOut)
     try {
-      singletonInstance(name, classLoader)
+      singletonInstance(classLoader, name)
     } catch {
       case ex: Throwable =>
         unwrapThrowable(ex) match {

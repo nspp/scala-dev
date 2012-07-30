@@ -12,7 +12,7 @@ import Flags.flagsToString
 import interpreter.IMain.stripString
 
 trait EventStrings {
-  self: SymbolTable with EventsSymbolTable with symtab.Positions =>
+  self: SymbolTable with EventsSymbolTable =>
 
   trait Strings {
     self: EventModel =>

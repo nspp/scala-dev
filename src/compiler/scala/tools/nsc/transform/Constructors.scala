@@ -44,11 +44,14 @@ abstract class Constructors extends Transform with ast.TreeDSL {
       )
       // decompose primary constructor into the three entities above.
       val constrInfo: ConstrInfo = {
-        val primary = stats find (_.symbol.isPrimaryConstructor)
-        assert(primary.isDefined, "no constructor in template: impl = " + impl)
-
-        val ddef @ DefDef(_, _, _, List(vparams), _, rhs @ Block(_, _)) = primary.get
+        stats find (_.symbol.isPrimaryConstructor) match {
+          case Some(ddef @ DefDef(_, _, _, List(vparams), _, rhs @ Block(_, _))) =>
         ConstrInfo(ddef, vparams map (_.symbol), rhs)
+          case x =>
+            // AnyVal constructor is OK
+            assert(clazz eq AnyValClass, "no constructor in template: impl = " + impl)
+            return impl
+        }
       }
       import constrInfo._
 
@@ -183,12 +186,15 @@ abstract class Constructors extends Transform with ast.TreeDSL {
           // before the superclass constructor call, otherwise it goes after.
           // Lazy vals don't get the assignment in the constructor.
           if (!stat.symbol.tpe.isInstanceOf[ConstantType]) {
-            if (rhs != EmptyTree && !stat.symbol.isLazy) {
+            if (stat.symbol.hasStaticAnnotation) {
+              debuglog("@static annotated field initialization skipped.")
+              defBuf += deriveValDef(stat)(tree => tree)
+            } else if (rhs != EmptyTree && !stat.symbol.isLazy) {
               val rhs1 = intoConstructor(stat.symbol, rhs);
               (if (canBeMoved(stat)) constrPrefixBuf else constrStatBuf) += mkAssign(
                 stat.symbol, rhs1)
+              defBuf += deriveValDef(stat)(_ => EmptyTree)
             }
-            defBuf += deriveValDef(stat)(_ => EmptyTree)
           }
         case ClassDef(_, _, _, _) =>
           // classes are treated recursively, and left in the template
@@ -320,7 +326,7 @@ abstract class Constructors extends Transform with ast.TreeDSL {
             // statements coming from the original class need retyping in the current context
             debuglog("retyping " + stat2)
 
-            val d = new specializeTypes.Duplicator
+            val d = new specializeTypes.Duplicator(Map[Symbol, Type]())
             d.retyped(localTyper.context1.asInstanceOf[d.Context],
                       stat2,
                       genericClazz,
@@ -359,9 +365,8 @@ abstract class Constructors extends Transform with ast.TreeDSL {
           val tree =
             If(
               Apply(
-                Select(
-                  Apply(gen.mkAttributedRef(specializedFlag), List()),
-                  definitions.getMember(definitions.BooleanClass, nme.UNARY_!)),
+                CODE.NOT (
+                 Apply(gen.mkAttributedRef(specializedFlag), List())),
                 List()),
               Block(stats, Literal(Constant())),
               EmptyTree)
@@ -443,7 +448,7 @@ abstract class Constructors extends Transform with ast.TreeDSL {
         localTyper.typed {
           atPos(impl.pos) {
             val closureClass   = clazz.newClass(nme.delayedInitArg.toTypeName, impl.pos, SYNTHETIC | FINAL)
-            val closureParents = List(AbstractFunctionClass(0).tpe, ScalaObjectClass.tpe)
+            val closureParents = List(AbstractFunctionClass(0).tpe)
 
             closureClass setInfoAndEnter new ClassInfoType(closureParents, newScope, closureClass)
 
@@ -565,7 +570,7 @@ abstract class Constructors extends Transform with ast.TreeDSL {
 
     override def transform(tree: Tree): Tree =
       tree match {
-        case ClassDef(_,_,_,_) if !tree.symbol.isInterface && !isValueClass(tree.symbol) =>
+        case ClassDef(_,_,_,_) if !tree.symbol.isInterface && !isPrimitiveValueClass(tree.symbol) =>
           deriveClassDef(tree)(transformClassTemplate)
         case _ =>
           super.transform(tree)

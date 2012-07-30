@@ -20,13 +20,14 @@ abstract class Flatten extends InfoTransform {
 
   /** Updates the owning scope with the given symbol; returns the old symbol.
    */
-  private def replaceSymbolInCurrentScope(sym: Symbol): Symbol = afterFlatten {
+  private def replaceSymbolInCurrentScope(sym: Symbol): Symbol = exitingFlatten {
     val scope = sym.owner.info.decls
     val old   = scope lookup sym.name
     if (old ne NoSymbol)
       scope unlink old
 
     scope enter sym
+    log("lifted " + sym.fullLocationString)
     old
   }
 
@@ -36,7 +37,7 @@ abstract class Flatten extends InfoTransform {
       debuglog("re-enter " + sym.fullLocationString)
       val old = replaceSymbolInCurrentScope(sym)
       if (old ne NoSymbol)
-        debuglog("lifted " + sym.fullLocationString + ", unlinked " + old)
+        log("unlinked " + old.fullLocationString + " after lifting " + sym)
     }
   }
   private def liftSymbol(sym: Symbol) {
@@ -52,7 +53,7 @@ abstract class Flatten extends InfoTransform {
     clazz.isClass && !clazz.isPackageClass && {
       // Cannot flatten here: class A[T] { object B }
       // was "at erasurePhase.prev"
-      beforeErasure(clazz.typeParams.isEmpty)
+      enteringErasure(clazz.typeParams.isEmpty)
     }
   }
 
@@ -66,11 +67,11 @@ abstract class Flatten extends InfoTransform {
         val decls1 = scopeTransform(clazz) {
           val decls1 = newScope
           if (clazz.isPackageClass) {
-            afterFlatten { decls foreach (decls1 enter _) }
+            exitingFlatten { decls foreach (decls1 enter _) }
           }
           else {
             val oldowner = clazz.owner
-            afterFlatten { oldowner.info }
+            exitingFlatten { oldowner.info }
             parents1 = parents mapConserve (this)
 
             for (sym <- decls) {
@@ -108,7 +109,7 @@ abstract class Flatten extends InfoTransform {
       tree match {
         case PackageDef(_, _) =>
           liftedDefs(tree.symbol.moduleClass) = new ListBuffer
-        case Template(_, _, _) if tree.symbol.owner.hasPackageFlag =>
+        case Template(_, _, _) if tree.symbol.isDefinedInPackage =>
           liftedDefs(tree.symbol.owner) = new ListBuffer
         case _ =>
       }
@@ -122,7 +123,7 @@ abstract class Flatten extends InfoTransform {
           liftedDefs(sym.enclosingTopLevelClass.owner) += tree
           EmptyTree
         case Select(qual, name) if (sym.isStaticModule && !sym.owner.isPackageClass) =>
-          afterFlatten(atPos(tree.pos)(gen.mkAttributedRef(sym)))
+          exitingFlatten(atPos(tree.pos)(gen.mkAttributedRef(sym)))
         case _ =>
           tree
       }

@@ -17,8 +17,7 @@ import collection.parallel.immutable.ParHashSet
 
 /** This class implements immutable sets using a hash trie.
  *
- *  '''Note:''' the builder of a hash set returns specialized representations `EmptySet`,`Set1`,..., `Set4`
- *  for sets of `size <= 4`.
+ *  '''Note:''' The builder of this hash set may return specialized representations for small sets.
  *
  *  @tparam A      the type of the elements contained in this hash set.
  *
@@ -26,7 +25,7 @@ import collection.parallel.immutable.ParHashSet
  *  @author  Tiark Rompf
  *  @version 2.8
  *  @since   2.3
- *  @define Coll immutable.HashSet
+ *  @define Coll `immutable.HashSet`
  *  @define coll immutable hash set
  */
 @SerialVersionUID(2L)
@@ -85,12 +84,12 @@ class HashSet[A] extends AbstractSet[A]
 }
 
 /** $factoryInfo
- *  @define Coll immutable.HashSet
+ *  @define Coll `immutable.HashSet`
  *  @define coll immutable hash set
  *
  *  @author  Tiark Rompf
  *  @since   2.3
- *  @define Coll immutable.HashSet
+ *  @define Coll `immutable.HashSet`
  *  @define coll immutable hash set
  *  @define mayNotTerminateInf
  *  @define willNotTerminateInf

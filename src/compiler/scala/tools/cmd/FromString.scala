@@ -7,19 +7,20 @@ package scala.tools
 package cmd
 
 import nsc.io.{ Path, File, Directory }
-import scala.reflect.OptManifest
+import scala.reflect.runtime.{universe => ru}
+import scala.tools.reflect.StdRuntimeTags._
 
 /** A general mechanism for defining how a command line argument
  *  (always a String) is transformed into an arbitrary type.  A few
  *  example instances are in the companion object, but in general
  *  either IntFromString will suffice or you'll want custom transformers.
  */
-abstract class FromString[+T](implicit m: OptManifest[T]) extends scala.runtime.AbstractPartialFunction[String, T] {
+abstract class FromString[+T](implicit t: ru.TypeTag[T]) extends PartialFunction[String, T] {
   def apply(s: String): T
-  def _isDefinedAt(s: String): Boolean = true
+  def isDefinedAt(s: String): Boolean = true
   def zero: T = apply("")
 
-  def targetString: String = m.toString
+  def targetString: String = t.toString
 }
 
 object FromString {
@@ -29,21 +30,21 @@ object FromString {
 
   /** Path related stringifiers.
    */
-  val ExistingFile: FromString[File] = new FromString[File] {
-    override def _isDefinedAt(s: String) = toFile(s).isFile
+  val ExistingFile: FromString[File] = new FromString[File]()(tagOfFile) {
+    override def isDefinedAt(s: String) = toFile(s).isFile
     def apply(s: String): File =
       if (isDefinedAt(s)) toFile(s)
       else cmd.runAndExit(println("'%s' is not an existing file." format s))
   }
-  val ExistingDir: FromString[Directory] = new FromString[Directory] {
-    override def _isDefinedAt(s: String) = toDir(s).isDirectory
+  val ExistingDir: FromString[Directory] = new FromString[Directory]()(tagOfDirectory) {
+    override def isDefinedAt(s: String) = toDir(s).isDirectory
     def apply(s: String): Directory =
       if (isDefinedAt(s)) toDir(s)
       else cmd.runAndExit(println("'%s' is not an existing directory." format s))
   }
-  def ExistingDirRelativeTo(root: Directory) = new FromString[Directory] {
-    private def resolve(s: String) = toDir(s) toAbsoluteWithRoot root toDirectory
-    override def _isDefinedAt(s: String) = resolve(s).isDirectory
+  def ExistingDirRelativeTo(root: Directory) = new FromString[Directory]()(tagOfDirectory) {
+    private def resolve(s: String) = (toDir(s) toAbsoluteWithRoot root).toDirectory
+    override def isDefinedAt(s: String) = resolve(s).isDirectory
     def apply(s: String): Directory =
       if (isDefinedAt(s)) resolve(s)
       else cmd.runAndExit(println("'%s' is not an existing directory." format resolve(s)))
@@ -52,20 +53,20 @@ object FromString {
   /** Argument expander, i.e. turns single argument "foo bar baz" into argument
    *  list "foo", "bar", "baz".
    */
-  val ArgumentsFromString: FromString[List[String]] = new FromString[List[String]] {
+  val ArgumentsFromString: FromString[List[String]] = new FromString[List[String]]()(tagOfListOfString) {
     def apply(s: String) = toArgs(s)
   }
 
   /** Identity.
    */
-  implicit val StringFromString: FromString[String] = new FromString[String] {
+  implicit val StringFromString: FromString[String] = new FromString[String]()(tagOfString) {
     def apply(s: String): String = s
   }
 
   /** Implicit as the most likely to be useful as-is.
    */
-  implicit val IntFromString: FromString[Int] = new FromString[Int] {
-    override def _isDefinedAt(s: String)  = safeToInt(s).isDefined
+  implicit val IntFromString: FromString[Int] = new FromString[Int]()(tagOfInt) {
+    override def isDefinedAt(s: String)   = safeToInt(s).isDefined
     def apply(s: String)                  = safeToInt(s).get
     def safeToInt(s: String): Option[Int] = try Some(java.lang.Integer.parseInt(s)) catch { case _: NumberFormatException => None }
   }

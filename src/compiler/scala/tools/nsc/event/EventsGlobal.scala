@@ -27,7 +27,7 @@ trait EventsGlobal extends EventsSymbolTable {
     def currentRun       = global.currentRun
     def currentUnit      = if (currentRun == null) null else currentRun.currentUnit
     def currentPos: Position =
-      if (!isInitialized || !posOK) NoPosition
+      if (!isInitialized) NoPosition
       else Option(global.posAssigner.pos) getOrElse NoPosition
 
     val TypeManifest     = manifest[Type]

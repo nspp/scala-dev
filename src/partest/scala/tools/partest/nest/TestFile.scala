@@ -35,7 +35,9 @@ abstract class TestFile(val kind: String) extends TestFileCommon {
     if (setOutDir)
       settings.outputDirs setSingleOutput setOutDirTo.path
 
-    // adding code.jar to the classpath (to provide Code.lift services for reification tests)
+    // adding codelib.jar to the classpath
+    // codelib provides the possibility to override standard reify
+    // this shields the massive amount of reification tests from changes in the API
     settings.classpath prepend PathSettings.srcCodeLib.toString
     if (propIsSet("java.class.path")) setProp("java.class.path", PathSettings.srcCodeLib.toString + ";" + propOrElse("java.class.path", ""))
 
@@ -76,3 +78,4 @@ case class SpecializedTestFile(file: JFile, fileManager: FileManager) extends Te
 }
 case class PresentationTestFile(file: JFile, fileManager: FileManager) extends TestFile("presentation")
 case class AntTestFile(file: JFile, fileManager: FileManager) extends TestFile("ant")
+case class InstrumentedTestFile(file: JFile, fileManager: FileManager) extends TestFile("instrumented")

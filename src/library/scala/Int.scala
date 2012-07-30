@@ -10,6 +10,8 @@
 
 package scala
 
+import language.implicitConversions
+
 /** `Int`, a 32-bit signed integer (equivalent to Java's `int` primitive type) is a
  *  subtype of [[scala.AnyVal]]. Instances of `Int` are not
  *  represented by an object in the underlying runtime system.
@@ -17,49 +19,49 @@ package scala
  *  There is an implicit conversion from [[scala.Int]] => [[scala.runtime.RichInt]]
  *  which provides useful non-primitive operations.
  */
-final class Int extends AnyVal {
-  def toByte: Byte = sys.error("stub")
-  def toShort: Short = sys.error("stub")
-  def toChar: Char = sys.error("stub")
-  def toInt: Int = sys.error("stub")
-  def toLong: Long = sys.error("stub")
-  def toFloat: Float = sys.error("stub")
-  def toDouble: Double = sys.error("stub")
+final abstract class Int private extends AnyVal {
+  def toByte: Byte
+  def toShort: Short
+  def toChar: Char
+  def toInt: Int
+  def toLong: Long
+  def toFloat: Float
+  def toDouble: Double
 
   /**
- * @return the bitwise negation of this value
+ * Returns the bitwise negation of this value.
  * @example {{{
  * ~5 == -6
  * // in binary: ~00000101 ==
  * //             11111010
  * }}}
  */
-  def unary_~ : Int = sys.error("stub")
+  def unary_~ : Int
   /**
- * @return this value, unmodified
+ * Returns this value, unmodified.
  */
-  def unary_+ : Int = sys.error("stub")
+  def unary_+ : Int
   /**
- * @return the negation of this value
+ * Returns the negation of this value.
  */
-  def unary_- : Int = sys.error("stub")
+  def unary_- : Int
 
-  def +(x: String): String = sys.error("stub")
+  def +(x: String): String
 
   /**
-  * @return this value bit-shifted left by the specified number of bits,
+  * Returns this value bit-shifted left by the specified number of bits,
   *         filling in the new right bits with zeroes.
   * @example {{{ 6 << 3 == 48 // in binary: 0110 << 3 == 0110000 }}}
   */
-  def <<(x: Int): Int = sys.error("stub")
+  def <<(x: Int): Int
   /**
-  * @return this value bit-shifted left by the specified number of bits,
+  * Returns this value bit-shifted left by the specified number of bits,
   *         filling in the new right bits with zeroes.
   * @example {{{ 6 << 3 == 48 // in binary: 0110 << 3 == 0110000 }}}
   */
-  def <<(x: Long): Int = sys.error("stub")
+  def <<(x: Long): Int
   /**
-  * @return this value bit-shifted right by the specified number of bits,
+  * Returns this value bit-shifted right by the specified number of bits,
   *         filling the new left bits with zeroes.
   * @example {{{ 21 >>> 3 == 2 // in binary: 010101 >>> 3 == 010 }}}
   * @example {{{
@@ -68,9 +70,9 @@ final class Int extends AnyVal {
   * //            00011111 11111111 11111111 11111101
   * }}}
   */
-  def >>>(x: Int): Int = sys.error("stub")
+  def >>>(x: Int): Int
   /**
-  * @return this value bit-shifted right by the specified number of bits,
+  * Returns this value bit-shifted right by the specified number of bits,
   *         filling the new left bits with zeroes.
   * @example {{{ 21 >>> 3 == 2 // in binary: 010101 >>> 3 == 010 }}}
   * @example {{{
@@ -79,9 +81,9 @@ final class Int extends AnyVal {
   * //            00011111 11111111 11111111 11111101
   * }}}
   */
-  def >>>(x: Long): Int = sys.error("stub")
+  def >>>(x: Long): Int
   /**
-  * @return this value bit-shifted left by the specified number of bits,
+  * Returns this value bit-shifted left by the specified number of bits,
   *         filling in the right bits with the same value as the left-most bit of this.
   *         The effect of this is to retain the sign of the value.
   * @example {{{
@@ -90,9 +92,9 @@ final class Int extends AnyVal {
   * //            11111111 11111111 11111111 11111101
   * }}}
   */
-  def >>(x: Int): Int = sys.error("stub")
+  def >>(x: Int): Int
   /**
-  * @return this value bit-shifted left by the specified number of bits,
+  * Returns this value bit-shifted left by the specified number of bits,
   *         filling in the right bits with the same value as the left-most bit of this.
   *         The effect of this is to retain the sign of the value.
   * @example {{{
@@ -101,184 +103,184 @@ final class Int extends AnyVal {
   * //            11111111 11111111 11111111 11111101
   * }}}
   */
-  def >>(x: Long): Int = sys.error("stub")
+  def >>(x: Long): Int
 
   /**
-  * @return `true` if this value is equal x, `false` otherwise
+  * Returns `true` if this value is equal to x, `false` otherwise.
   */
-  def ==(x: Byte): Boolean = sys.error("stub")
+  def ==(x: Byte): Boolean
   /**
-  * @return `true` if this value is equal x, `false` otherwise
+  * Returns `true` if this value is equal to x, `false` otherwise.
   */
-  def ==(x: Short): Boolean = sys.error("stub")
+  def ==(x: Short): Boolean
   /**
-  * @return `true` if this value is equal x, `false` otherwise
+  * Returns `true` if this value is equal to x, `false` otherwise.
   */
-  def ==(x: Char): Boolean = sys.error("stub")
+  def ==(x: Char): Boolean
   /**
-  * @return `true` if this value is equal x, `false` otherwise
+  * Returns `true` if this value is equal to x, `false` otherwise.
   */
-  def ==(x: Int): Boolean = sys.error("stub")
+  def ==(x: Int): Boolean
   /**
-  * @return `true` if this value is equal x, `false` otherwise
+  * Returns `true` if this value is equal to x, `false` otherwise.
   */
-  def ==(x: Long): Boolean = sys.error("stub")
+  def ==(x: Long): Boolean
   /**
-  * @return `true` if this value is equal x, `false` otherwise
+  * Returns `true` if this value is equal to x, `false` otherwise.
   */
-  def ==(x: Float): Boolean = sys.error("stub")
+  def ==(x: Float): Boolean
   /**
-  * @return `true` if this value is equal x, `false` otherwise
+  * Returns `true` if this value is equal to x, `false` otherwise.
   */
-  def ==(x: Double): Boolean = sys.error("stub")
+  def ==(x: Double): Boolean
 
   /**
-  * @return `true` if this value is not equal to x, `false` otherwise
+  * Returns `true` if this value is not equal to x, `false` otherwise.
   */
-  def !=(x: Byte): Boolean = sys.error("stub")
+  def !=(x: Byte): Boolean
   /**
-  * @return `true` if this value is not equal to x, `false` otherwise
+  * Returns `true` if this value is not equal to x, `false` otherwise.
   */
-  def !=(x: Short): Boolean = sys.error("stub")
+  def !=(x: Short): Boolean
   /**
-  * @return `true` if this value is not equal to x, `false` otherwise
+  * Returns `true` if this value is not equal to x, `false` otherwise.
   */
-  def !=(x: Char): Boolean = sys.error("stub")
+  def !=(x: Char): Boolean
   /**
-  * @return `true` if this value is not equal to x, `false` otherwise
+  * Returns `true` if this value is not equal to x, `false` otherwise.
   */
-  def !=(x: Int): Boolean = sys.error("stub")
+  def !=(x: Int): Boolean
   /**
-  * @return `true` if this value is not equal to x, `false` otherwise
+  * Returns `true` if this value is not equal to x, `false` otherwise.
   */
-  def !=(x: Long): Boolean = sys.error("stub")
+  def !=(x: Long): Boolean
   /**
-  * @return `true` if this value is not equal to x, `false` otherwise
+  * Returns `true` if this value is not equal to x, `false` otherwise.
   */
-  def !=(x: Float): Boolean = sys.error("stub")
+  def !=(x: Float): Boolean
   /**
-  * @return `true` if this value is not equal to x, `false` otherwise
+  * Returns `true` if this value is not equal to x, `false` otherwise.
   */
-  def !=(x: Double): Boolean = sys.error("stub")
+  def !=(x: Double): Boolean
 
   /**
-  * @return `true` if this value is less than x, `false` otherwise
+  * Returns `true` if this value is less than x, `false` otherwise.
   */
-  def <(x: Byte): Boolean = sys.error("stub")
+  def <(x: Byte): Boolean
   /**
-  * @return `true` if this value is less than x, `false` otherwise
+  * Returns `true` if this value is less than x, `false` otherwise.
   */
-  def <(x: Short): Boolean = sys.error("stub")
+  def <(x: Short): Boolean
   /**
-  * @return `true` if this value is less than x, `false` otherwise
+  * Returns `true` if this value is less than x, `false` otherwise.
   */
-  def <(x: Char): Boolean = sys.error("stub")
+  def <(x: Char): Boolean
   /**
-  * @return `true` if this value is less than x, `false` otherwise
+  * Returns `true` if this value is less than x, `false` otherwise.
   */
-  def <(x: Int): Boolean = sys.error("stub")
+  def <(x: Int): Boolean
   /**
-  * @return `true` if this value is less than x, `false` otherwise
+  * Returns `true` if this value is less than x, `false` otherwise.
   */
-  def <(x: Long): Boolean = sys.error("stub")
+  def <(x: Long): Boolean
   /**
-  * @return `true` if this value is less than x, `false` otherwise
+  * Returns `true` if this value is less than x, `false` otherwise.
   */
-  def <(x: Float): Boolean = sys.error("stub")
+  def <(x: Float): Boolean
   /**
-  * @return `true` if this value is less than x, `false` otherwise
+  * Returns `true` if this value is less than x, `false` otherwise.
   */
-  def <(x: Double): Boolean = sys.error("stub")
+  def <(x: Double): Boolean
 
   /**
-  * @return `true` if this value is less than or equal to x, `false` otherwise
+  * Returns `true` if this value is less than or equal to x, `false` otherwise.
   */
-  def <=(x: Byte): Boolean = sys.error("stub")
+  def <=(x: Byte): Boolean
   /**
-  * @return `true` if this value is less than or equal to x, `false` otherwise
+  * Returns `true` if this value is less than or equal to x, `false` otherwise.
   */
-  def <=(x: Short): Boolean = sys.error("stub")
+  def <=(x: Short): Boolean
   /**
-  * @return `true` if this value is less than or equal to x, `false` otherwise
+  * Returns `true` if this value is less than or equal to x, `false` otherwise.
   */
-  def <=(x: Char): Boolean = sys.error("stub")
+  def <=(x: Char): Boolean
   /**
-  * @return `true` if this value is less than or equal to x, `false` otherwise
+  * Returns `true` if this value is less than or equal to x, `false` otherwise.
   */
-  def <=(x: Int): Boolean = sys.error("stub")
+  def <=(x: Int): Boolean
   /**
-  * @return `true` if this value is less than or equal to x, `false` otherwise
+  * Returns `true` if this value is less than or equal to x, `false` otherwise.
   */
-  def <=(x: Long): Boolean = sys.error("stub")
+  def <=(x: Long): Boolean
   /**
-  * @return `true` if this value is less than or equal to x, `false` otherwise
+  * Returns `true` if this value is less than or equal to x, `false` otherwise.
   */
-  def <=(x: Float): Boolean = sys.error("stub")
+  def <=(x: Float): Boolean
   /**
-  * @return `true` if this value is less than or equal to x, `false` otherwise
+  * Returns `true` if this value is less than or equal to x, `false` otherwise.
   */
-  def <=(x: Double): Boolean = sys.error("stub")
+  def <=(x: Double): Boolean
 
   /**
-  * @return `true` if this value is greater than x, `false` otherwise
+  * Returns `true` if this value is greater than x, `false` otherwise.
   */
-  def >(x: Byte): Boolean = sys.error("stub")
+  def >(x: Byte): Boolean
   /**
-  * @return `true` if this value is greater than x, `false` otherwise
+  * Returns `true` if this value is greater than x, `false` otherwise.
   */
-  def >(x: Short): Boolean = sys.error("stub")
+  def >(x: Short): Boolean
   /**
-  * @return `true` if this value is greater than x, `false` otherwise
+  * Returns `true` if this value is greater than x, `false` otherwise.
   */
-  def >(x: Char): Boolean = sys.error("stub")
+  def >(x: Char): Boolean
   /**
-  * @return `true` if this value is greater than x, `false` otherwise
+  * Returns `true` if this value is greater than x, `false` otherwise.
   */
-  def >(x: Int): Boolean = sys.error("stub")
+  def >(x: Int): Boolean
   /**
-  * @return `true` if this value is greater than x, `false` otherwise
+  * Returns `true` if this value is greater than x, `false` otherwise.
   */
-  def >(x: Long): Boolean = sys.error("stub")
+  def >(x: Long): Boolean
   /**
-  * @return `true` if this value is greater than x, `false` otherwise
+  * Returns `true` if this value is greater than x, `false` otherwise.
   */
-  def >(x: Float): Boolean = sys.error("stub")
+  def >(x: Float): Boolean
   /**
-  * @return `true` if this value is greater than x, `false` otherwise
+  * Returns `true` if this value is greater than x, `false` otherwise.
   */
-  def >(x: Double): Boolean = sys.error("stub")
+  def >(x: Double): Boolean
 
   /**
-  * @return `true` if this value is greater than or equal to x, `false` otherwise
+  * Returns `true` if this value is greater than or equal to x, `false` otherwise.
   */
-  def >=(x: Byte): Boolean = sys.error("stub")
+  def >=(x: Byte): Boolean
   /**
-  * @return `true` if this value is greater than or equal to x, `false` otherwise
+  * Returns `true` if this value is greater than or equal to x, `false` otherwise.
   */
-  def >=(x: Short): Boolean = sys.error("stub")
+  def >=(x: Short): Boolean
   /**
-  * @return `true` if this value is greater than or equal to x, `false` otherwise
+  * Returns `true` if this value is greater than or equal to x, `false` otherwise.
   */
-  def >=(x: Char): Boolean = sys.error("stub")
+  def >=(x: Char): Boolean
   /**
-  * @return `true` if this value is greater than or equal to x, `false` otherwise
+  * Returns `true` if this value is greater than or equal to x, `false` otherwise.
   */
-  def >=(x: Int): Boolean = sys.error("stub")
+  def >=(x: Int): Boolean
   /**
-  * @return `true` if this value is greater than or equal to x, `false` otherwise
+  * Returns `true` if this value is greater than or equal to x, `false` otherwise.
   */
-  def >=(x: Long): Boolean = sys.error("stub")
+  def >=(x: Long): Boolean
   /**
-  * @return `true` if this value is greater than or equal to x, `false` otherwise
+  * Returns `true` if this value is greater than or equal to x, `false` otherwise.
   */
-  def >=(x: Float): Boolean = sys.error("stub")
+  def >=(x: Float): Boolean
   /**
-  * @return `true` if this value is greater than or equal to x, `false` otherwise
+  * Returns `true` if this value is greater than or equal to x, `false` otherwise.
   */
-  def >=(x: Double): Boolean = sys.error("stub")
+  def >=(x: Double): Boolean
 
   /**
-  * @return the bitwise OR of this value and x
+  * Returns the bitwise OR of this value and `x`.
   * @example {{{
   * (0xf0 | 0xaa) == 0xfa
   * // in binary:   11110000
@@ -287,9 +289,9 @@ final class Int extends AnyVal {
   * //              11111010
   * }}}
   */
-  def |(x: Byte): Int = sys.error("stub")
+  def |(x: Byte): Int
   /**
-  * @return the bitwise OR of this value and x
+  * Returns the bitwise OR of this value and `x`.
   * @example {{{
   * (0xf0 | 0xaa) == 0xfa
   * // in binary:   11110000
@@ -298,9 +300,9 @@ final class Int extends AnyVal {
   * //              11111010
   * }}}
   */
-  def |(x: Short): Int = sys.error("stub")
+  def |(x: Short): Int
   /**
-  * @return the bitwise OR of this value and x
+  * Returns the bitwise OR of this value and `x`.
   * @example {{{
   * (0xf0 | 0xaa) == 0xfa
   * // in binary:   11110000
@@ -309,9 +311,9 @@ final class Int extends AnyVal {
   * //              11111010
   * }}}
   */
-  def |(x: Char): Int = sys.error("stub")
+  def |(x: Char): Int
   /**
-  * @return the bitwise OR of this value and x
+  * Returns the bitwise OR of this value and `x`.
   * @example {{{
   * (0xf0 | 0xaa) == 0xfa
   * // in binary:   11110000
@@ -320,9 +322,9 @@ final class Int extends AnyVal {
   * //              11111010
   * }}}
   */
-  def |(x: Int): Int = sys.error("stub")
+  def |(x: Int): Int
   /**
-  * @return the bitwise OR of this value and x
+  * Returns the bitwise OR of this value and `x`.
   * @example {{{
   * (0xf0 | 0xaa) == 0xfa
   * // in binary:   11110000
@@ -331,10 +333,10 @@ final class Int extends AnyVal {
   * //              11111010
   * }}}
   */
-  def |(x: Long): Long = sys.error("stub")
+  def |(x: Long): Long
 
   /**
-  * @return the bitwise AND of this value and x
+  * Returns the bitwise AND of this value and `x`.
   * @example {{{
   * (0xf0 & 0xaa) == 0xa0
   * // in binary:   11110000
@@ -343,9 +345,9 @@ final class Int extends AnyVal {
   * //              10100000
   * }}}
   */
-  def &(x: Byte): Int = sys.error("stub")
+  def &(x: Byte): Int
   /**
-  * @return the bitwise AND of this value and x
+  * Returns the bitwise AND of this value and `x`.
   * @example {{{
   * (0xf0 & 0xaa) == 0xa0
   * // in binary:   11110000
@@ -354,9 +356,9 @@ final class Int extends AnyVal {
   * //              10100000
   * }}}
   */
-  def &(x: Short): Int = sys.error("stub")
+  def &(x: Short): Int
   /**
-  * @return the bitwise AND of this value and x
+  * Returns the bitwise AND of this value and `x`.
   * @example {{{
   * (0xf0 & 0xaa) == 0xa0
   * // in binary:   11110000
@@ -365,9 +367,9 @@ final class Int extends AnyVal {
   * //              10100000
   * }}}
   */
-  def &(x: Char): Int = sys.error("stub")
+  def &(x: Char): Int
   /**
-  * @return the bitwise AND of this value and x
+  * Returns the bitwise AND of this value and `x`.
   * @example {{{
   * (0xf0 & 0xaa) == 0xa0
   * // in binary:   11110000
@@ -376,9 +378,9 @@ final class Int extends AnyVal {
   * //              10100000
   * }}}
   */
-  def &(x: Int): Int = sys.error("stub")
+  def &(x: Int): Int
   /**
-  * @return the bitwise AND of this value and x
+  * Returns the bitwise AND of this value and `x`.
   * @example {{{
   * (0xf0 & 0xaa) == 0xa0
   * // in binary:   11110000
@@ -387,10 +389,10 @@ final class Int extends AnyVal {
   * //              10100000
   * }}}
   */
-  def &(x: Long): Long = sys.error("stub")
+  def &(x: Long): Long
 
   /**
-  * @return the bitwise XOR of this value and x
+  * Returns the bitwise XOR of this value and `x`.
   * @example {{{
   * (0xf0 ^ 0xaa) == 0x5a
   * // in binary:   11110000
@@ -399,9 +401,9 @@ final class Int extends AnyVal {
   * //              01011010
   * }}}
   */
-  def ^(x: Byte): Int = sys.error("stub")
+  def ^(x: Byte): Int
   /**
-  * @return the bitwise XOR of this value and x
+  * Returns the bitwise XOR of this value and `x`.
   * @example {{{
   * (0xf0 ^ 0xaa) == 0x5a
   * // in binary:   11110000
@@ -410,9 +412,9 @@ final class Int extends AnyVal {
   * //              01011010
   * }}}
   */
-  def ^(x: Short): Int = sys.error("stub")
+  def ^(x: Short): Int
   /**
-  * @return the bitwise XOR of this value and x
+  * Returns the bitwise XOR of this value and `x`.
   * @example {{{
   * (0xf0 ^ 0xaa) == 0x5a
   * // in binary:   11110000
@@ -421,9 +423,9 @@ final class Int extends AnyVal {
   * //              01011010
   * }}}
   */
-  def ^(x: Char): Int = sys.error("stub")
+  def ^(x: Char): Int
   /**
-  * @return the bitwise XOR of this value and x
+  * Returns the bitwise XOR of this value and `x`.
   * @example {{{
   * (0xf0 ^ 0xaa) == 0x5a
   * // in binary:   11110000
@@ -432,9 +434,9 @@ final class Int extends AnyVal {
   * //              01011010
   * }}}
   */
-  def ^(x: Int): Int = sys.error("stub")
+  def ^(x: Int): Int
   /**
-  * @return the bitwise XOR of this value and x
+  * Returns the bitwise XOR of this value and `x`.
   * @example {{{
   * (0xf0 ^ 0xaa) == 0x5a
   * // in binary:   11110000
@@ -443,154 +445,154 @@ final class Int extends AnyVal {
   * //              01011010
   * }}}
   */
-  def ^(x: Long): Long = sys.error("stub")
+  def ^(x: Long): Long
 
   /**
-  * @return the sum of this value and x
+  * Returns the sum of this value and `x`.
   */
-  def +(x: Byte): Int = sys.error("stub")
+  def +(x: Byte): Int
   /**
-  * @return the sum of this value and x
+  * Returns the sum of this value and `x`.
   */
-  def +(x: Short): Int = sys.error("stub")
+  def +(x: Short): Int
   /**
-  * @return the sum of this value and x
+  * Returns the sum of this value and `x`.
   */
-  def +(x: Char): Int = sys.error("stub")
+  def +(x: Char): Int
   /**
-  * @return the sum of this value and x
+  * Returns the sum of this value and `x`.
   */
-  def +(x: Int): Int = sys.error("stub")
+  def +(x: Int): Int
   /**
-  * @return the sum of this value and x
+  * Returns the sum of this value and `x`.
   */
-  def +(x: Long): Long = sys.error("stub")
+  def +(x: Long): Long
   /**
-  * @return the sum of this value and x
+  * Returns the sum of this value and `x`.
   */
-  def +(x: Float): Float = sys.error("stub")
+  def +(x: Float): Float
   /**
-  * @return the sum of this value and x
+  * Returns the sum of this value and `x`.
   */
-  def +(x: Double): Double = sys.error("stub")
+  def +(x: Double): Double
 
   /**
-  * @return the difference of this value and x
+  * Returns the difference of this value and `x`.
   */
-  def -(x: Byte): Int = sys.error("stub")
+  def -(x: Byte): Int
   /**
-  * @return the difference of this value and x
+  * Returns the difference of this value and `x`.
   */
-  def -(x: Short): Int = sys.error("stub")
+  def -(x: Short): Int
   /**
-  * @return the difference of this value and x
+  * Returns the difference of this value and `x`.
   */
-  def -(x: Char): Int = sys.error("stub")
+  def -(x: Char): Int
   /**
-  * @return the difference of this value and x
+  * Returns the difference of this value and `x`.
   */
-  def -(x: Int): Int = sys.error("stub")
+  def -(x: Int): Int
   /**
-  * @return the difference of this value and x
+  * Returns the difference of this value and `x`.
   */
-  def -(x: Long): Long = sys.error("stub")
+  def -(x: Long): Long
   /**
-  * @return the difference of this value and x
+  * Returns the difference of this value and `x`.
   */
-  def -(x: Float): Float = sys.error("stub")
+  def -(x: Float): Float
   /**
-  * @return the difference of this value and x
+  * Returns the difference of this value and `x`.
   */
-  def -(x: Double): Double = sys.error("stub")
+  def -(x: Double): Double
 
   /**
-  * @return the product of this value and x
+  * Returns the product of this value and `x`.
   */
-  def *(x: Byte): Int = sys.error("stub")
+  def *(x: Byte): Int
   /**
-  * @return the product of this value and x
+  * Returns the product of this value and `x`.
   */
-  def *(x: Short): Int = sys.error("stub")
+  def *(x: Short): Int
   /**
-  * @return the product of this value and x
+  * Returns the product of this value and `x`.
   */
-  def *(x: Char): Int = sys.error("stub")
+  def *(x: Char): Int
   /**
-  * @return the product of this value and x
+  * Returns the product of this value and `x`.
   */
-  def *(x: Int): Int = sys.error("stub")
+  def *(x: Int): Int
   /**
-  * @return the product of this value and x
+  * Returns the product of this value and `x`.
   */
-  def *(x: Long): Long = sys.error("stub")
+  def *(x: Long): Long
   /**
-  * @return the product of this value and x
+  * Returns the product of this value and `x`.
   */
-  def *(x: Float): Float = sys.error("stub")
+  def *(x: Float): Float
   /**
-  * @return the product of this value and x
+  * Returns the product of this value and `x`.
   */
-  def *(x: Double): Double = sys.error("stub")
+  def *(x: Double): Double
 
   /**
-  * @return the quotient of this value and x
+  * Returns the quotient of this value and `x`.
   */
-  def /(x: Byte): Int = sys.error("stub")
+  def /(x: Byte): Int
   /**
-  * @return the quotient of this value and x
+  * Returns the quotient of this value and `x`.
   */
-  def /(x: Short): Int = sys.error("stub")
+  def /(x: Short): Int
   /**
-  * @return the quotient of this value and x
+  * Returns the quotient of this value and `x`.
   */
-  def /(x: Char): Int = sys.error("stub")
+  def /(x: Char): Int
   /**
-  * @return the quotient of this value and x
+  * Returns the quotient of this value and `x`.
   */
-  def /(x: Int): Int = sys.error("stub")
+  def /(x: Int): Int
   /**
-  * @return the quotient of this value and x
+  * Returns the quotient of this value and `x`.
   */
-  def /(x: Long): Long = sys.error("stub")
+  def /(x: Long): Long
   /**
-  * @return the quotient of this value and x
+  * Returns the quotient of this value and `x`.
   */
-  def /(x: Float): Float = sys.error("stub")
+  def /(x: Float): Float
   /**
-  * @return the quotient of this value and x
+  * Returns the quotient of this value and `x`.
   */
-  def /(x: Double): Double = sys.error("stub")
+  def /(x: Double): Double
 
   /**
-  * @return the remainder of the division of this value by x
+  * Returns the remainder of the division of this value by `x`.
   */
-  def %(x: Byte): Int = sys.error("stub")
+  def %(x: Byte): Int
   /**
-  * @return the remainder of the division of this value by x
+  * Returns the remainder of the division of this value by `x`.
   */
-  def %(x: Short): Int = sys.error("stub")
+  def %(x: Short): Int
   /**
-  * @return the remainder of the division of this value by x
+  * Returns the remainder of the division of this value by `x`.
   */
-  def %(x: Char): Int = sys.error("stub")
+  def %(x: Char): Int
   /**
-  * @return the remainder of the division of this value by x
+  * Returns the remainder of the division of this value by `x`.
   */
-  def %(x: Int): Int = sys.error("stub")
+  def %(x: Int): Int
   /**
-  * @return the remainder of the division of this value by x
+  * Returns the remainder of the division of this value by `x`.
   */
-  def %(x: Long): Long = sys.error("stub")
+  def %(x: Long): Long
   /**
-  * @return the remainder of the division of this value by x
+  * Returns the remainder of the division of this value by `x`.
   */
-  def %(x: Float): Float = sys.error("stub")
+  def %(x: Float): Float
   /**
-  * @return the remainder of the division of this value by x
+  * Returns the remainder of the division of this value by `x`.
   */
-  def %(x: Double): Double = sys.error("stub")
+  def %(x: Double): Double
 
-  def getClass(): Class[Int] = sys.error("stub")
+  override def getClass(): Class[Int] = null
 }
 
 object Int extends AnyValCompanion {
@@ -622,5 +624,11 @@ object Int extends AnyValCompanion {
   /** The String representation of the scala.Int companion object.
    */
   override def toString = "object scala.Int"
+
+  /** Language mandated coercions from Int to "wider" types.
+   */
+  implicit def int2long(x: Int): Long = x.toLong
+  implicit def int2float(x: Int): Float = x.toFloat
+  implicit def int2double(x: Int): Double = x.toDouble
 }
 

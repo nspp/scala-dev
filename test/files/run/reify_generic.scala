@@ -1,14 +1,9 @@
-import scala.tools.nsc.reporters._
-import scala.tools.nsc.Settings
-import reflect.runtime.Mirror.ToolBox
+import scala.reflect.runtime.universe._
+import scala.tools.reflect.Eval
 
 object Test extends App {
-  val code = scala.reflect.Code.lift{
+  reify {
     val product = List(1, 2, 3).head * List[Any](4, 2, 0).head.asInstanceOf[Int]
     println(product)
-  };
-
-  val reporter = new ConsoleReporter(new Settings)
-  val toolbox = new ToolBox(reporter)
-  toolbox.runExpr(code.tree)
+  }.eval
 }

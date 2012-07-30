@@ -7,7 +7,7 @@ package scala.tools.nsc
 
 import java.io.{ BufferedOutputStream, FileOutputStream, PrintStream }
 import scala.tools.nsc.reporters.{Reporter, ConsoleReporter}
-import scala.tools.nsc.util.FakePos //Position
+import scala.reflect.internal.util.FakePos //Position
 import scala.tools.util.SocketServer
 import settings.FscSettings
 
@@ -154,7 +154,7 @@ class StandardCompileServer extends SocketServer {
         case ex @ FatalError(msg) =>
           reporter.error(null, "fatal error: " + msg)
           clearCompiler()
-        case ex =>
+        case ex: Throwable =>
           warn("Compile server encountered fatal condition: " + ex)
           shutdown = true
           throw ex

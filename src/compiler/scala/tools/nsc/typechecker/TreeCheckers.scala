@@ -14,7 +14,7 @@ import util.returning
 abstract class TreeCheckers extends Analyzer {
   import global._
 
-  private def classstr(x: AnyRef) = x.getClass.getName split """\\.|\\$""" last;
+  private def classstr(x: AnyRef) = (x.getClass.getName split """\\.|\\$""").last
   private def typestr(x: Type)    = " (tpe = " + x + ")"
   private def treestr(t: Tree)    = t + " [" + classstr(t) + "]" + typestr(t.tpe)
   private def ownerstr(s: Symbol) = "'" + s + "'" + s.locationString
@@ -127,11 +127,20 @@ abstract class TreeCheckers extends Analyzer {
   def assertFn(cond: Boolean, msg: => Any) =
     if (!cond) errorFn(msg)
 
+  private def wrap[T](msg: => Any)(body: => Unit) {
+    try body
+    catch { case x: Throwable =>
+      Console.println("Caught " + x)
+      Console.println(msg)
+      x.printStackTrace
+    }
+  }
+
   def checkTrees() {
     if (settings.verbose.value)
       Console.println("[consistency check at the beginning of phase " + phase + "]")
 
-    currentRun.units foreach check
+    currentRun.units foreach (x => wrap(x)(check(x)))
   }
 
   def printingTypings[T](body: => T): T = {
@@ -200,11 +209,11 @@ abstract class TreeCheckers extends Analyzer {
           tree.tpe = null
           saved
         })
-        super.typed(tree, mode, pt) match {
+        wrap(tree)(super.typed(tree, mode, pt) match {
           case _: Literal     => ()
           case x if x ne tree => treesDiffer(tree, x)
           case _              => ()
-        }
+        })
       case _ => ()
     }
 
@@ -263,15 +272,20 @@ abstract class TreeCheckers extends Analyzer {
 
           tree match {
             case x: PackageDef    =>
-              if (sym.ownerChain contains currentOwner) ()
-              else fail(sym + " owner chain does not contain currentOwner " + currentOwner)
+              if ((sym.ownerChain contains currentOwner) || currentOwner.isEmptyPackageClass) ()
+              else fail(sym + " owner chain does not contain currentOwner " + currentOwner + sym.ownerChain)
             case _ =>
               def cond(s: Symbol) = !s.isTerm || s.isMethod || s == sym.owner
 
               if (sym.owner != currentOwner) {
                 val expected = currentOwner.ownerChain find (x => cond(x)) getOrElse fail("DefTree can't find owner: ")
                 if (sym.owner != expected)
-                  fail("Expected owner %s (out of %s), found %s: ".format(expected, currentOwner.ownerChain, sym.owner))
+                  fail("""|
+                          | currentOwner chain: %s
+                          |       symbol chain: %s""".stripMargin.format(
+                            currentOwner.ownerChain take 3 mkString " -> ",
+                            sym.ownerChain mkString " -> ")
+                      )
               }
           }
         }

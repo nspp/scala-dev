@@ -16,7 +16,7 @@ import immutable.{RedBlackTree => RB}
 import mutable.{ Builder, SetBuilder }
 
 /** $factoryInfo
- *  @define Coll immutable.TreeSet
+ *  @define Coll `immutable.TreeSet`
  *  @define coll immutable tree set
  */
 object TreeSet extends ImmutableSortedSetFactory[TreeSet] {
@@ -40,7 +40,7 @@ object TreeSet extends ImmutableSortedSetFactory[TreeSet] {
  *  @see [[http://docs.scala-lang.org/overviews/collections/concrete-immutable-collection-classes.html#redblack_trees "Scala's Collection Library overview"]]
  *  section on `Red-Black Trees` for more information.
  *
- *  @define Coll immutable.TreeSet
+ *  @define Coll `immutable.TreeSet`
  *  @define coll immutable tree set
  *  @define orderDependent
  *  @define orderDependentFold
@@ -112,7 +112,7 @@ class TreeSet[A] private (tree: RB.Tree[A, Unit])(implicit val ordering: Orderin
    *  @param elem    a new element to add.
    *  @return        a new $coll containing `elem` and all the elements of this $coll.
    */
-  def + (elem: A): TreeSet[A] = newSet(RB.update(tree, elem, ()))
+  def + (elem: A): TreeSet[A] = newSet(RB.update(tree, elem, (), false))
 
   /** A new `TreeSet` with the entry added is returned,
    *  assuming that elem is <em>not</em> in the TreeSet.
@@ -122,7 +122,7 @@ class TreeSet[A] private (tree: RB.Tree[A, Unit])(implicit val ordering: Orderin
    */
   def insert(elem: A): TreeSet[A] = {
     assert(!RB.contains(tree, elem))
-    newSet(RB.update(tree, elem, ()))
+    newSet(RB.update(tree, elem, (), false))
   }
 
   /** Creates a new `TreeSet` with the entry removed.

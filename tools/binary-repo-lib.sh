@@ -75,17 +75,39 @@ pushJarFile() {
   local jar_dir=$(dirname $jar)
   local jar_name=${jar#$jar_dir/}
   pushd $jar_dir >/dev/null
-  local jar_sha1=$(shasum -p $jar_name)
-  local version=${jar_sha1% ?$jar_name}
+  local version=$(makeJarSha $jar_name)
   local remote_uri=${version}${jar#$basedir}
   echo "  Pushing to ${remote_urlbase}/${remote_uri} ..."
   echo "	$curl"
   curlUpload $remote_uri $jar_name $user $pw
   echo "  Making new sha1 file ...."
-  echo "$jar_sha1" > "${jar_name}${desired_ext}"
+  echo "$version ?$jar_name" > "${jar_name}${desired_ext}"
   popd >/dev/null
   # TODO - Git remove jar and git add jar.desired.sha1
   # rm $jar
+}
+
+makeJarSha() {
+  local jar=$1
+  if which sha1sum 2>/dev/null >/dev/null; then
+    shastring=$(sha1sum "$jar")
+    echo "$shastring" | sed 's/ .*//'
+  elif which shasum 2>/dev/null >/dev/null; then
+    shastring=$(shasum "$jar")
+    echo "$shastring" | sed 's/ .*//'
+  else
+    shastring=$(openssl sha1 "$jar")
+    echo "$shastring" | sed 's/^.*= //'
+  fi
+}
+
+getJarSha() {
+  local jar=$1
+  if [[ ! -f "$jar" ]]; then
+    echo ""
+  else
+    echo $(makeJarSha $jar)
+  fi
 }
 
 # Tests whether or not the .desired.sha1 hash matches a given file.
@@ -93,7 +115,7 @@ pushJarFile() {
 # Returns: Empty string on failure, "OK" on success.
 isJarFileValid() {
   local jar=$1
-  if [[ ! -f $jar ]]; then
+  if [[ ! -f "$jar" ]]; then
     echo ""
   else
     local jar_dir=$(dirname $jar)
@@ -131,6 +153,27 @@ pushJarFiles() {
   fi
 } 
 
+
+checkJarSha() {
+  local jar=$1
+  local sha=$2
+  local testsha=$(getJarSha "$jar")
+  if test "$sha" == "$testsha"; then
+    echo "OK"
+  fi
+}
+
+makeCacheLocation() {
+  local uri=$1
+  local sha=$2
+  local cache_loc="$cache_dir/$uri"
+  local cdir=$(dirname $cache_loc)
+  if [[ ! -d "$cdir" ]]; then
+    mkdir -p "$cdir"
+  fi
+  echo "$cache_loc"
+}
+
 # Pulls a single binary artifact from a remote repository.
 # Argument 1 - The uri to the file that should be downloaded.
 # Argument 2 - SHA of the file...
@@ -138,16 +181,19 @@ pushJarFiles() {
 pullJarFileToCache() {
   local uri=$1
   local sha=$2
-  local cache_loc=$cache_dir/$uri
-  local cdir=$(dirname $cache_loc)
-  if [[ ! -d $cdir ]]; then
-    mkdir -p $cdir
-  fi
+  local cache_loc="$(makeCacheLocation $uri)"
   # TODO - Check SHA of local cache is accurate.
-  if [[ ! -f $cache_loc ]]; then
-    curlDownload $cache_loc ${remote_urlbase}/${uri}
+  if test -f "$cache_loc" && test "$(checkJarSha "$cache_loc" "$sha")" != "OK"; then
+    echo "Found bad cached file: $cache_loc"
+    rm -f "$cache_loc"
   fi
-  echo "$cache_loc"
+  if [[ ! -f "$cache_loc" ]]; then
+    curlDownload $cache_loc ${remote_urlbase}/${uri}
+    if test "$(checkJarSha "$cache_loc" "$sha")" != "OK"; then
+      echo "Trouble downloading $uri.  Please try pull-binary-libs again when your internet connection is stable."
+      exit 2
+    fi
+  fi
 }
 
 # Pulls a single binary artifact from a remote repository.
@@ -162,7 +208,8 @@ pullJarFile() {
   local version=${sha1% ?$jar_name}
   local remote_uri=${version}/${jar#$basedir/}
   echo "Resolving [${remote_uri}]"
-  local cached_file=$(pullJarFileToCache $remote_uri $version)
+  pullJarFileToCache $remote_uri $version
+  local cached_file=$(makeCacheLocation $remote_uri)
   cp $cached_file $jar
 }
 

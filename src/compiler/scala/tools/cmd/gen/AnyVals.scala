@@ -14,20 +14,43 @@ trait AnyValReps {
   sealed abstract class AnyValNum(name: String, repr: Option[String], javaEquiv: String) extends AnyValRep(name,repr,javaEquiv) {
 
     case class Op(val op : String, val doc : String)
+    
+    private def companionCoercions(tos: AnyValRep*) = {
+      tos.toList map (to =>
+        """implicit def @javaequiv@2%s(x: @name@): %s = x.to%s""".format(to.javaEquiv, to.name, to.name)
+      )
+    }
+    def coercionCommentExtra = ""
+    def coercionComment = """
+  /** Language mandated coercions from @name@ to "wider" types.%s
+   */""".format(coercionCommentExtra)
+    
+    def implicitCoercions: List[String] = {
+      val coercions = this match {
+        case B     => companionCoercions(S, I, L, F, D)
+        case S | C => companionCoercions(I, L, F, D)
+        case I     => companionCoercions(L, F, D)
+        case L     => companionCoercions(F, D)
+        case F     => companionCoercions(D)
+        case _     => Nil
+      }
+      if (coercions.isEmpty) Nil
+      else coercionComment :: coercions
+    }
 
     def isCardinal: Boolean = isIntegerType(this)
     def unaryOps = {
       val ops = List(
         Op("+", "/**\n" +
-                " * @return this value, unmodified\n" +
+                " * Returns this value, unmodified.\n" +
                 " */"),
         Op("-", "/**\n" +
-                " * @return the negation of this value\n" +
+                " * Returns the negation of this value.\n" +
                 " */"))
 
       if(isCardinal)
         Op("~", "/**\n" +
-                " * @return the bitwise negation of this value\n" +
+                " * Returns the bitwise negation of this value.\n" +
                 " * @example {{{\n" +
                 " * ~5 == -6\n" +
                 " * // in binary: ~00000101 ==\n" +
@@ -41,7 +64,7 @@ trait AnyValReps {
       if (isCardinal)
         List(
           Op("|", "/**\n" +
-                     "  * @return the bitwise OR of this value and x\n" +
+                     "  * Returns the bitwise OR of this value and `x`.\n" +
                      "  * @example {{{\n" +
                      "  * (0xf0 | 0xaa) == 0xfa\n" +
                      "  * // in binary:   11110000\n" +
@@ -51,7 +74,7 @@ trait AnyValReps {
                      "  * }}}\n" +
                      "  */"),
           Op("&", "/**\n" +
-                     "  * @return the bitwise AND of this value and x\n" +
+                     "  * Returns the bitwise AND of this value and `x`.\n" +
                      "  * @example {{{\n" +
                      "  * (0xf0 & 0xaa) == 0xa0\n" +
                      "  * // in binary:   11110000\n" +
@@ -61,7 +84,7 @@ trait AnyValReps {
                      "  * }}}\n" +
                      "  */"),
           Op("^", "/**\n" +
-                     "  * @return the bitwise XOR of this value and x\n" +
+                     "  * Returns the bitwise XOR of this value and `x`.\n" +
                      "  * @example {{{\n" +
                      "  * (0xf0 ^ 0xaa) == 0x5a\n" +
                      "  * // in binary:   11110000\n" +
@@ -76,13 +99,13 @@ trait AnyValReps {
       if (isCardinal)
         List(
           Op("<<",  "/**\n" +
-                       "  * @return this value bit-shifted left by the specified number of bits,\n" +
+                       "  * Returns this value bit-shifted left by the specified number of bits,\n" +
                        "  *         filling in the new right bits with zeroes.\n" +
                        "  * @example {{{ 6 << 3 == 48 // in binary: 0110 << 3 == 0110000 }}}\n" +
                        "  */"),
 
           Op(">>>", "/**\n" +
-                       "  * @return this value bit-shifted right by the specified number of bits,\n" +
+                       "  * Returns this value bit-shifted right by the specified number of bits,\n" +
                        "  *         filling the new left bits with zeroes.\n" +
                        "  * @example {{{ 21 >>> 3 == 2 // in binary: 010101 >>> 3 == 010 }}}\n" +
                        "  * @example {{{\n" +
@@ -93,7 +116,7 @@ trait AnyValReps {
                        "  */"),
 
           Op(">>",  "/**\n" +
-                       "  * @return this value bit-shifted left by the specified number of bits,\n" +
+                       "  * Returns this value bit-shifted left by the specified number of bits,\n" +
                        "  *         filling in the right bits with the same value as the left-most bit of this.\n" +
                        "  *         The effect of this is to retain the sign of the value.\n" +
                        "  * @example {{{\n" +
@@ -105,19 +128,19 @@ trait AnyValReps {
       else Nil
 
     def comparisonOps       = List(
-      Op("==", "/**\n  * @return `true` if this value is equal x, `false` otherwise\n  */"),
-      Op("!=", "/**\n  * @return `true` if this value is not equal to x, `false` otherwise\n  */"),
-      Op("<",  "/**\n  * @return `true` if this value is less than x, `false` otherwise\n  */"),
-      Op("<=", "/**\n  * @return `true` if this value is less than or equal to x, `false` otherwise\n  */"),
-      Op(">",  "/**\n  * @return `true` if this value is greater than x, `false` otherwise\n  */"),
-      Op(">=", "/**\n  * @return `true` if this value is greater than or equal to x, `false` otherwise\n  */"))
+      Op("==", "/**\n  * Returns `true` if this value is equal to x, `false` otherwise.\n  */"),
+      Op("!=", "/**\n  * Returns `true` if this value is not equal to x, `false` otherwise.\n  */"),
+      Op("<",  "/**\n  * Returns `true` if this value is less than x, `false` otherwise.\n  */"),
+      Op("<=", "/**\n  * Returns `true` if this value is less than or equal to x, `false` otherwise.\n  */"),
+      Op(">",  "/**\n  * Returns `true` if this value is greater than x, `false` otherwise.\n  */"),
+      Op(">=", "/**\n  * Returns `true` if this value is greater than or equal to x, `false` otherwise.\n  */"))
 
     def otherOps = List(
-      Op("+", "/**\n  * @return the sum of this value and x\n  */"),
-      Op("-", "/**\n  * @return the difference of this value and x\n  */"),
-      Op("*", "/**\n  * @return the product of this value and x\n  */"),
-      Op("/", "/**\n  * @return the quotient of this value and x\n  */"),
-      Op("%", "/**\n  * @return the remainder of the division of this value by x\n  */"))
+      Op("+", "/**\n  * Returns the sum of this value and `x`.\n  */"),
+      Op("-", "/**\n  * Returns the difference of this value and `x`.\n  */"),
+      Op("*", "/**\n  * Returns the product of this value and `x`.\n  */"),
+      Op("/", "/**\n  * Returns the quotient of this value and `x`.\n  */"),
+      Op("%", "/**\n  * Returns the remainder of the division of this value by `x`.\n  */"))
 
     // Given two numeric value types S and T , the operation type of S and T is defined as follows:
     // If both S and T are subrange types then the operation type of S and T is Int.
@@ -154,13 +177,13 @@ trait AnyValReps {
       case (res, lines) =>
         val xs = lines map {
           case ""   => ""
-          case s    => interpolate(s) + " = " + stub
+          case s    => interpolate(s)
         }
         res ++ xs
     }
     def objectLines = {
       val comp = if (isCardinal) cardinalCompanion else floatingCompanion
-      (comp + allCompanions).trim.lines map interpolate toList
+      (comp + allCompanions + "\n" + nonUnitCompanions).trim.lines.toList ++ implicitCoercions map interpolate
     }
 
     /** Makes a set of binary operations based on the given set of ops, args, and resultFn.
@@ -182,7 +205,7 @@ trait AnyValReps {
     def classLines: List[String]
     def objectLines: List[String]
     def commonClassLines = List(
-      "def getClass(): Class[@name@]"
+      "override def getClass(): Class[@name@] = null"
     )
 
     def lcname = name.toLowerCase
@@ -224,8 +247,9 @@ trait AnyValReps {
     def classDoc  = interpolate(classDocTemplate)
     def objectDoc = ""
     def mkImports = ""
-    def mkClass   = assemble("final class", "AnyVal", classLines) + "\n"
-    def mkObject  = assemble("object", "AnyValCompanion", objectLines) + "\n"
+    
+    def mkClass       = assemble("final abstract class " + name + " private extends AnyVal", classLines)
+    def mkObject      = assemble("object " + name + " extends AnyValCompanion", objectLines)
     def make()    = List[String](
       headerTemplate,
       mkImports,
@@ -235,11 +259,10 @@ trait AnyValReps {
       mkObject
     ) mkString ""
 
-    def assemble(what: String, parent: String, lines: List[String]): String = {
-      val decl = "%s %s extends %s ".format(what, name, parent)
-      val body = if (lines.isEmpty) "{ }\n\n" else lines map indent mkString ("{\n", "\n", "\n}\n")
+    def assemble(decl: String, lines: List[String]): String = {
+      val body = if (lines.isEmpty) " { }\n\n" else lines map indent mkString (" {\n", "\n", "\n}\n")
 
-      decl + body
+      decl + body + "\n"
     }
     override def toString = name
   }
@@ -258,6 +281,8 @@ trait AnyValTemplates {
 %s
 package scala
 
+import language.implicitConversions
+
 """.trim.format(timestampString) + "\n\n")
 
   def classDocTemplate = ("""
@@ -271,7 +296,6 @@ package scala
 """.trim + "\n")
 
   def timestampString = "// DO NOT EDIT, CHANGES WILL BE LOST.\n"
-  def stub            = """sys.error("stub")"""
 
   def allCompanions = """
 /** Transform a value type into a boxed reference type.
@@ -295,6 +319,8 @@ def unbox(x: java.lang.Object): @name@ = @unboxImpl@
  */
 override def toString = "object scala.@name@"
 """
+
+  def nonUnitCompanions = ""  // todo
 
   def cardinalCompanion = """
 /** The smallest value representable as a @name@.
@@ -348,7 +374,7 @@ class AnyVals extends AnyValReps with AnyValTemplates {
  *
  * @return the negated expression
  */
-def unary_! : Boolean = sys.error("stub")
+def unary_! : Boolean
 
 /**
   * Compares two Boolean expressions and returns `true` if they evaluate to the same value.
@@ -357,7 +383,7 @@ def unary_! : Boolean = sys.error("stub")
   *  - `a` and `b` are `true` or
   *  - `a` and `b` are `false`.
   */
-def ==(x: Boolean): Boolean = sys.error("stub")
+def ==(x: Boolean): Boolean
 
 /**
   * Compares two Boolean expressions and returns `true` if they evaluate to a different value.
@@ -366,7 +392,7 @@ def ==(x: Boolean): Boolean = sys.error("stub")
   *  - `a` is `true` and `b` is `false` or
   *  - `a` is `false` and `b` is `true`.
   */
-def !=(x: Boolean): Boolean = sys.error("stub")
+def !=(x: Boolean): Boolean
 
 /**
   * Compares two Boolean expressions and returns `true` if one or both of them evaluate to true.
@@ -380,7 +406,7 @@ def !=(x: Boolean): Boolean = sys.error("stub")
   *       behaves as if it was declared as `def ||(x: => Boolean): Boolean`.
   *       If `a` evaluates to `true`, `true` is returned without evaluating `b`.
   */
-def ||(x: Boolean): Boolean = sys.error("stub")
+def ||(x: Boolean): Boolean
 
 /**
   * Compares two Boolean expressions and returns `true` if both of them evaluate to true.
@@ -392,11 +418,11 @@ def ||(x: Boolean): Boolean = sys.error("stub")
   *       behaves as if it was declared as `def &&(x: => Boolean): Boolean`.
   *       If `a` evaluates to `false`, `false` is returned without evaluating `b`.
   */
-def &&(x: Boolean): Boolean = sys.error("stub")
+def &&(x: Boolean): Boolean
 
 // Compiler won't build with these seemingly more accurate signatures
-// def ||(x: => Boolean): Boolean = sys.error("stub")
-// def &&(x: => Boolean): Boolean = sys.error("stub")
+// def ||(x: => Boolean): Boolean
+// def &&(x: => Boolean): Boolean
 
 /**
   * Compares two Boolean expressions and returns `true` if one or both of them evaluate to true.
@@ -408,7 +434,7 @@ def &&(x: Boolean): Boolean = sys.error("stub")
   *
   * @note This method evaluates both `a` and `b`, even if the result is already determined after evaluating `a`.
   */
-def |(x: Boolean): Boolean  = sys.error("stub")
+def |(x: Boolean): Boolean
 
 /**
   * Compares two Boolean expressions and returns `true` if both of them evaluate to true.
@@ -418,7 +444,7 @@ def |(x: Boolean): Boolean  = sys.error("stub")
   *
   * @note This method evaluates both `a` and `b`, even if the result is already determined after evaluating `a`.
   */
-def &(x: Boolean): Boolean  = sys.error("stub")
+def &(x: Boolean): Boolean
 
 /**
   * Compares two Boolean expressions and returns `true` if they evaluate to a different value.
@@ -427,12 +453,12 @@ def &(x: Boolean): Boolean  = sys.error("stub")
   *  - `a` is `true` and `b` is `false` or
   *  - `a` is `false` and `b` is `true`.
   */
-def ^(x: Boolean): Boolean  = sys.error("stub")
+def ^(x: Boolean): Boolean
 
-def getClass(): Class[Boolean] = sys.error("stub")
+override def getClass(): Class[Boolean] = null
     """.trim.lines.toList
 
-    def objectLines = interpolate(allCompanions).lines.toList
+    def objectLines = interpolate(allCompanions + "\n" + nonUnitCompanions).lines.toList
   }
   object U extends AnyValRep("Unit", None, "void") {
     override def classDoc = """
@@ -443,7 +469,7 @@ def getClass(): Class[Boolean] = sys.error("stub")
  */
 """
     def classLines  = List(
-      """def getClass(): Class[Unit] = sys.error("stub")"""
+      """override def getClass(): Class[Unit] = null"""
     )
     def objectLines = interpolate(allCompanions).lines.toList
 

@@ -1,7 +1,7 @@
 package scala.tools.nsc
 package interactive
 
-import util.{SourceFile, BatchSourceFile, RangePosition}
+import scala.reflect.internal.util.{SourceFile, BatchSourceFile, RangePosition}
 import collection.mutable.ArrayBuffer
 import reflect.internal.Chars.isLineBreakChar
 
@@ -79,7 +79,7 @@ trait ScratchPadMaker { self: Global =>
                 addSandbox(stat)
               } else {
                 val resName = nextRes()
-                val dispResName = resName filter ('$' !=)
+                val dispResName = resName filter ('$' != _)
                 patches += Patch(stat.pos.start, "val " + resName + " = ")
                 addSandbox(stat)
                 toPrint += resultString(nameType(dispResName, stat.tpe), resName)
@@ -92,7 +92,7 @@ trait ScratchPadMaker { self: Global =>
       case PackageDef(_, _) =>
         super.traverse(tree)
       case ModuleDef(_, name, Template(_, _, body)) =>
-        if (objectName.length == 0 /* objectName.isEmpty does not compile on Java 5 due to ambiguous implicit conversions: augmentString, stringToTermName */)
+        if (objectName.length == 0)
           objectName = tree.symbol.fullName
         body foreach traverseStat
         applyPendingPatches(skipped)

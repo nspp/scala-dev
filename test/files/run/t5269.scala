@@ -1,9 +1,8 @@
-import scala.tools.nsc.reporters._
-import scala.tools.nsc.Settings
-import reflect.runtime.Mirror.ToolBox
+import scala.reflect.runtime.universe._
+import scala.tools.reflect.Eval
 
 object Test extends App {
-  val code = scala.reflect.Code.lift{
+  reify {
     trait Z {
       val z = 2
     }
@@ -13,9 +12,5 @@ object Test extends App {
     }
 
     new X().println()
-  };
-
-  val reporter = new ConsoleReporter(new Settings)
-  val toolbox = new ToolBox(reporter)
-  toolbox.runExpr(code.tree)
+  }.eval
 }

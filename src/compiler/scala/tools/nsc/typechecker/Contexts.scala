@@ -30,9 +30,9 @@ trait Contexts { self: Analyzer =>
 
   private val startContext = {
     NoContext.make(
-    global.Template(List(), emptyValDef, List()) setSymbol global.NoSymbol setType global.NoType,
-    global.definitions.RootClass,
-    global.definitions.RootClass.info.decls)
+    Template(List(), emptyValDef, List()) setSymbol global.NoSymbol setType global.NoType,
+    rootMirror.RootClass,
+    rootMirror.RootClass.info.decls)
   }
 
   var lastAccessCheckDetails: String = ""
@@ -43,8 +43,7 @@ trait Contexts { self: Analyzer =>
    *  - if option `-Yno-imports` is given, nothing is imported
    *  - if the unit is java defined, only `java.lang` is imported
    *  - if option `-Yno-predef` is given, if the unit body has an import of Predef
-   *    among its leading imports, or if the tree is [[scala.ScalaObject]]
-   *    or [[scala.Predef]], `Predef` is not imported.
+   *    among its leading imports, or if the tree is [[scala.Predef]], `Predef` is not imported.
    */
   protected def rootImports(unit: CompilationUnit): List[Symbol] = {
     import definitions._
@@ -68,6 +67,7 @@ trait Contexts { self: Analyzer =>
     val c = sc.make(unit, tree, sc.owner, sc.scope, sc.imports)
     if (erasedTypes) c.setThrowErrors() else c.setReportErrors()
     c.implicitsEnabled = !erasedTypes
+    c.enrichmentEnabled = c.implicitsEnabled
     c
   }
 
@@ -100,13 +100,19 @@ trait Contexts { self: Analyzer =>
     var outer: Context = _                  // The next outer context
     var enclClass: Context = _              // The next outer context whose tree is a
                                             // template or package definition
+    @inline final def savingEnclClass[A](c: Context)(a: => A): A = {
+      val saved = enclClass
+      enclClass = c
+      try a finally enclClass = saved
+    }
+
     var enclMethod: Context = _             // The next outer context whose tree is a method
     var variance: Int = _                   // Variance relative to enclosing class
     private var _undetparams: List[Symbol] = List() // Undetermined type parameters,
                                                     // not inherited to child contexts
     var depth: Int = 0
     var imports: List[ImportInfo] = List()   // currently visible imports
-    var openImplicits: List[(Type,Symbol)] = List()   // types for which implicit arguments
+    var openImplicits: List[(Type,Tree)] = List()   // types for which implicit arguments
                                              // are currently searched
     // for a named application block (Tree) the corresponding NamedApplyInfo
     var namedApplyBlockInfo: Option[(Tree, NamedApplyInfo)] = None
@@ -120,6 +126,8 @@ trait Contexts { self: Analyzer =>
 
     var diagnostic: List[String] = Nil      // these messages are printed when issuing an error
     var implicitsEnabled = false
+    var macrosEnabled = true
+    var enrichmentEnabled = false // to selectively allow enrichment in patterns, where other kinds of implicit conversions are not allowed
     var checking = false
     var retyping = false
 
@@ -182,11 +190,49 @@ trait Contexts { self: Analyzer =>
 
     def logError(err: AbsTypeError) = buffer += err
 
+    def withImplicitsEnabled[T](op: => T): T = {
+      val saved = implicitsEnabled
+      implicitsEnabled = true
+      try op
+      finally implicitsEnabled = saved
+    }
+
     def withImplicitsDisabled[T](op: => T): T = {
       val saved = implicitsEnabled
       implicitsEnabled = false
+      val savedP = enrichmentEnabled
+      enrichmentEnabled = false
       try op
-      finally implicitsEnabled = saved
+      finally {
+        implicitsEnabled = saved
+        enrichmentEnabled = savedP
+      }
+    }
+
+    def withImplicitsDisabledAllowEnrichment[T](op: => T): T = {
+      val saved = implicitsEnabled
+      implicitsEnabled = false
+      val savedP = enrichmentEnabled
+      enrichmentEnabled = true
+      try op
+      finally {
+        implicitsEnabled = saved
+        enrichmentEnabled = savedP
+      }
+    }
+
+    def withMacrosEnabled[T](op: => T): T = {
+      val saved = macrosEnabled
+      macrosEnabled = true
+      try op
+      finally macrosEnabled = saved
+    }
+
+    def withMacrosDisabled[T](op: => T): T = {
+      val saved = macrosEnabled
+      macrosEnabled = false
+      try op
+      finally macrosEnabled = saved
     }
 
     def make(unit: CompilationUnit, tree: Tree, owner: Symbol,
@@ -224,6 +270,8 @@ trait Contexts { self: Analyzer =>
       c.diagnostic = this.diagnostic
       c.typingIndentLevel = typingIndentLevel
       c.implicitsEnabled = this.implicitsEnabled
+      c.macrosEnabled = this.macrosEnabled
+      c.enrichmentEnabled = this.enrichmentEnabled
       c.checking = this.checking
       c.retyping = this.retyping
       c.openImplicits = this.openImplicits
@@ -239,6 +287,7 @@ trait Contexts { self: Analyzer =>
       val c = make(unit, EmptyTree, owner, scope, imports)
       c.setReportErrors()
       c.implicitsEnabled = true
+      c.macrosEnabled = true
       c
     }
 
@@ -279,6 +328,7 @@ trait Contexts { self: Analyzer =>
     def makeImplicit(reportAmbiguousErrors: Boolean) = {
       val c = makeSilent(reportAmbiguousErrors)
       c.implicitsEnabled = false
+      c.enrichmentEnabled = false
       c
     }
 
@@ -314,29 +364,30 @@ trait Contexts { self: Analyzer =>
 
     private def unitError(pos: Position, msg: String) =
       unit.error(pos, if (checking) "\n**** ERROR DURING INTERNAL CHECKING ****\n" + msg else msg)
-
-    def issue(err: AbsTypeError) {
+    
+    @inline private def issueCommon(err: AbsTypeError)(pf: PartialFunction[AbsTypeError, Unit]) {
       debugwarn("issue error: " + err.errMsg)
-      if (reportErrors) unitError(err.errPos, addDiagString(err.errMsg))
+      if (settings.Yissuedebug.value) (new Exception).printStackTrace()
+      if (pf isDefinedAt err) pf(err)
       else if (bufferErrors) { buffer += err }
       else throw new TypeError(err.errPos, err.errMsg)
+    }
+
+    def issue(err: AbsTypeError) {
+      issueCommon(err) { case _ if reportErrors =>
+        unitError(err.errPos, addDiagString(err.errMsg))
+      }
     }
 
     def issueAmbiguousError(pre: Type, sym1: Symbol, sym2: Symbol, err: AbsTypeError) {
-      debugwarn("issue ambiguous error: " + err.errMsg)
-      if (ambiguousErrors) {
+      issueCommon(err) { case _ if ambiguousErrors =>
         if (!pre.isErroneous && !sym1.isErroneous && !sym2.isErroneous)
           unitError(err.errPos, err.errMsg)
-      } else if (bufferErrors) { buffer += err }
-      else throw new TypeError(err.errPos, err.errMsg)
+      }
     }
 
     def issueAmbiguousError(err: AbsTypeError) {
-      debugwarn("issue ambiguous error: " + err.errMsg)
-      if (ambiguousErrors)
-        unitError(err.errPos, addDiagString(err.errMsg))
-      else if (bufferErrors) { buffer += err }
-      else throw new TypeError(err.errPos, err.errMsg)
+      issueCommon(err) { case _ if ambiguousErrors => unitError(err.errPos, addDiagString(err.errMsg)) }
     }
 
     // TODO remove
@@ -362,6 +413,17 @@ trait Contexts { self: Analyzer =>
       case _                => outer.isLocal()
     }
 
+    /** Fast path for some slow checks (ambiguous assignment in Refchecks, and
+     *  existence of __match for MatchTranslation in virtpatmat.) This logic probably
+     *  needs improvement.
+     */
+    def isNameInScope(name: Name) = (
+      enclosingContextChain exists (ctx =>
+           (ctx.scope.lookupEntry(name) != null)
+        || (ctx.owner.rawInfo.member(name) != NoSymbol)
+      )
+    )
+
     // nextOuter determines which context is searched next for implicits
     // (after `this`, which contributes `newImplicits` below.) In
     // most cases, it is simply the outer context: if we're owned by
@@ -386,8 +448,8 @@ trait Contexts { self: Analyzer =>
 
     def enclosingContextChain: List[Context] = this :: outer.enclosingContextChain
 
-    override def toString = "Context(%s@%s unit=%s scope=%s errors=%b)".format(
-      owner.fullName, tree.shortClass, unit, scope.##, hasErrors
+    override def toString = "Context(%s@%s unit=%s scope=%s errors=%b, reportErrors=%b, throwErrors=%b)".format(
+      owner.fullName, tree.shortClass, unit, scope.##, hasErrors, reportErrors, throwErrors
     )
     /** Is `sub` a subclass of `base` or a companion object of such a subclass?
      */
@@ -491,7 +553,7 @@ trait Contexts { self: Analyzer =>
       (pre == NoPrefix) || {
         val ab = sym.accessBoundary(sym.owner)
 
-        (  (ab.isTerm || ab == definitions.RootClass)
+        (  (ab.isTerm || ab == rootMirror.RootClass)
         || (accessWithin(ab) || accessWithinLinked(ab)) &&
              (  !sym.hasLocalFlag
              || sym.owner.isImplClass // allow private local accesses to impl classes
@@ -546,16 +608,16 @@ trait Contexts { self: Analyzer =>
      *  it is accessible, and if it is imported there is not already a local symbol
      *  with the same names. Local symbols override imported ones. This fixes #2866.
      */
-    private def isQualifyingImplicit(sym: Symbol, pre: Type, imported: Boolean) =
+    private def isQualifyingImplicit(name: Name, sym: Symbol, pre: Type, imported: Boolean) =
       sym.isImplicit &&
       isAccessible(sym, pre) &&
       !(imported && {
-        val e = scope.lookupEntry(sym.name)
+        val e = scope.lookupEntry(name)
         (e ne null) && (e.owner == scope)
       })
 
     private def collectImplicits(syms: List[Symbol], pre: Type, imported: Boolean = false): List[ImplicitInfo] =
-      for (sym <- syms if isQualifyingImplicit(sym, pre, imported)) yield
+      for (sym <- syms if isQualifyingImplicit(sym.name, sym, pre, imported)) yield
         new ImplicitInfo(sym.name, pre, sym)
 
     private def collectImplicitImports(imp: ImportInfo): List[ImplicitInfo] = {
@@ -569,7 +631,7 @@ trait Contexts { self: Analyzer =>
           var impls = collect(sels1) filter (info => info.name != from)
           if (to != nme.WILDCARD) {
             for (sym <- imp.importedSymbol(to).alternatives)
-              if (isQualifyingImplicit(sym, pre, imported = true))
+              if (isQualifyingImplicit(to, sym, pre, imported = true))
                 impls = new ImplicitInfo(to, pre, sym) :: impls
           }
           impls
@@ -578,6 +640,12 @@ trait Contexts { self: Analyzer =>
       collect(imp.tree.selectors)
     }
 
+    /* SI-5892 / SI-4270: `implicitss` can return results which are not accessible at the
+     * point where implicit search is triggered. Example: implicits in (annotations of)
+     * class type parameters (SI-5892). The `context.owner` is the class symbol, therefore
+     * `implicitss` will return implicit conversions defined inside the class. These are
+     * filtered out later by `eligibleInfos` (SI-4270 / 9129cfe9), as they don't type-check.
+     */
     def implicitss: List[List[ImplicitInfo]] = {
       if (implicitsRunId != currentRunId) {
         implicitsRunId = currentRunId
@@ -586,11 +654,12 @@ trait Contexts { self: Analyzer =>
           if (owner != nextOuter.owner && owner.isClass && !owner.isPackageClass && !inSelfSuperCall) {
             if (!owner.isInitialized) return nextOuter.implicitss
             // debuglog("collect member implicits " + owner + ", implicit members = " + owner.thisType.implicitMembers)//DEBUG
-            val savedEnclClass = enclClass
-            this.enclClass = this
-            val res = collectImplicits(owner.thisType.implicitMembers, owner.thisType)
-            this.enclClass = savedEnclClass
-            res
+            savingEnclClass(this) {
+              // !!! In the body of `class C(implicit a: A) { }`, `implicitss` returns `List(List(a), List(a), List(<predef..)))`
+              //     it handled correctly by implicit search, which considers the second `a` to be shadowed, but should be
+              //     remedied nonetheless.
+              collectImplicits(owner.thisType.implicitMembers, owner.thisType)
+            }
           } else if (scope != nextOuter.scope && !owner.isPackageClass) {
             debuglog("collect local implicits " + scope.toList)//DEBUG
             collectImplicits(scope.toList, NoPrefix)
@@ -669,7 +738,7 @@ trait Contexts { self: Analyzer =>
       case List(ImportSelector(nme.WILDCARD, _, _, _)) => List(sym)
       case ImportSelector(from, _, to, _) :: _ if from == sym.name =>
         if (to == nme.WILDCARD) List()
-        else { val sym1 = sym.cloneSymbol; sym1.name = to; List(sym1) }
+        else List(sym.cloneSymbol(sym.owner, sym.rawflags, to))
       case _ :: rest => transformImport(rest, sym)
     }
 

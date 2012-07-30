@@ -7,7 +7,7 @@ package scala.tools.nsc
 package backend
 
 import io.AbstractFile
-import util.{ClassPath,JavaClassPath}
+import util.{ClassPath,JavaClassPath,MergedClassPath,DeltaClassPath}
 import util.ClassPath.{ JavaContext, DefaultJavaContext }
 import scala.tools.util.PathResolver
 
@@ -17,7 +17,17 @@ trait JavaPlatform extends Platform {
 
   type BinaryRepr = AbstractFile
 
-  lazy val classPath  = new PathResolver(settings).result
+  private var currentClassPath: Option[MergedClassPath[BinaryRepr]] = None
+
+  def classPath: ClassPath[BinaryRepr] = {
+    if (currentClassPath.isEmpty) currentClassPath = Some(new PathResolver(settings).result)
+    currentClassPath.get
+  }
+
+  /** Update classpath with a substituted subentry */
+  def updateClassPath(subst: Map[ClassPath[BinaryRepr], ClassPath[BinaryRepr]]) =
+    currentClassPath = Some(new DeltaClassPath(currentClassPath.get, subst))
+
   def rootLoader = new loaders.PackageLoader(classPath.asInstanceOf[ClassPath[platform.BinaryRepr]])
     // [Martin] Why do we need a cast here?
     // The problem is that we cannot specify at this point that global.platform should be of type JavaPlatform.
@@ -33,15 +43,19 @@ trait JavaPlatform extends Platform {
     if (settings.make.isDefault) Nil
     else List(dependencyAnalysis)
 
+  private def classEmitPhase =
+    if (settings.target.value == "jvm-1.5-fjbg") genJVM
+    else genASM
+
   def platformPhases = List(
-    flatten,    // get rid of inner classes
-    genJVM      // generate .class files
+    flatten,        // get rid of inner classes
+    classEmitPhase  // generate .class files
   ) ++ depAnalysisPhase
 
-  lazy val externalEquals          = getMember(BoxesRunTimeClass, nme.equals_)
-  lazy val externalEqualsNumNum    = getMember(BoxesRunTimeClass, nme.equalsNumNum)
-  lazy val externalEqualsNumChar   = getMember(BoxesRunTimeClass, nme.equalsNumChar)
-  lazy val externalEqualsNumObject = getMember(BoxesRunTimeClass, nme.equalsNumObject)
+  lazy val externalEquals          = getDecl(BoxesRunTimeClass, nme.equals_)
+  lazy val externalEqualsNumNum    = getDecl(BoxesRunTimeClass, nme.equalsNumNum)
+  lazy val externalEqualsNumChar   = getDecl(BoxesRunTimeClass, nme.equalsNumChar)
+  lazy val externalEqualsNumObject = getDecl(BoxesRunTimeClass, nme.equalsNumObject)
 
   /** We could get away with excluding BoxedBooleanClass for the
    *  purpose of equality testing since it need not compare equal

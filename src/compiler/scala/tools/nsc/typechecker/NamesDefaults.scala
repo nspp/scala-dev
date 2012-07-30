@@ -8,6 +8,8 @@ package typechecker
 
 import symtab.Flags._
 import scala.collection.mutable
+import scala.ref.WeakReference
+import scala.reflect.ClassTag
 
 /**
  *  @author Lukas Rytz
@@ -19,8 +21,19 @@ trait NamesDefaults { self: Analyzer =>
   import definitions._
   import NamesDefaultsErrorsGen._
 
-  val defaultParametersOfMethod =
-    perRunCaches.newWeakMap[Symbol, Set[Symbol]]() withDefaultValue Set()
+  // Default getters of constructors are added to the companion object in the
+  // typeCompleter of the constructor (methodSig). To compute the signature,
+  // we need the ClassDef. To create and enter the symbols into the companion
+  // object, we need the templateNamer of that module class. These two are stored
+  // as an attachment in the companion module symbol
+  class ConstructorDefaultsAttachment(val classWithDefault: ClassDef, var companionModuleClassNamer: Namer)
+
+  // To attach the default getters of local (term-owned) methods to the method symbol.
+  // Used in Namer.enterExistingSym: it needs to re-enter the method symbol and also
+  // default getters, which could not be found otherwise.
+  class DefaultsOfLocalMethodAttachment(val defaultGetters: mutable.Set[Symbol]) {
+    def this(default: Symbol) = this(mutable.Set(default))
+  }
 
   case class NamedApplyInfo(
     qual:       Option[Tree],
@@ -38,16 +51,16 @@ trait NamesDefaults { self: Analyzer =>
   def isNamed(arg: Tree) = nameOf(arg).isDefined
 
   /** @param pos maps indices from old to new */
-  def reorderArgs[T: ClassManifest](args: List[T], pos: Int => Int): List[T] = {
+  def reorderArgs[T: ClassTag](args: List[T], pos: Int => Int): List[T] = {
     val res = new Array[T](args.length)
     foreachWithIndex(args)((arg, index) => res(pos(index)) = arg)
     res.toList
   }
 
   /** @param pos maps indices from new to old (!) */
-  def reorderArgsInv[T: ClassManifest](args: List[T], pos: Int => Int): List[T] = {
+  def reorderArgsInv[T: ClassTag](args: List[T], pos: Int => Int): List[T] = {
     val argsArray = args.toArray
-    argsArray.indices map (i => argsArray(pos(i))) toList
+    (argsArray.indices map (i => argsArray(pos(i)))).toList
   }
 
   /** returns `true` if every element is equal to its index */
@@ -151,24 +164,26 @@ trait NamesDefaults { self: Analyzer =>
 
       // never used for constructor calls, they always have a stable qualifier
       def blockWithQualifier(qual: Tree, selected: Name) = {
-        val sym = blockTyper.context.owner.newValue(unit.freshTermName("qual$"), qual.pos) setInfo qual.tpe
+        val sym = blockTyper.context.owner.newValue(unit.freshTermName("qual$"), qual.pos, newFlags = HIDDEN) setInfo qual.tpe
         blockTyper.context.scope enter sym
         val vd = atPos(sym.pos)(ValDef(sym, qual) setType NoType)
+        // it stays in Vegas: SI-5720, SI-5727
+        qual changeOwner (blockTyper.context.owner -> sym)
 
+        val newQual = atPos(qual.pos.focus)(blockTyper.typedQualifier(Ident(sym.name)))
         var baseFunTransformed = atPos(baseFun.pos.makeTransparent) {
-          // don't use treeCopy: it would assign opaque position.
-          val f = Select(gen.mkAttributedRef(sym), selected)
-                   .setType(baseFun1.tpe).setSymbol(baseFun1.symbol)
+          // setSymbol below is important because the 'selected' function might be overloaded. by
+          // assigning the correct method symbol, typedSelect will just assign the type. the reason
+          // to still call 'typed' is to correctly infer singleton types, SI-5259.
+          val f = blockTyper.typedOperator(Select(newQual, selected).setSymbol(baseFun1.symbol))
           if (funTargs.isEmpty) f
           else TypeApply(f, funTargs).setType(baseFun.tpe)
         }
 
         val b = Block(List(vd), baseFunTransformed)
                   .setType(baseFunTransformed.tpe).setPos(baseFun.pos)
-
-        val defaultQual = Some(atPos(qual.pos.focus)(gen.mkAttributedRef(sym)))
         context.namedApplyBlockInfo =
-          Some((b, NamedApplyInfo(defaultQual, defaultTargs, Nil, blockTyper)))
+          Some((b, NamedApplyInfo(Some(newQual), defaultTargs, Nil, blockTyper)))
         b
       }
 
@@ -224,7 +239,7 @@ trait NamesDefaults { self: Analyzer =>
         case Select(sp @ Super(_, _), _) if isConstr =>
           // 'moduleQual' fixes #3207. selection of the companion module of the
           // superclass needs to have the same prefix as the superclass.
-          blockWithoutQualifier(moduleQual(baseFun.pos, sp.symbol.tpe.parents.head))
+          blockWithoutQualifier(moduleQual(baseFun.pos, sp.symbol.tpe.firstParent))
 
         // self constructor calls (in secondary constructors)
         case Select(tp, name) if isConstr =>
@@ -257,19 +272,18 @@ trait NamesDefaults { self: Analyzer =>
     def argValDefs(args: List[Tree], paramTypes: List[Type], blockTyper: Typer): List[ValDef] = {
       val context = blockTyper.context
       val symPs = map2(args, paramTypes)((arg, tpe) => {
-        val byName = isByNameParamType(tpe)
-        val (argTpe, repeated) =
-          if (isScalaRepeatedParamType(tpe)) arg match {
-            case Typed(expr, Ident(tpnme.WILDCARD_STAR)) =>
-              (expr.tpe, true)
-            case _ =>
-              (seqType(arg.tpe), true)
-          } else (arg.tpe, false)
-        val s = context.owner.newValue(unit.freshTermName("x$"), arg.pos)
-        val valType = if (byName) functionType(List(), argTpe)
-                      else if (repeated) argTpe
-                      else argTpe
-        s.setInfo(valType)
+        val byName   = isByNameParamType(tpe)
+        val repeated = isScalaRepeatedParamType(tpe)
+        val argTpe = (
+          if (repeated) arg match {
+            case Typed(expr, Ident(tpnme.WILDCARD_STAR)) => expr.tpe
+            case _                                       => seqType(arg.tpe)
+          }
+          else arg.tpe
+        ).widen // have to widen or types inferred from literal defaults will be singletons
+        val s = context.owner.newValue(unit.freshTermName("x$"), arg.pos, newFlags = HIDDEN) setInfo (
+          if (byName) functionType(Nil, argTpe) else argTpe
+        )
         (context.scope.enter(s), byName, repeated)
       })
       map2(symPs, args) {
@@ -335,7 +349,7 @@ trait NamesDefaults { self: Analyzer =>
               // cannot call blockTyper.typedBlock here, because the method expr might be partially applied only
               val res = blockTyper.doTypedApply(tree, expr, refArgs, mode, pt)
               res.setPos(res.pos.makeTransparent)
-              val block = Block(stats ::: valDefs, res).setType(res.tpe).setPos(tree.pos)
+              val block = Block(stats ::: valDefs, res).setType(res.tpe).setPos(tree.pos.makeTransparent)
               context.namedApplyBlockInfo =
                 Some((block, NamedApplyInfo(qual, targs, vargss :+ refArgs, blockTyper)))
               block
@@ -374,10 +388,10 @@ trait NamesDefaults { self: Analyzer =>
    */
   def addDefaults(givenArgs: List[Tree], qual: Option[Tree], targs: List[Tree],
                   previousArgss: List[List[Tree]], params: List[Symbol],
-                  pos: util.Position, context: Context): (List[Tree], List[Symbol]) = {
+                  pos: scala.reflect.internal.util.Position, context: Context): (List[Tree], List[Symbol]) = {
     if (givenArgs.length < params.length) {
       val (missing, positional) = missingParams(givenArgs, params)
-      if (missing forall (_.hasDefaultFlag)) {
+      if (missing forall (_.hasDefault)) {
         val defaultArgs = missing flatMap (p => {
           val defGetter = defaultGetter(p, context)
           // TODO #3649 can create spurious errors when companion object is gone (because it becomes unlinked from scope)
@@ -399,7 +413,7 @@ trait NamesDefaults { self: Analyzer =>
           }
         })
         (givenArgs ::: defaultArgs, Nil)
-      } else (givenArgs, missing filterNot (_.hasDefaultFlag))
+      } else (givenArgs, missing filterNot (_.hasDefault))
     } else (givenArgs, Nil)
   }
 
@@ -443,21 +457,12 @@ trait NamesDefaults { self: Analyzer =>
     }
   }
 
-  /** Fast path for ambiguous assignment check.
-   */
-  private def isNameInScope(context: Context, name: Name) = (
-    context.enclosingContextChain exists (ctx =>
-         (ctx.scope.lookupEntry(name) != null)
-      || (ctx.owner.rawInfo.member(name) != NoSymbol)
-    )
-  )
-
   /** A full type check is very expensive; let's make sure there's a name
    *  somewhere which could potentially be ambiguous before we go that route.
    */
   private def isAmbiguousAssignment(typer: Typer, param: Symbol, arg: Tree) = {
     import typer.context
-    isNameInScope(context, param.name) && {
+    (context isNameInScope param.name) && {
       // for named arguments, check whether the assignment expression would
       // typecheck. if it does, report an ambiguous error.
       val paramtpe = param.tpe.cloneInfo(param)
@@ -484,7 +489,18 @@ trait NamesDefaults { self: Analyzer =>
         // instead of arg, but can't do that because eventually setType(ErrorType)
         // is called, and EmptyTree can only be typed NoType.  Thus we need to
         // disable conforms as a view...
-        try typer.silent(_.typed(arg, subst(paramtpe))) match {
+        val errsBefore = reporter.ERROR.count
+        try typer.silent { tpr =>
+          val res = tpr.typed(arg, subst(paramtpe))
+          // better warning for SI-5044: if `silent` was not actually silent give a hint to the user
+          // [H]: the reason why `silent` is not silent is because the cyclic reference exception is
+          // thrown in a context completely different from `context` here. The exception happens while
+          // completing the type, and TypeCompleter is created/run with a non-silent Namer `context`
+          // and there is at the moment no way to connect the two unless we go through some global state.
+          if (errsBefore < reporter.ERROR.count)
+            WarnAfterNonSilentRecursiveInference(param, arg)(context)
+          res
+        } match {
           case SilentResultValue(t)  => !t.isErroneous // #4041
           case _        => false
         }
@@ -493,7 +509,7 @@ trait NamesDefaults { self: Analyzer =>
           // CyclicReferences.  Fix for #3685
           case cr @ CyclicReference(sym, _) =>
             (sym.name == param.name) && sym.accessedOrSelf.isVariable && {
-              NameClashError(sym, arg)(typer.context)
+              NameClashError(sym, arg)(context)
               true
             }
         }
@@ -513,7 +529,7 @@ trait NamesDefaults { self: Analyzer =>
     // maps indices from (order written by user) to (order of definition)
     val argPos            = Array.fill(args.length)(-1)
     var positionalAllowed = true
-    val namelessArgs = mapWithIndex(args) { (arg, index) =>
+    val namelessArgs = mapWithIndex(args) { (arg, argIndex) =>
       arg match {
         case arg @ AssignOrNamedArg(Ident(name), rhs) =>
           def matchesName(param: Symbol) = !param.isSynthetic && (
@@ -525,30 +541,35 @@ trait NamesDefaults { self: Analyzer =>
               case _ => false
             })
           )
-          val pos = params indexWhere matchesName
-          if (pos == -1) {
+          val paramPos = params indexWhere matchesName
+          if (paramPos == -1) {
             if (positionalAllowed) {
-              argPos(index) = index
+              argPos(argIndex) = argIndex
               // prevent isNamed from being true when calling doTypedApply recursively,
               // treat the arg as an assignment of type Unit
               Assign(arg.lhs, rhs) setPos arg.pos
             }
             else UnknownParameterNameNamesDefaultError(arg, name)
           }
-          else if (argPos contains pos)
-            DoubleParamNamesDefaultError(arg, name)
-          else if (isAmbiguousAssignment(typer, params(pos), arg))
+          else if (argPos contains paramPos) {
+            val existingArgIndex = argPos.indexWhere(_ == paramPos)
+            val otherName = args(paramPos) match {
+              case AssignOrNamedArg(Ident(oName), rhs) if oName != name => Some(oName)
+              case _ => None
+            }
+            DoubleParamNamesDefaultError(arg, name, existingArgIndex+1, otherName)
+          } else if (isAmbiguousAssignment(typer, params(paramPos), arg))
             AmbiguousReferenceInNamesDefaultError(arg, name)
           else {
             // if the named argument is on the original parameter
             // position, positional after named is allowed.
-            if (index != pos)
+            if (argIndex != paramPos)
               positionalAllowed = false
-            argPos(index) = pos
+            argPos(argIndex) = paramPos
             rhs
           }
         case _ =>
-          argPos(index) = index
+          argPos(argIndex) = argIndex
           if (positionalAllowed) arg
           else PositionalAfterNamedNamesDefaultError(arg)
       }

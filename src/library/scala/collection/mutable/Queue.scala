@@ -23,14 +23,13 @@ import generic._
  *  @see [[http://docs.scala-lang.org/overviews/collections/concrete-mutable-collection-classes.html#mutable_queues "Scala's Collection Library overview"]]
  *  section on `Queues` for more information.
  *
- *  @define Coll mutable.Queue
+ *  @define Coll `mutable.Queue`
  *  @define coll mutable queue
  *  @define orderDependent
  *  @define orderDependentFold
  *  @define mayNotTerminateInf
  *  @define willNotTerminateInf
  */
-@cloneable
 class Queue[A]
 extends MutableList[A]
    with GenericTraversableTemplate[A, Queue]
