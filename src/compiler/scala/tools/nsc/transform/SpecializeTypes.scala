@@ -51,6 +51,8 @@ import language.existentials
 abstract class SpecializeTypes extends InfoTransform with TypingTransformers {
   import global._
   import Flags._
+  import EVDefaults._
+
   /** the name of the phase: */
   val phaseName: String = "specialize"
 
@@ -1237,7 +1239,7 @@ abstract class SpecializeTypes extends InfoTransform with TypingTransformers {
       override def castType(tree: Tree, pt: Type): Tree = {
         // log(" expected type: " + pt)
         // log(" tree type: " + tree.tpe)
-        tree.tpe = if (tree.tpe != null) fixType(tree.tpe) else null
+        tree setType (if (tree.tpe != null) fixType(tree.tpe) else null)
         // log(" tree type: " + tree.tpe)
         val ntree = if (tree.tpe != null && !(tree.tpe <:< pt)) {
           val casttpe = CastMap(tree.tpe)
@@ -1245,7 +1247,7 @@ abstract class SpecializeTypes extends InfoTransform with TypingTransformers {
           else if (casttpe <:< CastMap(pt)) gen.mkCast(tree, pt)
           else tree
         } else tree
-        ntree.tpe = null
+        ntree setType null
         ntree
       }
     }
@@ -1688,7 +1690,7 @@ abstract class SpecializeTypes extends InfoTransform with TypingTransformers {
         false) // don't make private fields public
 
       val newBody = symSubstituter(body(source).duplicate)
-      tpt.tpe = tpt.tpe.substSym(oldtparams, newtparams)
+      tpt setType tpt.tpe.substSym(oldtparams, newtparams)
 
       copyDefDef(tree)(vparamss = List(newSyms map ValDef), rhs = newBody)
     }

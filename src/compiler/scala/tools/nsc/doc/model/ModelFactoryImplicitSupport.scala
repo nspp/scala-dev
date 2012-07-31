@@ -237,7 +237,7 @@ trait ModelFactoryImplicitSupport {
           context.flushBuffer() /* any errors here should not prevent future findings */
           // TODO: Not sure this is the right thing to do -- seems similar to what scalac should be doing
           val context2 = context.make(context.unit, context.tree, sym.owner, context.scope, context.imports)
-          val search = inferImplicit(EmptyTree, tpe, false, false, context2, false)
+          val search = inferImplicit(EmptyTree, tpe, false, false, context2, false)(EV.DefaultExplanation)
           context.flushBuffer() /* any errors here should not prevent future findings */
 
           available = Some(search.tree != EmptyTree)

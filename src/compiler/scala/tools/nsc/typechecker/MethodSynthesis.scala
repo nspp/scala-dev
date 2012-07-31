@@ -21,6 +21,7 @@ trait MethodSynthesis {
   import global._
   import definitions._
   import CODE._
+  import EVDefaults._
 
   object synthesisUtil {
     type TT[T]  = ru.TypeTag[T]

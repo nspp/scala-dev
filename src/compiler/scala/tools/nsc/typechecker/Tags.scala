@@ -12,6 +12,7 @@ trait Tags {
 
     private def resolveTag(pos: Position, taggedTp: Type, allowMaterialization: Boolean) = enteringTyper {
       def wrapper (tree: => Tree): Tree = if (allowMaterialization) (context.withMacrosEnabled[Tree](tree)) else (context.withMacrosDisabled[Tree](tree))
+      // FIXME: provide proper explanation
       wrapper(inferImplicit(
         EmptyTree,
         taggedTp,
@@ -20,7 +21,7 @@ trait Tags {
         /*context =*/ context,
         /*saveAmbiguousDivergent =*/ true,
         /*pos =*/ pos
-      ).tree)
+      )(EV.DefaultExplanation).tree)
     }
 
     /** Finds in scope or materializes a ClassTag.

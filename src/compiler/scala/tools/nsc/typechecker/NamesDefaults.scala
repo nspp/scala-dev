@@ -170,7 +170,7 @@ trait NamesDefaults { self: Analyzer =>
         // it stays in Vegas: SI-5720, SI-5727
         qual changeOwner (blockTyper.context.owner -> sym)
 
-        val newQual = atPos(qual.pos.focus)(blockTyper.typedQualifier(Ident(sym.name)))
+        val newQual = atPos(qual.pos.focus)(blockTyper.typedQualifier(Ident(sym.name))(EV.DefaultExplanation))
         var baseFunTransformed = atPos(baseFun.pos.makeTransparent) {
           // setSymbol below is important because the 'selected' function might be overloaded. by
           // assigning the correct method symbol, typedSelect will just assign the type. the reason
@@ -290,7 +290,7 @@ trait NamesDefaults { self: Analyzer =>
         case ((sym, byName, repeated), arg) =>
           val body =
             if (byName) {
-              val res = blockTyper.typed(Function(List(), arg))
+              val res = blockTyper.typed(Function(List(), arg))(EV.DefaultExplanation)
               new ChangeOwnerTraverser(context.owner, res.symbol) traverse arg // fixes #2290
               res
             } else {
@@ -300,7 +300,7 @@ trait NamesDefaults { self: Analyzer =>
                   expr
                 case _ =>
                   val factory = Select(gen.mkAttributedRef(SeqModule), nme.apply)
-                  blockTyper.typed(Apply(factory, List(resetLocalAttrs(arg))))
+                  blockTyper.typed(Apply(factory, List(resetLocalAttrs(arg))))(EV.DefaultExplanation)
               } else arg
             }
           atPos(body.pos)(ValDef(sym, body).setType(NoType))
@@ -314,7 +314,7 @@ trait NamesDefaults { self: Analyzer =>
       // `fun` is typed. `namelessArgs` might be typed or not, if they are types are kept.
       case Apply(fun, namelessArgs) =>
         val transformedFun = transformNamedApplication(typer, mode, pt)(fun, x => x)
-        if (transformedFun.isErroneous) setError(tree)
+        if (transformedFun.isErroneous) setError(treeCopy.Apply(tree, fun, namelessArgs))
         else {
           assert(isNamedApplyBlock(transformedFun), transformedFun)
           val NamedApplyInfo(qual, targs, vargss, blockTyper) =
@@ -491,7 +491,7 @@ trait NamesDefaults { self: Analyzer =>
         // disable conforms as a view...
         val errsBefore = reporter.ERROR.count
         try typer.silent { tpr =>
-          val res = tpr.typed(arg, subst(paramtpe))
+          val res = tpr.typed(arg, subst(paramtpe))(EV.DefaultExplanation)
           // better warning for SI-5044: if `silent` was not actually silent give a hint to the user
           // [H]: the reason why `silent` is not silent is because the cyclic reference exception is
           // thrown in a context completely different from `context` here. The exception happens while

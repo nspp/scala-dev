@@ -182,7 +182,7 @@ trait Macros extends scala.tools.reflect.FastTrack with Traces {
    *
    *  @return typechecked rhs of the given macro definition
    */
-  def typedMacroBody(typer: Typer, ddef: DefDef): Tree = {
+  def typedMacroBody(typer: Typer, ddef: DefDef)(implicit e: EV.Explanation): Tree = {
     import typer.context
     macroLogVerbose("typechecking macro def %s at %s".format(ddef.symbol, ddef.pos))
 
@@ -285,21 +285,21 @@ trait Macros extends scala.tools.reflect.FastTrack with Traces {
     def typecheckRhs(rhs: Tree): Tree = {
       try {
         val prevNumErrors = reporter.ERROR.count // [Eugene] funnily enough, the isErroneous check is not enough
-        var rhs1 = if (hasErrors) EmptyTree else typer.typed1(rhs, EXPRmode, WildcardType)
+        var rhs1 = if (hasErrors) EmptyTree else typer.typed1(rhs, EXPRmode, WildcardType)(EV.DefaultExplanation)
         def typecheckedWithErrors = (rhs1 exists (_.isErroneous)) || reporter.ERROR.count != prevNumErrors
         def rhsNeedsMacroExpansion = rhs1.symbol != null && rhs1.symbol.isTermMacro && !rhs1.symbol.isErroneous
         while (!typecheckedWithErrors && rhsNeedsMacroExpansion) {
           rhs1 = macroExpand1(typer, rhs1) match {
             case Success(expanded) =>
               try {
-                val typechecked = typer.typed1(expanded, EXPRmode, WildcardType)
+                val typechecked = typer.typed1(expanded, EXPRmode, WildcardType)(EV.DefaultExplanation)
                 macroLogVerbose("typechecked1:%n%s%n%s".format(typechecked, showRaw(typechecked)))
                 typechecked
               } finally {
                 openMacros = openMacros.tail
               }
             case Fallback(fallback) =>
-              typer.typed1(fallback, EXPRmode, WildcardType)
+              typer.typed1(fallback, EXPRmode, WildcardType)(EV.DefaultExplanation)
             case Other(result) =>
               result
           }
@@ -432,7 +432,7 @@ trait Macros extends scala.tools.reflect.FastTrack with Traces {
       var actparamss = macroImpl.paramss
       actparamss = transformTypeTagEvidenceParams(actparamss, (param, tparam) => None)
 
-      val rettpe = if (!ddef.tpt.isEmpty) typer.typedType(ddef.tpt).tpe else computeMacroDefTypeFromMacroImpl(ddef, macroDef, macroImpl)
+      val rettpe = if (!ddef.tpt.isEmpty) typer.typedType(ddef.tpt)(EV.DefaultExplanation).tpe else computeMacroDefTypeFromMacroImpl(ddef, macroDef, macroImpl)
       val (reqparamsss0, reqres0) = macroImplSigs(macroDef, ddef.tparams, ddef.vparamss, rettpe)
       var reqparamsss = reqparamsss0
 
@@ -495,7 +495,7 @@ trait Macros extends scala.tools.reflect.FastTrack with Traces {
     rhs1
   }
 
-  def computeMacroDefTypeFromMacroImpl(macroDdef: DefDef, macroDef: Symbol, macroImpl: Symbol): Type = {
+  def computeMacroDefTypeFromMacroImpl(macroDdef: DefDef, macroDef: Symbol, macroImpl: Symbol)(implicit e: EV.Explanation): Type = {
     // get return type from method type
     def unwrapRet(tpe: Type): Type = {
       def loop(tpe: Type) = tpe match {

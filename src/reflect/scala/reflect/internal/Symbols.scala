@@ -1379,6 +1379,8 @@ trait Symbols extends api.Symbols { self: SymbolTable =>
 // ------ info and type -------------------------------------------------------------------
 
     private[Symbols] var infos: TypeHistory = null
+    private[Symbols] var rawsnapshot: SymbolTypeSnapshot = null
+    private[Symbols] var eventIds: List[Int]             = List()
     def originalInfo = {
       if (infos eq null) null
       else {
@@ -1442,7 +1444,7 @@ trait Symbols extends api.Symbols { self: SymbolTable =>
         throw ex
     }
 
-    def info_=(info: Type) {
+    protected def info_=(info: Type) {
       assert(info ne null)
       infos = TypeHistory(currentPeriod, info, null)
       unlock()
@@ -1450,11 +1452,21 @@ trait Symbols extends api.Symbols { self: SymbolTable =>
     }
 
     /** Set initial info. */
-    def setInfo(info: Type): this.type  = {
+    def setInfo(info0: Type): this.type                     = {
+      if (isClockOn) {
+        val tick = newClockTick()
+        rawsnapshot = SymbolTypeSnapshot(tick, info0, rawsnapshot)
+      }
+      setInfoNoLog(info0)
+    }
+    def setInfoNoLog(info: Type): this.type  = {
       info_=(info)
       EV << EV.SymSetInfo(this, info)
       this
     }
+    
+    def snapshot = rawsnapshot
+    
     /** Modifies this symbol's info in place. */
     def modifyInfo(f: Type => Type): this.type = setInfo(f(info))
     /** Substitute second list of symbols for first in current info. */
@@ -1479,6 +1491,31 @@ trait Symbols extends api.Symbols { self: SymbolTable =>
       infos = TypeHistory(currentPeriod, info, infos)
       _validTo = if (info.isComplete) currentPeriod else NoPeriod
       this
+    }
+    
+    // todo: remove
+    final def updateEventInfo(maybeId: Int): Symbol = {
+      if (maybeId != EV.NoEvent.id) {
+        eventIds = id::eventIds
+      }
+      this
+    }
+
+    def previousHistoryEvent(evId: Int): Int = {
+      def findNext(acc: Int, next: Int): Int = {
+        if (next == evId)
+          next
+        else
+          acc
+      }
+
+      eventIds match {
+        case Nil =>
+          EV.NoEvent.id
+        case h::rest =>
+          val res = rest.foldLeft(h)(findNext)
+          if (res == evId) EV.NoEvent.id else res
+      }
     }
 
     def hasRawInfo: Boolean = infos ne null
@@ -2503,6 +2540,7 @@ trait Symbols extends api.Symbols { self: SymbolTable =>
         else if (isAliasType) " = " + tp.resultType
         else tp.resultType match {
           case rt @ TypeBounds(_, _) => "" + rt
+          case NoType                => ""
           case rt                    => " <: " + rt
         }
       )
@@ -2890,7 +2928,7 @@ trait Symbols extends api.Symbols { self: SymbolTable =>
       tyconCache
     }
 
-    override def info_=(tp: Type) {
+    protected override def info_=(tp: Type) {
       tpePeriod = NoPeriod
       tyconCache = null
       super.info_=(tp)
@@ -3258,7 +3296,7 @@ trait Symbols extends api.Symbols { self: SymbolTable =>
       setInfo(NoType)
       privateWithin = this
     }
-    override def info_=(info: Type) = {
+    protected override def info_=(info: Type) = {
       infos = TypeHistory(1, NoType, null)
       unlock()
       validTo = currentPeriod
@@ -3393,6 +3431,11 @@ trait Symbols extends api.Symbols { self: SymbolTable =>
       "TypeHistory(" + phaseOf(validFrom)+":"+runId(validFrom) + "," + info + "," + prev + ")"
 
     def toList: List[TypeHistory] = this :: ( if (prev eq null) Nil else prev.toList )
+  }
+  
+  case class SymbolTypeSnapshot(clock: Clock, info: Type, prev: SymbolTypeSnapshot) {
+    override def toString() =
+      "TypeSnapshot(at " + clock + ": " + info + ",prev: " + prev + ")"
   }
 
   Statistics.newView("#symbols")(ids)

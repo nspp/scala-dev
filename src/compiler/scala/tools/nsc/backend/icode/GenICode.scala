@@ -1824,7 +1824,7 @@ abstract class GenICode extends SubComponent  {
           case t @ Apply(_, args) if sym.isLabel && !boundLabels(sym) =>
             val newSym = getLabel(sym.pos, sym.name)
             val tree = Apply(global.gen.mkAttributedRef(newSym), transformTrees(args)) setPos t.pos
-            tree.tpe = t.tpe
+            tree setType t.tpe
             tree
 
           case t @ LabelDef(name, params, rhs) =>

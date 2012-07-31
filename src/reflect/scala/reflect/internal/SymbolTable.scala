@@ -37,8 +37,10 @@ abstract class SymbolTable extends makro.Universe
                               with StdAttachments
                               with StdCreators
                               with BuildUtils
+                              with Implicits
                               with event.EventsUniverse
                               with event.Events
+                              with event.Clocks
 {
 
   val gen = new TreeGen { val global: SymbolTable.this.type = SymbolTable.this }
@@ -329,6 +331,10 @@ abstract class SymbolTable extends makro.Universe
   /** Is this symbol table a part of a compiler universe?
    */
   def isCompilerUniverse = false
+  
+  // FIXME: move to tags
+  val TypeManifest = manifest[Type]
+  val SymbolManifest = manifest[Symbol]
 
   @deprecated("Use enteringPhase", "2.10.0")
   @inline final def atPhase[T](ph: Phase)(op: => T): T = enteringPhase(ph)(op)

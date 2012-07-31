@@ -42,7 +42,7 @@ trait Trees extends reflect.internal.Trees { self: Global =>
   case class DocDef(comment: DocComment, definition: Tree)
        extends Tree {
     override def symbol: Symbol = definition.symbol
-    override def symbol_=(sym: Symbol) { definition.symbol = sym }
+    protected override def symbol_=(sym: Symbol) { definition setSymbol sym }
     override def isDef = definition.isDef
     override def isTerm = definition.isTerm
     override def isType = definition.isType
@@ -87,7 +87,7 @@ trait Trees extends reflect.internal.Trees { self: Global =>
 
     // create parameters for <init> as synthetic trees.
     var vparamss1 = mmap(vparamss) { vd =>
-      atPos(vd.pos.focus) {
+      atPos(vd.pos.makeTransparent) {
         val mods = Modifiers(vd.mods.flags & (IMPLICIT | DEFAULTPARAM | BYNAMEPARAM) | PARAM | PARAMACCESSOR)
         ValDef(mods withAnnotations vd.mods.annotations, vd.name, vd.tpt.duplicate, vd.rhs.duplicate)
       }
@@ -331,7 +331,7 @@ trait Trees extends reflect.internal.Trees { self: Global =>
                   transform(tpt.original)
                 else if (tpt.tpe != null && (tpt.wasEmpty || (tpt.tpe exists (tp => locals contains tp.typeSymbol)))) {
                   val dupl = tpt.duplicate
-                  dupl.tpe = null
+                  dupl setType null
                   dupl
                 }
                 else tree
@@ -344,8 +344,8 @@ trait Trees extends reflect.internal.Trees { self: Global =>
               case _ =>
                 val dupl = tree.duplicate
                 if (tree.hasSymbol && (!localOnly || (locals contains tree.symbol)) && !(keepLabels && tree.symbol.isLabel))
-                  dupl.symbol = NoSymbol
-                dupl.tpe = null
+                  dupl setSymbol NoSymbol
+                dupl setType null
                 dupl
             }
           }

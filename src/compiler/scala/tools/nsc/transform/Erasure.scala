@@ -20,6 +20,7 @@ abstract class Erasure extends AddInterfaces
   import global._
   import definitions._
   import CODE._
+  import EVDefaults._
 
   val phaseName: String = "erasure"
 
@@ -687,7 +688,7 @@ abstract class Erasure extends AddInterfaces
           if (tree.symbol == NoSymbol) {
             tree
           } else if (name == nme.CONSTRUCTOR) {
-            if (tree.symbol.owner == AnyValClass) tree.symbol = ObjectClass.primaryConstructor
+            if (tree.symbol.owner == AnyValClass) tree setSymbol ObjectClass.primaryConstructor
             tree
           } else if (tree.symbol == Any_asInstanceOf)
             adaptMember(atPos(tree.pos)(Select(qual, Object_asInstanceOf)))
@@ -704,7 +705,7 @@ abstract class Erasure extends AddInterfaces
               qual1 = unbox(qual1, tree.symbol.owner.tpe)
 
             if (isPrimitiveValueMember(tree.symbol) && !isPrimitiveValueType(qual1.tpe))
-              tree.symbol = NoSymbol
+              tree setSymbol NoSymbol
             else if (qual1.tpe.isInstanceOf[MethodType] && qual1.tpe.params.isEmpty) {
               assert(qual1.symbol.isStable, qual1.symbol);
               qual1 = Apply(qual1, List()) setPos qual1.pos setType qual1.tpe.resultType
@@ -725,12 +726,12 @@ abstract class Erasure extends AddInterfaces
 
     /** A replacement for the standard typer's adapt method.
      */
-    override protected def adapt(tree: Tree, mode: Int, pt: Type, original: Tree = EmptyTree): Tree =
+    override protected def adapt(tree: Tree, mode: Int, pt: Type, original: Tree = EmptyTree)(implicit expl: EV.Explanation = EV.DefaultExplanation): Tree =
       adaptToType(tree, pt)
 
     /** A replacement for the standard typer's `typed1` method.
      */
-    override def typed1(tree: Tree, mode: Int, pt: Type): Tree = {
+    override def typed1(tree: Tree, mode: Int, pt: Type)(implicit expl0: EV.Explanation): Tree = {
       val tree1 = try {
         tree match {
           case InjectDerivedValue(arg) =>
@@ -739,13 +740,13 @@ abstract class Erasure extends AddInterfaces
                 val tref = itype.tpe
                 val argPt = enteringPhase(currentRun.erasurePhase)(erasedValueClassArg(tref))
                 log(s"transforming inject $arg -> $tref/$argPt")
-                val result = typed(arg, mode, argPt)
+                val result = typed(arg, mode, argPt)(expl0)
                 log(s"transformed inject $arg -> $tref/$argPt = $result:${result.tpe}")
                 return result setType ErasedValueType(tref)
 
             }
           case _ =>
-            super.typed1(adaptMember(tree), mode, pt)
+            super.typed1(adaptMember(tree), mode, pt)(expl0)
         }
       } catch {
         case er: TypeError =>
@@ -781,8 +782,8 @@ abstract class Erasure extends AddInterfaces
               alt => alt == first || !(first.tpe looselyMatches alt.tpe)
             }
             if (tree.symbol ne sym1) {
-              tree1.symbol = sym1
-              tree1.tpe = sym1.tpe
+              tree1 setSymbol sym1
+              tree1 setType sym1.tpe
             }
           }
           tree1
@@ -1072,7 +1073,7 @@ abstract class Erasure extends AddInterfaces
           if (owner.isRefinementClass) {
             val overridden = tree.symbol.nextOverriddenSymbol
             assert(overridden != NoSymbol, tree.symbol)
-            tree.symbol = overridden
+            tree setSymbol overridden
           }
 
           def isAccessible(sym: Symbol) = localTyper.context.isAccessible(sym, sym.owner.thisType)
@@ -1134,7 +1135,7 @@ abstract class Erasure extends AddInterfaces
                 tree1, elemtpt setType specialScalaErasure.applyInArray(elemtpt.tpe), trees map transform) setType null
             case DefDef(_, _, _, _, tpt, _) =>
               val result = super.transform(tree1) setType null
-              tpt.tpe = specialErasure(tree1.symbol)(tree1.symbol.tpe).resultType
+              tpt setType specialErasure(tree1.symbol)(tree1.symbol.tpe).resultType
               result
             case _ =>
               super.transform(tree1) setType null

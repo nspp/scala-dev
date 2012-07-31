@@ -93,7 +93,7 @@ trait PatternMatching extends Transform with TypingTransformers with ast.TreeDSL
         // setType origTp intended for CPS -- TODO: is it necessary?
         val translated = translator.translateMatch(treeCopy.Match(tree, transform(sel), transformTrees(cases).asInstanceOf[List[CaseDef]]))
         try {
-          localTyper.typed(translated) setType origTp
+          localTyper.typed(translated)(EV.DefaultExplanation) setType origTp
         } catch {
           case x: (Types#TypeError) =>
             // TODO: this should never happen; error should've been reported during type checking
@@ -1275,7 +1275,7 @@ trait PatternMatching extends Transform with TypingTransformers with ast.TreeDSL
         }
         t match {
           case Function(_, _) if t.symbol == NoSymbol =>
-            t.symbol = currentOwner.newAnonymousFunctionValue(t.pos)
+            t setSymbol currentOwner.newAnonymousFunctionValue(t.pos)
             patmatDebug("new symbol for "+ (t, t.symbol.ownerChain))
           case Function(_, _) if (t.symbol.owner == NoSymbol) || (t.symbol.owner == origOwner) =>
             patmatDebug("fundef: "+ (t, t.symbol.ownerChain, currentOwner.ownerChain))

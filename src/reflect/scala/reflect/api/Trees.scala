@@ -107,6 +107,12 @@ trait Trees extends base.Trees { self: Universe =>
      *  in this tree will be found when searching by position).
      */
     def duplicate: this.type
+    
+    /**
+     *  Same as `duplicate' except that range positions are
+     *  becoming transparent.
+     */
+    def duplicateWithPos: this.type
   }
 
   override type TermTree >: Null <: Tree with TermTreeApi

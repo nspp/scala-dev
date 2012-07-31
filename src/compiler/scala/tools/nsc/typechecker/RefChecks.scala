@@ -46,6 +46,7 @@ abstract class RefChecks extends InfoTransform with reflect.internal.transform.R
   import global._
   import definitions._
   import typer.{typed, typedOperator, atOwner}
+  import EVDefaults._
 
   /** the following two members override abstract members in Transform */
   val phaseName: String = "refchecks"

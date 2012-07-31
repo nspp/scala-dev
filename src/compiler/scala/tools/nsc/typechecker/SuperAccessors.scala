@@ -30,6 +30,7 @@ abstract class SuperAccessors extends transform.Transform with transform.TypingT
   import global._
   import definitions.{ UnitClass, ObjectClass, isRepeatedParamType, isByNameParamType, Any_asInstanceOf }
   import analyzer.{ restrictionError }
+  import EVDefaults._
 
   /** the following two members override abstract members in Transform */
   val phaseName: String = "superaccessors"

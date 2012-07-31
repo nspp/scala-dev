@@ -42,7 +42,8 @@ class Global(var currentSettings: Settings, var reporter: Reporter)
     with Trees
     with Printers
     with DocComments
-    with Positions { self =>
+    with Positions
+    with event.Clocks { self =>
 
   // [Eugene++] would love to find better homes for the new things dumped into Global
 
@@ -91,24 +92,46 @@ class Global(var currentSettings: Settings, var reporter: Reporter)
   // platform specific elements
 
   // event hooks ------------------------------------------------------
+  
+  trait EventPostInit {
+    def postInit: Unit
+  }
 
-  object EV extends {
+  // todo: fix when overriding inner objects is possible
+  class EVGlobal extends {
     val global: Global.this.type = Global.this
-  } with EventModel {
+  } with EventModel with EventPostInit {
     val loader = new {
       val global: Global.this.type = Global.this
     } with HookLoader
+    
+    var _postInit = false
 
-    lazy val postInit: Unit = {
-      posOK = true
-      settings.Yhook.value match {
-        case ""   => ()
-        case arg  =>
-          log("Installing user hook: " + settings.Yhook.value)
-          addHook(loader createHookFromString arg)
+    def postInit: Unit = {
+      if (!_postInit) {
+        _postInit = true
+        posOK = true
+	    settings.Yhook.value match {
+	      case ""   => ()
+	      case arg  =>
+	        log("Installing user hook: " + settings.Yhook.value)
+	        global.EV.addHook(loader createHookFromString arg)
+	    }
       }
     }
+    
+    def instrumentingOn = false
+
     isInitialized = true
+  }
+  
+  protected def EVGlobal: EventModel with EventPostInit = new EVGlobal
+  
+  lazy val EV: EventModel with EventPostInit = EVGlobal
+
+
+  object EVDefaults {
+    implicit val e: EV.Explanation = EV.DefaultExplanation
   }
 
   type ThisPlatform = Platform { val global: Global.this.type }
@@ -131,7 +154,7 @@ class Global(var currentSettings: Settings, var reporter: Reporter)
     val global: Global.this.type = Global.this
   } with TreeGen {
     def mkAttributedCast(tree: Tree, pt: Type): Tree =
-      typer.typed(mkCast(tree, pt))
+      typer.typed(mkCast(tree, pt))(EV.DefaultExplanation)
   }
 
   /** Fold constants */
@@ -1536,8 +1559,10 @@ class Global(var currentSettings: Settings, var reporter: Reporter)
         return
       }
 
-      compileUnits(sources map (new CompilationUnit(_)), firstPhase)
+      compileUnits(sources map (new CompilationUnit(_)))
     }
+    
+    def compileUnits(units: List[CompilationUnit]) { compileUnits(units, firstPhase) }
 
     def compileUnits(units: List[CompilationUnit], fromPhase: Phase) {
       try compileUnitsInternal(units, fromPhase)

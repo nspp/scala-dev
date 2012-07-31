@@ -47,7 +47,7 @@ class StdReplVals(final val r: ILoop) extends ReplVals {
 
   final lazy val replImplicits = new ReplImplicits
 
-  def typed[T <: analyzer.global.Tree](tree: T): T = typer.typed(tree).asInstanceOf[T]
+  def typed[T <: analyzer.global.Tree](tree: T): T = typer.typed(tree)(analyzer.global.EV.DefaultExplanation).asInstanceOf[T]
 }
 
 object ReplVals {

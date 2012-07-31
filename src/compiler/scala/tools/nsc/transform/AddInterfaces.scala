@@ -232,7 +232,7 @@ abstract class AddInterfaces extends InfoTransform { self: Erasure =>
     override def traverse(tree: Tree) {
       tree match {
         case Return(expr) =>
-          if (tree.symbol == oldowner) tree.symbol = newowner
+          if (tree.symbol == oldowner) tree setSymbol newowner
         case _ =>
       }
       super.traverse(tree)

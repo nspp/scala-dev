@@ -57,7 +57,7 @@ trait PostErasure extends InfoTransform with TypingTransformers {
         } =>
           val result = Apply(Select(arg1, cmp) setPos sel.pos, List(arg2)) setPos tree.pos
           log("shortcircuiting equality "+tree+" -> "+result)
-          localTyper.typed(result)
+          localTyper.typed(result)(EV.DefaultExplanation)
 
         case // arg.asInstanceOf[T]  ==>  arg      if arg.tpe == T
           Apply(TypeApply(cast @ Select(arg, asinstanceof), List(tpt)), List())

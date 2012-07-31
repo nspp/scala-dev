@@ -29,13 +29,26 @@ trait EventUniverseStub {
     def currentPhase = phase
     def currentPos: outer.Position = outer.NoPosition
     def currentUnit: CompilationUnit = NoCompilationUnit
+    def currentFile: Option[AbstractScalaFile] = None
     def eventsOn: Boolean = false
     def flagsString(flags: Long): String = internal.Flags.flagsToString(flags)
     def posString(pos: outer.Position): String = ""
     def formatTypeString(tpe: Type): String = "(not implemented)"
+    def eventHooks: List[Hook] = List()
+    def openBlockResponse(ev: Event): EventResponse = NoResponse
+    def instrumentingOn = false
 
     object NoCompilationUnit {
       def source: Any = null
     }
+    
+    object NoAbstractType {
+      def file: java.io.File = null
+    }
   }
+  
+  // clocks stub
+  def newClockTick(): Clock = null
+  def currentClock(): Clock = null
+  def isClockOn: Boolean = false
 }

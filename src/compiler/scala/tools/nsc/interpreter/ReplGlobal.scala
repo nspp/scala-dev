@@ -25,7 +25,7 @@ trait ReplGlobal extends Global {
     val global: ReplGlobal.this.type = ReplGlobal.this
   } with Analyzer {
     override def newTyper(context: Context): Typer = new Typer(context) {
-      override def typed(tree: Tree, mode: Int, pt: Type): Tree = {
+      override def typed(tree: Tree, mode: Int, pt: Type)(implicit expl: EV.Explanation): Tree = {
         val res = super.typed(tree, mode, pt)
         tree match {
           case Ident(name) if !tree.symbol.hasPackageFlag && !name.toString.startsWith("$") =>

@@ -15,6 +15,28 @@ trait Trees extends api.Trees { self: SymbolTable =>
 
   private[scala] var nodeCount = 0
 
+  sealed abstract class AttributesHistory {
+    type T
+    def clock: Clock
+    def v: T
+    def m: Manifest[T]
+    def prev: AttributesHistory
+  }
+
+  case class TreeSymChange(clock: Clock, sym: Symbol, prev: AttributesHistory) extends AttributesHistory {
+    type T = Symbol
+    def v = sym
+    def m = SymbolManifest
+    override def toString() = "TypeChangeInTree[" + clock + "](" + sym + ")" + (if (prev != null) ("," + prev.toString) else ".")
+  }
+  
+  case class TreeTpeChange(clock: Clock, tpe: Type, prev: AttributesHistory) extends AttributesHistory {
+    type T = Type
+    def v = tpe
+    def m = TypeManifest
+    override def toString() = "SymbolChangeInTree[" + clock + "](" + tpe + ")" + (if (prev != null) ("," + prev.toString) else ".")
+  }
+  
   abstract class Tree extends TreeContextApiImpl with Attachable with Product {
     val id = nodeCount // TODO: add to attachment?
     nodeCount += 1
@@ -25,14 +47,33 @@ trait Trees extends api.Trees { self: SymbolTable =>
 
     private[this] var rawtpe: Type = _
     @inline final def tpe = rawtpe
-    def tpe_=(t: Type) = rawtpe = t
-    def setType(tp: Type): this.type = { rawtpe = tp; this }
+    protected def tpe_=(t: Type) = rawtpe = t
+    def setType(tp: Type): this.type = { logType(tp); rawtpe = tp; this }
+    def setTypeNoLog(tp: Type) = rawtpe = tp // only used for recreating the trees
     def defineType(tp: Type): this.type = setType(tp)
-
+    
+    private[this] var attrHistory: AttributesHistory = null
+    def attributes = attrHistory
+    
     def symbol: Symbol = null
-    def symbol_=(sym: Symbol) { throw new UnsupportedOperationException("symbol_= inapplicable for " + this) }
-    def setSymbol(sym: Symbol): this.type = { symbol = sym; this }
+    protected def symbol_=(sym: Symbol) { throw new UnsupportedOperationException("symbol_= inapplicable for " + this) }
+    def setSymbol(sym: Symbol): this.type = { logSymbol(sym); symbol = sym; this }
+    def setSymbolNoLog(sym: Symbol) = symbol = sym
     def hasSymbol = false
+    
+    @inline
+    def logType(tp: Type) {
+      if (isClockOn && tp != null) {
+        attrHistory = TreeTpeChange(newClockTick(), tp, attrHistory)
+      }
+    }
+    
+    @inline
+    def logSymbol(sym: Symbol) {
+      if (isClockOn && sym != null) {
+        attrHistory = TreeSymChange(newClockTick(), sym, attrHistory)
+      }
+    }
 
     def isDef = false
 
@@ -62,7 +103,7 @@ trait Trees extends api.Trees { self: SymbolTable =>
 
     private[scala] def copyAttrs(tree: Tree): this.type = {
       rawatt = tree.rawatt
-      tpe = tree.tpe
+      rawtpe = tree.tpe
       if (hasSymbol) symbol = tree.symbol
       this
     }
@@ -72,6 +113,9 @@ trait Trees extends api.Trees { self: SymbolTable =>
 
     override def duplicate: this.type =
       (duplicator transform this).asInstanceOf[this.type]
+    override def duplicateWithPos: this.type =
+      (duplicatorWithPos transform this).asInstanceOf[this.type]
+      
   }
 
   abstract class TreeContextApiImpl extends TreeContextApi { this: Tree =>
@@ -230,9 +274,11 @@ trait Trees extends api.Trees { self: SymbolTable =>
   }
 
   case object EmptyTree extends TermTree {
-    super.tpe_=(NoType)
-    override def tpe_=(t: Type) =
+    super.setType(NoType)
+    override def setType(t: Type) = {
       if (t != NoType) throw new UnsupportedOperationException("tpe_=("+t+") inapplicable for <empty>")
+      this
+    }
     override def isEmpty = true
   }
 
@@ -375,14 +421,14 @@ trait Trees extends api.Trees { self: SymbolTable =>
   case class TypeApply(fun: Tree, args: List[Tree])
        extends GenericApply with TypeApplyApi {
     override def symbol: Symbol = fun.symbol
-    override def symbol_=(sym: Symbol) { fun.symbol = sym }
+    protected override def symbol_=(sym: Symbol) { fun setSymbol sym }
   }
   object TypeApply extends TypeApplyExtractor
 
   case class Apply(fun: Tree, args: List[Tree])
        extends GenericApply with ApplyApi {
     override def symbol: Symbol = fun.symbol
-    override def symbol_=(sym: Symbol) { fun.symbol = sym }
+    protected override def symbol_=(sym: Symbol) { fun setSymbol sym }
   }
   object Apply extends ApplyExtractor
 
@@ -402,7 +448,7 @@ trait Trees extends api.Trees { self: SymbolTable =>
 
   case class Super(qual: Tree, mix: TypeName) extends TermTree with SuperApi {
     override def symbol: Symbol = qual.symbol
-    override def symbol_=(sym: Symbol) { qual.symbol = sym }
+    protected override def symbol_=(sym: Symbol) { qual setSymbol sym }
   }
   object Super extends SuperExtractor
 
@@ -453,7 +499,7 @@ trait Trees extends api.Trees { self: SymbolTable =>
   case class AppliedTypeTree(tpt: Tree, args: List[Tree])
        extends TypTree with AppliedTypeTreeApi {
     override def symbol: Symbol = tpt.symbol
-    override def symbol_=(sym: Symbol) { tpt.symbol = sym }
+    protected override def symbol_=(sym: Symbol) { tpt setSymbol sym }
   }
   object AppliedTypeTree extends AppliedTypeTreeExtractor
 
@@ -1298,7 +1344,7 @@ trait Trees extends api.Trees { self: SymbolTable =>
             log("NOT changing owner of %s because %s is nested in %s".format(tree, newowner, oldowner))
           else {
             log("changing owner of %s: %s => %s".format(tree, oldowner, newowner))
-            tree.symbol = newowner
+            tree setSymbol newowner
           }
         }
       case _: DefTree | _: Function =>
@@ -1347,7 +1393,7 @@ trait Trees extends api.Trees { self: SymbolTable =>
   class ThisSubstituter(clazz: Symbol, to: => Tree) extends Transformer {
     val newtpe = to.tpe
     override def transform(tree: Tree) = {
-      if (tree.tpe ne null) tree.tpe = tree.tpe.substThis(clazz, newtpe)
+      if (tree.tpe ne null) tree setType tree.tpe.substThis(clazz, newtpe)
       tree match {
         case This(_) if tree.symbol == clazz => to
         case _ => super.transform(tree)
@@ -1358,7 +1404,7 @@ trait Trees extends api.Trees { self: SymbolTable =>
   class TypeMapTreeSubstituter(val typeMap: TypeMap) extends Traverser {
     override def traverse(tree: Tree) {
       if (tree.tpe ne null)
-        tree.tpe = typeMap(tree.tpe)
+        tree setType typeMap(tree.tpe)
       if (tree.isDef)
         tree.symbol modifyInfo typeMap
 
@@ -1391,7 +1437,7 @@ trait Trees extends api.Trees { self: SymbolTable =>
           else subst(from.tail, to.tail)
       }
 
-      if (tree.tpe ne null) tree.tpe = symSubst(tree.tpe)
+      if (tree.tpe ne null) tree setType symSubst(tree.tpe)
       if (tree.hasSymbol) {
         subst(from, to)
         tree match {
@@ -1443,11 +1489,19 @@ trait Trees extends api.Trees { self: SymbolTable =>
     }
   }
 
-  private lazy val duplicator = new Transformer {
+  private lazy val duplicator = new Duplicator(false)
+  private lazy val duplicatorWithPos = new Duplicator(true)
+    
+  private class Duplicator(focusRangePos: Boolean) extends Transformer {
     override val treeCopy = newStrictTreeCopier
     override def transform(t: Tree) = {
       val t1 = super.transform(t)
-      if ((t1 ne t) && t1.pos.isRange) t1 setPos t.pos.focus
+      if (t1 ne t) {
+        if (focusRangePos && t1.pos.isRange)
+          t1 setPos t.pos.focus
+        else
+          t1 setPos t.pos.makeTransparent
+      }
       t1
     }
   }

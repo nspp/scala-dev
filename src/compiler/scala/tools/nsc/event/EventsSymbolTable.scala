@@ -25,6 +25,7 @@ import scala.concurrent.DelayedLazyVal
 import mutable.ListBuffer
 import java.util.concurrent.{ LinkedBlockingQueue }
 import scala.reflect.internal.event.{ EventsUniverse, Events }
+import scala.annotation.elidable
 
 trait EventsSymbolTable extends EventsUniverse
                         with EventStrings
@@ -35,19 +36,20 @@ trait EventsSymbolTable extends EventsUniverse
   abstract class EventModel extends super.EventModel
                             with Strings
                             with ProcessingUtil
-                            with ControlEvents {
+                            with ControlEvents
+                            with ErrorEvents {
     model =>
 
     val global: SymbolTable
 
-    type EventResponse = Unit
-    val NoResponse     = ()
+    type EventResponse = Event
+    val NoResponse     = NoEvent
 
     type Phase  = nsc.Phase
     val NoPhase = nsc.NoPhase
     def currentPhase: Phase = global.phase
-    override def symbolPos(sym: Symbol): Position = sym.pos
-    override def treePos(tree: Tree): Position = tree.pos
+    override def symbolPos(sym: Symbol): Position = if (sym == null) NoPosition else sym.pos
+    override def treePos(tree: Tree): Position = if (tree == null) NoPosition else tree.pos
     implicit lazy val phaseOrdering: Ordering[Phase] = Ordering[Int] on (_.id)
 
     protected[event] def fatal(msg: String): Nothing = Predef.error(msg)
@@ -65,11 +67,6 @@ trait EventsSymbolTable extends EventsUniverse
     protected def isDebug                = global.settings.debug.value
     protected def log(msg: String): Unit = global.log(msg)
     protected def dlog(msg: => String): Unit = if (isDebug) log(msg)
-
-    object NoEvent extends Event {
-      def tag = "NoEvent"
-      protected def participants = Nil
-    }
 
     /** Active event hooks.
      */
@@ -107,7 +104,45 @@ trait EventsSymbolTable extends EventsUniverse
     // object FireHose extends Hose(Int.MaxValue) {
     //
     // }
+    
+    def openBlockResponse(ev: Event): EventResponse = ev
 
+    // Normal way of informing about an event
+    @elidable(2500)
+    @inline
+    final def <<(ev: Event): EventResponse = {
+      if (eventsOn) {
+        //dlog(ev.toString)
+        eventHooks foreach (_ applyIfDefined ev)
+      }
+      NoResponse
+    }
+    
+    // always make sure that blocks are closed
+    // it is recommended to use one of the wrappers below if you can
+    @inline
+    final def <<<(ev: Event): EventResponse = {
+      if (eventsOn) {
+        // start block
+        //dlog(ev.toString)
+        assert(!ev.isInstanceOf[DoneBlock])
+        eventHooks foreach (h => {h applyIfDefined ev; h.startBlock() })
+        openBlockResponse(ev)
+      } else NoResponse
+    }
+
+    @inline
+    final def >>>(ev: Event): EventResponse = {
+      if (eventsOn) {
+        // end block
+        //dlog(ev.toString)
+        assert(ev.isInstanceOf[DoneBlock], ev.getClass + " should be an instance of DoneBlock")
+        // Should update tag to super.tag`-done`
+        // but cannot do it easily without forwarding everything
+        eventHooks foreach (h => {h applyIfDefined ev; h.endBlock()})
+      }
+      NoResponse
+    }
 
     trait Hook extends AbsHook {
       def start(): this.type = {
@@ -128,7 +163,7 @@ trait EventsSymbolTable extends EventsUniverse
       }
       class LoggerHook(val fmt: String) extends Hook {
         override def show(ev: Event) = Console println (ev formattedString fmt)
-        def action(ev: Event): EventResponse = show(ev)
+        def action(ev: Event): EventResponse = { show(ev); ev }
       }
       class IndentationHook(f: (Int) => (Event) => EventResponse) extends Hook {
         private var _indent: Int = 0
@@ -244,46 +279,6 @@ trait EventsSymbolTable extends EventsUniverse
       def not(filter: Filter)   = apply("!" + filter.tag, ev => !filter(ev))
       def apply(tag: String, f: Event => Boolean): Filter = new SimpleFilter(tag, f)
       def apply(f: Event => Boolean): Filter = apply("", f)
-    }
-
-    def <<(ev: Event): EventResponse = {
-      if (eventsOn) {
-        dlog(ev.toString)
-        //assert(!ev.isInstanceOf[DoneBlock])
-        eventHooks foreach (_ applyIfDefined ev)
-      }
-    }
-
-    def <<<(ev: Event): EventResponse = {
-      if (eventsOn) {
-        // start block
-        ev.blockStart = true
-        dlog(ev.toString)
-        //assert(!ev.isInstanceOf[DoneBlock])
-        eventHooks foreach (h => {h applyIfDefined ev; h.startBlock })
-      }
-    }
-
-    def >>>(ev: Event): EventResponse = {
-      if (eventsOn) {
-        // end block
-        dlog(ev.toString)
-        //assert(ev.isInstanceOf[DoneBlock], ev.getClass + " should be an instance of DoneBlock")
-        // Should update tag to super.tag`-done`
-        // but cannot do it easily without forwarding everything
-        eventHooks foreach (h => {h applyIfDefined ev; h.endBlock})
-      }
-    }
-
-    def >>(ev: Event): EventResponse = {
-      if (eventsOn) {
-        // end block
-        dlog(ev.toString)
-        //assert(ev.isInstanceOf[DoneBlock], ev.getClass + " should be an instance of DoneBlock")
-        // Should update tag to super.tag`-done`
-        // but cannot do it easily without forwarding everything
-        eventHooks foreach (h => {h applyIfDefined ev; h.endBlock})
-      }
     }
   }
 }

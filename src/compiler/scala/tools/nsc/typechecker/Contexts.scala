@@ -75,7 +75,7 @@ trait Contexts { self: Analyzer =>
     var sc = startContext
     while (sc != NoContext) {
       sc.tree match {
-        case Import(qual, _) => qual.tpe = singleType(qual.symbol.owner.thisType, qual.symbol)
+        case Import(qual, _) => qual setType singleType(qual.symbol.owner.thisType, qual.symbol)
         case _ =>
       }
       sc = sc.outer
@@ -369,25 +369,33 @@ trait Contexts { self: Analyzer =>
       debugwarn("issue error: " + err.errMsg)
       if (settings.Yissuedebug.value) (new Exception).printStackTrace()
       if (pf isDefinedAt err) pf(err)
-      else if (bufferErrors) { buffer += err }
-      else throw new TypeError(err.errPos, err.errMsg)
+      else if (bufferErrors) { 
+        EV << EV.ContextTypeErrorEvent(err, EV.ErrorLevel.Soft)
+        buffer += err
+      } else throw new TypeError(err.errPos, err.errMsg)
     }
 
     def issue(err: AbsTypeError) {
       issueCommon(err) { case _ if reportErrors =>
+        EV << EV.ContextTypeErrorEvent(err, EV.ErrorLevel.Hard)
         unitError(err.errPos, addDiagString(err.errMsg))
       }
     }
 
     def issueAmbiguousError(pre: Type, sym1: Symbol, sym2: Symbol, err: AbsTypeError) {
       issueCommon(err) { case _ if ambiguousErrors =>
-        if (!pre.isErroneous && !sym1.isErroneous && !sym2.isErroneous)
+        if (!pre.isErroneous && !sym1.isErroneous && !sym2.isErroneous) {
+          EV << EV.ContextAmbiguousTypeErrorEvent(err, EV.ErrorLevel.Hard)
           unitError(err.errPos, err.errMsg)
+        }
       }
     }
 
     def issueAmbiguousError(err: AbsTypeError) {
-      issueCommon(err) { case _ if ambiguousErrors => unitError(err.errPos, addDiagString(err.errMsg)) }
+      issueCommon(err) { case _ if ambiguousErrors =>
+        EV << EV.ContextAmbiguousTypeErrorEvent(err, EV.ErrorLevel.Hard)
+        unitError(err.errPos, addDiagString(err.errMsg))
+      }
     }
 
     // TODO remove
@@ -616,11 +624,11 @@ trait Contexts { self: Analyzer =>
         (e ne null) && (e.owner == scope)
       })
 
-    private def collectImplicits(syms: List[Symbol], pre: Type, imported: Boolean = false): List[ImplicitInfo] =
+    private def collectImplicits(syms: List[Symbol], pre: Type, imported: Boolean = false)(implicit s: ImplicitInfoSource): List[ImplicitInfo] =
       for (sym <- syms if isQualifyingImplicit(sym.name, sym, pre, imported)) yield
-        new ImplicitInfo(sym.name, pre, sym)
+        ImplicitInfo(sym.name, pre, sym)
 
-    private def collectImplicitImports(imp: ImportInfo): List[ImplicitInfo] = {
+    private def collectImplicitImports(imp: ImportInfo)(implicit s: ImplicitInfoSource): List[ImplicitInfo] = {
       val pre = imp.qual.tpe
       def collect(sels: List[ImportSelector]): List[ImplicitInfo] = sels match {
         case List() =>
@@ -632,7 +640,7 @@ trait Contexts { self: Analyzer =>
           if (to != nme.WILDCARD) {
             for (sym <- imp.importedSymbol(to).alternatives)
               if (isQualifyingImplicit(to, sym, pre, imported = true))
-                impls = new ImplicitInfo(to, pre, sym) :: impls
+                impls = ImplicitInfo(to, pre, sym) :: impls
           }
           impls
       }
@@ -658,17 +666,17 @@ trait Contexts { self: Analyzer =>
               // !!! In the body of `class C(implicit a: A) { }`, `implicitss` returns `List(List(a), List(a), List(<predef..)))`
               //     it handled correctly by implicit search, which considers the second `a` to be shadowed, but should be
               //     remedied nonetheless.
-              collectImplicits(owner.thisType.implicitMembers, owner.thisType)
+              collectImplicits(owner.thisType.implicitMembers, owner.thisType)(MemberS)
             }
           } else if (scope != nextOuter.scope && !owner.isPackageClass) {
             debuglog("collect local implicits " + scope.toList)//DEBUG
-            collectImplicits(scope.toList, NoPrefix)
+            collectImplicits(scope.toList, NoPrefix)(LocalS)
           } else if (imports != nextOuter.imports) {
             assert(imports.tail == nextOuter.imports, (imports, nextOuter.imports))
-            collectImplicitImports(imports.head)
+            collectImplicitImports(imports.head)(ImportS)
           } else if (owner.isPackageClass) {
             // the corresponding package object may contain implicit members.
-            collectImplicits(owner.tpe.implicitMembers, owner.tpe)
+            collectImplicits(owner.tpe.implicitMembers, owner.tpe)(PackageObjectS)
           } else List()
         implicitsCache = if (newImplicits.isEmpty) nextOuter.implicitss
                          else newImplicits :: nextOuter.implicitss

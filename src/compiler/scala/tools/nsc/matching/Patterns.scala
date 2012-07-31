@@ -22,6 +22,7 @@ trait Patterns extends ast.TreeDSL {
   import CODE._
   import Debug._
   import treeInfo.{ unbind, isStar, isVarPattern, isVariableName }
+  import EVDefaults._
 
   type PatternMatch       = MatchMatrix#PatternMatch
   private type PatternVar = MatrixContext#PatternVar

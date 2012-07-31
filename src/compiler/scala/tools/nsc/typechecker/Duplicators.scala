@@ -17,6 +17,7 @@ import scala.collection.{ mutable, immutable }
  */
 abstract class Duplicators extends Analyzer {
   import global._
+  import EVDefaults._
   import definitions.{ AnyRefClass, AnyValClass }
 
   def retyped(context: Context, tree: Tree): Tree = {
@@ -174,10 +175,10 @@ abstract class Duplicators extends Analyzer {
           case DefDef(_, name, tparams, vparamss, _, rhs) =>
             // invalidate parameters
             invalidateAll(tparams ::: vparamss.flatten)
-            tree.symbol = NoSymbol
+            tree setSymbol NoSymbol
 
           case _ =>
-            tree.symbol = NoSymbol
+            tree setSymbol NoSymbol
         }
       }
     }
@@ -192,7 +193,7 @@ abstract class Duplicators extends Analyzer {
       invalidateAll(ddef.tparams)
       mforeach(ddef.vparamss) { vdef =>
         invalidate(vdef)
-        vdef.tpe = null
+        vdef setType null
       }
       ddef.symbol = NoSymbol
       enterSym(context, ddef)
@@ -230,53 +231,53 @@ abstract class Duplicators extends Analyzer {
      *  their symbols are recreated ad-hoc and their types are fixed inline, instead of letting the
      *  namer/typer handle them, or Idents that refer to them.
      */
-    override def typed(tree: Tree, mode: Int, pt: Type): Tree = {
+    override def typed(tree: Tree, mode: Int, pt: Type)(implicit e: EV.Explanation = EV.DefaultExplanation): Tree = {
       debuglog("typing " + tree + ": " + tree.tpe + ", " + tree.getClass)
       val origtreesym = tree.symbol
       if (tree.hasSymbol && tree.symbol != NoSymbol
           && !tree.symbol.isLabel  // labels cannot be retyped by the type checker as LabelDef has no ValDef/return type trees
           && invalidSyms.isDefinedAt(tree.symbol)) {
         debuglog("removed symbol " + tree.symbol)
-        tree.symbol = NoSymbol
+        tree setSymbol NoSymbol
       }
 
       tree match {
         case ttree @ TypeTree() =>
           // log("fixing tpe: " + tree.tpe + " with sym: " + tree.tpe.typeSymbol)
-          ttree.tpe = fixType(ttree.tpe)
+          ttree setType fixType(ttree.tpe)
           ttree
 
         case Block(stats, res) =>
           debuglog("invalidating block")
           invalidateAll(stats)
           invalidate(res)
-          tree.tpe = null
+          tree setType null
           super.typed(tree, mode, pt)
 
         case ClassDef(_, _, _, tmpl @ Template(parents, _, stats)) =>
           // log("invalidating classdef " + tree)
           tmpl.symbol = tree.symbol.newLocalDummy(tree.pos)
           invalidateAll(stats, tree.symbol)
-          tree.tpe = null
+          tree setType null
           super.typed(tree, mode, pt)
 
         case ddef @ DefDef(_, _, _, _, tpt, rhs) =>
-          ddef.tpt.tpe = fixType(ddef.tpt.tpe)
-          ddef.tpe = null
+          ddef.tpt setType fixType(ddef.tpt.tpe)
+          ddef setType null
           super.typed(ddef, mode, pt)
 
         case vdef @ ValDef(mods, name, tpt, rhs) =>
           // log("vdef fixing tpe: " + tree.tpe + " with sym: " + tree.tpe.typeSymbol + " and " + invalidSyms)
           //if (mods.hasFlag(Flags.LAZY)) vdef.symbol.resetFlag(Flags.MUTABLE) // Martin to Iulian: lazy vars can now appear because they are no longer boxed; Please check that deleting this statement is OK.
-          vdef.tpt.tpe = fixType(vdef.tpt.tpe)
-          vdef.tpe = null
+          vdef.tpt setType fixType(vdef.tpt.tpe)
+          vdef setType null
           super.typed(vdef, mode, pt)
 
         case ldef @ LabelDef(name, params, rhs) =>
           // log("label def: " + ldef)
           // in case the rhs contains any definitions -- TODO: is this necessary?
           invalidate(rhs)
-          ldef.tpe = null
+          ldef setType null
 
           // since typer does not create the symbols for a LabelDef's params,
           // we do that manually here -- we should really refactor LabelDef to be a subclass of DefDef
@@ -286,26 +287,26 @@ abstract class Duplicators extends Analyzer {
           }
           val params1 = params map newParam
           val rhs1 = (new TreeSubstituter(params map (_.symbol), params1) transform rhs) // TODO: duplicate?
-          rhs1.tpe = null
+          rhs1 setType null
 
           super.typed(treeCopy.LabelDef(tree, name, params1, rhs1), mode, pt)
 
         case Bind(name, _) =>
           // log("bind: " + tree)
           invalidate(tree)
-          tree.tpe = null
+          tree setType null
           super.typed(tree, mode, pt)
 
         case Ident(_) if tree.symbol.isLabel =>
           debuglog("Ident to labeldef " + tree + " switched to ")
-          tree.symbol = updateSym(tree.symbol)
-          tree.tpe = null
+          tree setSymbol updateSym(tree.symbol)
+          tree setType null
           super.typed(tree, mode, pt)
 
         case Ident(_) if (origtreesym ne null) && origtreesym.isLazy =>
           debuglog("Ident to a lazy val " + tree + ", " + tree.symbol + " updated to " + origtreesym)
-          tree.symbol = updateSym(origtreesym)
-          tree.tpe = null
+          tree setSymbol updateSym(origtreesym)
+          tree setType null
           super.typed(tree, mode, pt)
 
         case Select(th @ This(_), sel) if (oldClassOwner ne null) && (th.symbol == oldClassOwner) =>
@@ -327,7 +328,7 @@ abstract class Duplicators extends Analyzer {
 
         case This(_) =>
           debuglog("selection on this, plain: " + tree)
-          tree.symbol = updateSym(tree.symbol)
+          tree setSymbol updateSym(tree.symbol)
           val ntree = castType(tree, pt)
           val tree1 = super.typed(ntree, mode, pt)
           // log("plain this typed to: " + tree1)
@@ -370,13 +371,12 @@ abstract class Duplicators extends Analyzer {
           debuglog("Duplicators default case: " + tree.summaryString)
           debuglog(" ---> " + tree)
           if (tree.hasSymbol && tree.symbol != NoSymbol && (tree.symbol.owner == definitions.AnyClass)) {
-            tree.symbol = NoSymbol // maybe we can find a more specific member in a subclass of Any (see AnyVal members, like ==)
+            tree setSymbol NoSymbol // maybe we can find a more specific member in a subclass of Any (see AnyVal members, like ==)
           }
           val ntree = castType(tree, pt)
           super.typed(ntree, mode, pt)
       }
     }
-    
   }
 }
 

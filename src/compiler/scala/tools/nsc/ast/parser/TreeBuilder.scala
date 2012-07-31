@@ -583,7 +583,9 @@ abstract class TreeBuilder {
     if (contextBounds.isEmpty) vparamss
     else {
       val mods = Modifiers(if (owner.isTypeName) PARAMACCESSOR | LOCAL | PRIVATE else PARAM)
-      def makeEvidenceParam(tpt: Tree) = ValDef(mods | IMPLICIT, freshTermName(nme.EVIDENCE_PARAM_PREFIX), tpt, EmptyTree)
+      def makeEvidenceParam(tpt: Tree) = atPos(tpt.pos.makeTransparent) { 
+        ValDef(mods | IMPLICIT, freshTermName(nme.EVIDENCE_PARAM_PREFIX), tpt, EmptyTree)
+      }
       val evidenceParams = contextBounds map makeEvidenceParam
 
       val vparamssLast = if(vparamss.nonEmpty) vparamss.last else Nil

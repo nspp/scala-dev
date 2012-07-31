@@ -15,6 +15,7 @@ abstract class CleanUp extends Transform with ast.TreeDSL {
   import global._
   import definitions._
   import CODE._
+  import EVDefaults._
 
   /** the following two members override abstract members in Transform */
   val phaseName: String = "cleanup"

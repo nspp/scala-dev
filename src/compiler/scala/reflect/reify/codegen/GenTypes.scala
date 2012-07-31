@@ -114,12 +114,12 @@ trait GenTypes {
         isView = false,
         context = typer.context,
         saveAmbiguousDivergent = false,
-        pos = defaultErrorPosition) match {
+        pos = defaultErrorPosition)(EV.DefaultExplanation) match {
           case success if !success.tree.isEmpty && !isSynthetic(success.tree) =>
             val manifestInScope = success.tree
             // todo. write a test for this
             if (ReflectRuntimeUniverse == NoSymbol) CannotConvertManifestToTagWithoutScalaReflect(tpe, manifestInScope)
-            val cm = typer.typed(Ident(ReflectRuntimeCurrentMirror))
+            val cm = typer.typed(Ident(ReflectRuntimeCurrentMirror))(EV.DefaultExplanation)
             val tagTree = gen.mkMethodCall(ReflectRuntimeUniverse, nme.manifestToTypeTag, List(tpe), List(cm, manifestInScope))
             Select(Apply(Select(tagTree, nme.in), List(Ident(nme.MIRROR_SHORT))), nme.tpe)
           case _ =>

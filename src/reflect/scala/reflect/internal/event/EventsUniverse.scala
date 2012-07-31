@@ -3,18 +3,30 @@ package internal
 package event
 
 import annotation.elidable
+import scala.util.control.ControlThrowable
 
-trait EventsUniverse extends AnyRef with Events {
+trait EventsUniverse extends AnyRef
+                     with Events
+                     with AdaptEventsUniverse
+                     with TyperEventsUniverse
+                     with InferEventsUniverse
+                     with NamerEventsUniverse
+                     with ImplicitEventsUniverse
+                     with TypesEventsUniverse {
   outer: SymbolTable =>
 
   val EV: EventModel {
     val global: outer.type
   }
 
-  abstract class EventModel extends AllEvents {
+  private[scala] var eventIds = 0
+
+  abstract class EventModel extends AllEvents with AllExplanations {
     val global: SymbolTable
     var isInitialized = false
-    private var eventIds = 0
+    
+    def instrumentingOn: Boolean
+
 
     type EventResponse
     val NoResponse: EventResponse
@@ -34,7 +46,13 @@ trait EventsUniverse extends AnyRef with Events {
     type CompilationUnit <: {
       def source: Any
     }
+    
+    type AbstractScalaFile <: {
+      def file: java.io.File
+    }
+    
     def currentUnit: CompilationUnit
+    def currentFile: Option[AbstractScalaFile]
     def currentPos: Position
 
     type =>?[-T, +R]  = PartialFunction[T, R]
@@ -60,6 +78,9 @@ trait EventsUniverse extends AnyRef with Events {
     def joinString(xs: Any*) = xs map anyString filterNot (_ == "") mkString " "
     def symbolPos(sym: Symbol): Position = NoPosition
     def treePos(tree: Tree): Position = NoPosition
+    
+    def eventHooks: List[Hook]
+    def openBlockResponse(ev: Event): EventResponse
 
     protected def cast[T](x: Any): T = x.asInstanceOf[T]
     protected def anyGetClass(x: Any): JClass[_] = cast[AnyRef](x).getClass
@@ -91,7 +112,7 @@ trait EventsUniverse extends AnyRef with Events {
      */
     def isSameName(n1: Name, n2: Name) = n1.toString == n2.toString
 
-    def resetEventsCounter {
+    def resetEventsCounter() {
       eventIds = 0
     }
 
@@ -102,21 +123,22 @@ trait EventsUniverse extends AnyRef with Events {
       def lName: String = tag // Long description if different
       protected def participants: List[Any]
       var id = { eventIds += 1; eventIds }
-      var blockStart = false // TODO refactor to VisEvent
+      val time = currentClock()
 
       // record the phase and unit at creation
-      val phase: Phase          = currentPhase
-      val unit: CompilationUnit = currentUnit
+      val phase: Phase                    = currentPhase
+      val unit: CompilationUnit           = currentUnit
+      val file: Option[AbstractScalaFile] = currentFile
 
 
       // Sometimes it is necessary to force the actual string representation
       // at the creation time since we often deal with refs and not primitive vals
-      protected val eventStringRep: String = ""
+      protected def eventStringRep: String = "" // TODO REMOVE, relict from the old approach, was causing CRE
 
       protected def defaultPos = currentPos
-      private var _pos: Position = defaultPos
+      private lazy val _pos: Position = defaultPos
       def pos: Position         = _pos
-      def withPos(pos: Position): this.type = { _pos = pos ; this }
+      //def withPos(pos: Position): this.type = { _pos = pos ; this }
       def unitString =
         if (unit == null) "<unknown>"
         else unit.source.toString
@@ -192,6 +214,12 @@ trait EventsUniverse extends AnyRef with Events {
       def eventString = joinString(participants)
       override def toString = eventString
     }
+
+    object NoEvent extends Event {
+      override def eventString = "NoEvent"
+      protected def participants = List()
+      def tag = "no-event"
+    }
     trait UnaryEvent[+T] extends Event {
       def value: T
       override def eventString = joinString(value)
@@ -209,7 +237,7 @@ trait EventsUniverse extends AnyRef with Events {
       def sym: Symbol
       def value = sym
 
-      override protected val eventStringRep       = anyString(value)
+      override protected def eventStringRep       = anyString(value)
       override protected def defaultPos = symbolPos(sym)
     }
     trait TwoSymEvent extends BinaryEvent[Symbol] {
@@ -228,7 +256,7 @@ trait EventsUniverse extends AnyRef with Events {
       def tree: Tree
       def value = tree
       override protected def defaultPos = treePos(tree)
-      override protected val eventStringRep = joinString(value)
+      override protected def eventStringRep = joinString(value)
       override def eventString = eventStringRep
     }
 
@@ -239,7 +267,7 @@ trait EventsUniverse extends AnyRef with Events {
     trait TreeTypeEventUnary extends TypeEvent {
       def tree: Tree
       override protected def participants: List[Any] = List(tree, tpe)
-      override protected val eventStringRep = joinString(tree, tpe)
+      override protected def eventStringRep = joinString(tree, tpe)
       override def eventString = eventStringRep
       override protected def defaultPos = treePos(tree)
     }
@@ -332,8 +360,8 @@ trait EventsUniverse extends AnyRef with Events {
       def stop(): this.type
       def show(ev: Event): Unit = ()
 
-      def startBlock: Unit
-      def endBlock: Unit
+      def startBlock(): Unit
+      def endBlock(): Unit
 
       def hooking[T](body: => T): T = {
         try {
@@ -361,21 +389,54 @@ trait EventsUniverse extends AnyRef with Events {
       def apply(f: Event =>? EventResponse): Hook
     }
 
-    // Normal way of informing about an event
-    // Contains no information for visualization
-    @elidable(2500)
+    class TargetDebugDone(val t: Tree) extends ControlThrowable
+
     def <<(ev: Event): EventResponse
-
-    // Event starting block
-    @elidable(2500)
     def <<<(ev: Event): EventResponse
-
-    // Event ending block
-    @elidable(2500)
-    def >>(ev: Event): EventResponse
-
-    // Event ending block without actual handling of the event
-    @elidable(2500)
     def >>>(ev: Event): EventResponse
+    
+    // Note: assigning event within the eventsOn block is used only to
+    // avoid creating multiple instances of the same event.
+    // So that the inliner does the correct work we explicitly add the eventsOn mode
+    // so that the normal compiler's performance is not hammered by the events.
+    @inline
+    final def eventBlock[T](startEvent: => Event, endEvent: => Int => Event)(f: => T): T = {
+      if (eventsOn) {
+        <<<(startEvent)
+        val res = try f finally {
+          >>>(endEvent(startEvent.id))
+        }
+        res
+      } else f
+    }
+
+    // TODO: disallow?
+    @inline
+    final def eventBlockWithEv[T](startEvent: => Event, endEvent: => Int => Event)(f: Event => T): T = {
+      if (eventsOn) {
+        <<<(startEvent)
+        val res = try f(startEvent) finally {
+          >>>(endEvent(startEvent.id))
+        }
+        res
+      } else f(NoEvent)
+    }
+
+    @inline
+    final def eventBlockInform[T](startEvent: => Event, endEvent: => (Int, T) => Event)(f: => T): T = 
+      if (eventsOn) {
+        <<<(startEvent)
+        val res = try f catch {
+          case ex: scala.runtime.NonLocalReturnControl[T] =>
+            println("[non local return in block]")
+            >>>(endEvent(startEvent.id, ex.value))
+            throw ex
+          case ex: TargetDebugDone =>
+            >>>(NeutralDoneBlock(startEvent.id, ex))
+            throw ex
+        }
+        >>>(endEvent(startEvent.id, res))
+        res
+      } else f
   }
 }

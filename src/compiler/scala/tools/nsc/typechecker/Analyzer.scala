@@ -39,7 +39,9 @@ trait Analyzer extends AnyRef
       override def keepsTypeParams = false
 
       def apply(unit: CompilationUnit) {
-        newNamer(rootContext(unit)).enterSym(unit.body)
+        EV.eventBlock[Unit](EV.NamerApplyPhase(), EV.UnitApplyDone) {
+          newNamer(rootContext(unit)).enterSym(unit.body)
+        }
       }
     }
   }
@@ -95,7 +97,9 @@ trait Analyzer extends AnyRef
       }
       def apply(unit: CompilationUnit) {
         try {
-          unit.body = newTyper(rootContext(unit)).typed(unit.body)
+          EV.eventBlock[Unit](EV.TyperApplyPhase(), EV.UnitApplyDone) {
+            unit.body = newTyper(rootContext(unit)).typed(unit.body)(EV.TypeUnit(unit))
+          }
           if (global.settings.Yrangepos.value && !global.reporter.hasErrors) global.validatePositions(unit.body)
           for (workItem <- unit.toCheck) workItem()
         } finally {

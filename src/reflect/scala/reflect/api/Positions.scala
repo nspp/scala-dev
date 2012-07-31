@@ -12,6 +12,7 @@ trait Positions extends base.Positions {
    *  If some of the trees are ranges, returns a range position enclosing all ranges
    *  Otherwise returns default position.
    */
+  def wrappingPos(default: Position, trees: List[Tree], focus: Boolean): Position
   def wrappingPos(default: Position, trees: List[Tree]): Position
 
   /** A position that wraps the non-empty set of trees.

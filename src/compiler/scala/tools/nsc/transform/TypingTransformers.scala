@@ -15,6 +15,7 @@ trait TypingTransformers {
 
   val global: Global
   import global._
+  import EVDefaults._
 
   abstract class TypingTransformer(unit: CompilationUnit) extends Transformer {
     var localTyper: analyzer.Typer =

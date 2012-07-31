@@ -50,7 +50,7 @@ abstract class Universe extends scala.reflect.api.Universe {
     def setPos(newpos: Position): this.type
 
     /** ... */
-    def tpe_=(t: Type): Unit
+    //def tpe_=(t: Type): Unit
 
     /** Set tpe to give `tp` and return this.
      */
@@ -76,7 +76,7 @@ abstract class Universe extends scala.reflect.api.Universe {
     def defineType(tp: Type): this.type
 
     /** ... */
-    def symbol_=(sym: Symbol): Unit
+    //def symbol_=(sym: Symbol): Unit
 
     /** ... */
     def setSymbol(sym: Symbol): this.type

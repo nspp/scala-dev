@@ -103,6 +103,7 @@ trait ContextErrors {
       }
 
       def NoImplicitFoundError(tree: Tree, param: Symbol) = {
+        EV << EV.InferImplicitValueNotFound(param) // TODO only report as error below?
         def errMsg = {
           val paramName = param.name
           val paramTp   = param.tpe
@@ -125,7 +126,8 @@ trait ContextErrors {
         // the found/req types.
         val foundType: Type = req.normalize match {
           case RefinedType(parents, decls) if !decls.isEmpty && found.typeSymbol.isAnonOrRefinementClass =>
-            val retyped    = typed (tree.duplicate setType null)
+            // TODO: provide more meaningful explanation
+            val retyped    = typed(tree.duplicate setType null)(EV.DefaultExplanation)
             val foundDecls = retyped.tpe.decls filter (sym => !sym.isConstructor && !sym.isSynthetic)
 
             if (foundDecls.isEmpty || (found.typeSymbol eq NoSymbol)) found
@@ -154,7 +156,7 @@ trait ContextErrors {
       }
 
       def ParentTypesError(templ: Template, ex: TypeError) = {
-         templ.tpe = null
+         templ setType null
          issueNormalTypeError(templ, ex.getMessage())
       }
 

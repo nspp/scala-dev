@@ -51,6 +51,7 @@ abstract class UnCurry extends InfoTransform
   import global._                  // the global environment
   import definitions._             // standard classes and methods
   import CODE._
+  import EVDefaults._
 
   val phaseName: String = "uncurry"
 

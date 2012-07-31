@@ -423,12 +423,12 @@ trait Importers { self: SymbolTable =>
           mytree match {
             case mytt: TypeTree =>
               val tt = tree.asInstanceOf[from.TypeTree]
-              if (mytree.hasSymbol) mytt.symbol = mysym
+              if (mytree.hasSymbol) mytt setSymbol mysym
               if (tt.wasEmpty) mytt.defineType(mytpe) else mytt.setType(mytpe)
               if (tt.original != null) mytt.setOriginal(importTree(tt.original))
             case _ =>
-              if (mytree.hasSymbol) mytree.symbol = importSymbol(tree.symbol)
-              mytree.tpe = importType(tree.tpe)
+              if (mytree.hasSymbol) mytree setSymbol importSymbol(tree.symbol)
+              mytree setType importType(tree.tpe)
           }
         }
       })

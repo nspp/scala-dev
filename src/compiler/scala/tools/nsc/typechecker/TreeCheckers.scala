@@ -13,6 +13,7 @@ import util.returning
 
 abstract class TreeCheckers extends Analyzer {
   import global._
+  import EVDefaults._
 
   private def classstr(x: AnyRef) = (x.getClass.getName split """\\.|\\$""").last
   private def typestr(x: Type)    = " (tpe = " + x + ")"
@@ -201,12 +202,12 @@ abstract class TreeCheckers extends Analyzer {
       if (t.symbol == NoSymbol)
         errorFn(t.pos, "no symbol: " + treestr(t))
 
-    override def typed(tree: Tree, mode: Int, pt: Type): Tree = returning(tree) {
+    override def typed(tree: Tree, mode: Int, pt: Type)(implicit e: EV.Explanation = EV.DefaultExplanation): Tree = returning(tree) {
       case EmptyTree | TypeTree() => ()
       case _ if tree.tpe != null  =>
         tpeOfTree.getOrElseUpdate(tree, {
           val saved = tree.tpe
-          tree.tpe = null
+          tree setType null
           saved
         })
         wrap(tree)(super.typed(tree, mode, pt) match {
@@ -302,7 +303,7 @@ abstract class TreeCheckers extends Analyzer {
               if (oldtpe =:= tree.tpe) ()
               else typesDiffer(tree, oldtpe, tree.tpe)
 
-              tree.tpe = oldtpe
+              tree setType oldtpe
               super.traverse(tree)
             }
         }

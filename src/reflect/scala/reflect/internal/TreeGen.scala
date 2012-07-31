@@ -137,7 +137,7 @@ abstract class TreeGen extends makro.TreeBuilder {
 
   /** Replaces tree type with a stable type if possible */
   def stabilize(tree: Tree): Tree = {
-    for(tp <- stableTypeFor(tree)) tree.tpe = tp
+    for(tp <- stableTypeFor(tree)) tree setType tp
     tree
   }
 

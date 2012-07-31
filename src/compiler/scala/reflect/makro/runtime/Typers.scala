@@ -35,7 +35,7 @@ trait Typers {
     val context = callsiteTyper.context
     val wrapper1 = if (!withMacrosDisabled) (context.withMacrosEnabled[SearchResult] _) else (context.withMacrosDisabled[SearchResult] _)
     def wrapper (inference: => SearchResult) = wrapper1(inference)
-    wrapper(universe.analyzer.inferImplicit(universe.EmptyTree, pt, true, false, context, !silent, pos)) match {
+    wrapper(universe.analyzer.inferImplicit(universe.EmptyTree, pt, true, false, context, !silent, pos)(universe.EV.DefaultExplanation)) match {
       case failure if failure.tree.isEmpty =>
         macroLogVerbose("implicit search has failed. to find out the reason, turn on -Xlog-implicits")
         if (context.hasErrors) throw new universe.TypeError(context.errBuffer.head.errPos, context.errBuffer.head.errMsg)
@@ -53,7 +53,7 @@ trait Typers {
     def wrapper (inference: => SearchResult) = wrapper1(inference)
     val fun1 = universe.definitions.FunctionClass(1)
     val viewTpe = universe.TypeRef(fun1.typeConstructor.prefix, fun1, List(from, to))
-    wrapper(universe.analyzer.inferImplicit(tree, viewTpe, reportAmbiguous, true, context, !silent, pos)) match {
+    wrapper(universe.analyzer.inferImplicit(tree, viewTpe, reportAmbiguous, true, context, !silent, pos)(universe.EV.DefaultExplanation)) match {
       case failure if failure.tree.isEmpty =>
         macroLogVerbose("implicit search has failed. to find out the reason, turn on -Xlog-implicits")
         if (context.hasErrors) throw new universe.TypeError(context.errBuffer.head.errPos, context.errBuffer.head.errMsg)
