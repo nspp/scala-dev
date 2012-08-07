@@ -23,7 +23,7 @@ abstract class Utils {
         subst(from, to)
       case _ =>
         val tree1 = super.transform(tree)
-        if (tree1 ne tree) tree1.tpe = null
+        if (tree1 ne tree) tree1 setType null
         tree1
     }
   }

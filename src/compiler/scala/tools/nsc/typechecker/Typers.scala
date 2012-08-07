@@ -1270,7 +1270,7 @@ trait Typers extends Modes with Adaptations with Tags {
                   AdaptTypeError(tree, found, req)
                 }
               }
-              setError(duplicateTree(tree))
+              setError(tree)
             }
           }
       }
@@ -1406,7 +1406,7 @@ trait Typers extends Modes with Adaptations with Tags {
       }
       silent(_.adaptToMember(qual, HasMember(name), false)) match {
           case SilentResultValue(res) => res
-          case SilentTypeError(err) => onError({if (reportAmbiguous) { context.issue(err) }; setError(duplicateTree(tree))})
+          case SilentTypeError(err) => onError({if (reportAmbiguous) { context.issue(err) }; setError(tree)})
       }
     }
 
@@ -4467,7 +4467,7 @@ trait Typers extends Modes with Adaptations with Tags {
               } else
                 res
             case SilentTypeError(err) =>
-              onError({issue(err); setError(treeCopy.Apply(tree, fun, args))})
+              onError({issue(err); setError(tree)})
           }
         }
       }
@@ -4629,7 +4629,7 @@ trait Typers extends Modes with Adaptations with Tags {
             NotAMemberError(tree, qual, name)
           }
 
-          if (forInteractive) makeInteractiveErrorTree else setError(duplicateTree(tree))
+          if (forInteractive) makeInteractiveErrorTree else setError(tree)
         } else {
           val tree1 = tree match {
             case Select(_, _) => treeCopy.Select(tree, qual, name)
@@ -4904,7 +4904,7 @@ trait Typers extends Modes with Adaptations with Tags {
         }
         if (errorContainer != null) {
           ErrorUtils.issueTypeError(errorContainer)
-          setError(treeCopy.Ident(tree, name))
+          setError(tree)
         } else {
           if (defSym.owner.isPackageClass)
             pre = defSym.owner.thisType
