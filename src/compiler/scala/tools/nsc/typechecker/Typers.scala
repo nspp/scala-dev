@@ -2533,14 +2533,26 @@ trait Typers extends Modes with Adaptations with Tags {
       if (numVparams > definitions.MaxFunctionArity)
         return MaxFunctionArityError(fun)
 
-      def decompose(pt: Type): (Symbol, List[Type], Type) =
+      def decompose(pt: Type): (Symbol, List[Type], Type) = {
+        def default =  (FunctionClass(numVparams), fun.vparams map (x => NoType), WildcardType)
         if ((isFunctionType(pt) || (pt.typeSymbol == PartialFunctionClass && numVparams == 1 && fun.body.isInstanceOf[Match])) && // see bug901 for a reason why next conditions are needed
             (  pt.normalize.typeArgs.length - 1 == numVparams
             || fun.vparams.exists(_.tpt.isEmpty)
             ))
           (pt.typeSymbol, pt.normalize.typeArgs.init, pt.normalize.typeArgs.last)
-        else
-          (FunctionClass(numVparams), fun.vparams map (x => NoType), WildcardType)
+        else {
+          val normalized = pt.normalize
+          normalized baseType FunctionClass(numVparams) match {
+            case NoType =>
+              default
+            case adapted =>
+              if (adapted eq normalized)
+                default
+              else
+                (adapted.typeSymbol, adapted.normalize.typeArgs.init, adapted.normalize.typeArgs.last)
+          }
+        }
+      }
 
       val (clazz, argpts, respt) = decompose(pt)
       if (argpts.lengthCompare(numVparams) != 0)
@@ -2552,7 +2564,7 @@ trait Typers extends Modes with Adaptations with Tags {
               if (isFullyDefined(argpt)) argpt
               else {
                 fun match {
-                  case etaExpansion(vparams, fn, args) =>
+                  case etaExpansion(_, fn, _) =>
                     silent(_.typed(fn, forFunMode(mode), pt)) match {
                       case SilentResultValue(fn1) if context.undetparams.isEmpty =>
                         // if context,undetparams is not empty, the function was polymorphic,
@@ -2561,9 +2573,9 @@ trait Typers extends Modes with Adaptations with Tags {
                         val ftpe = normalize(fn1.tpe) baseType FunctionClass(numVparams)
                         if (isFunctionType(ftpe) && isFullyDefined(ftpe))
                           return typedFunction(fun, mode, ftpe)
-                      case _ =>
+                      case _                                                     =>
                     }
-                  case _ =>
+                  case _                      =>
                 }
                 MissingParameterTypeError(fun, vparam, pt)
                 ErrorType
