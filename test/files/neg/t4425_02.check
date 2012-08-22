@@ -1,0 +1,4 @@
+t4425_02.scala:2: error: Implementation restriction: unapply member cannot have default arguments
+  object X { def unapply(x : Int)(y: Option[Int] = None): Option[Tuple2[Int, Int]] = Some((2,2)) }
+                 ^
+one error found

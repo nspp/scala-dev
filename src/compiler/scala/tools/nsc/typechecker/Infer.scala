@@ -257,7 +257,16 @@ trait Infer {
   class Inferencer(context: Context) extends InferencerContextErrors {
     import InferErrorGen._
 
-    /* -- Error Messages --------------------------------------------------- */
+    //  Set the type of the tree to ErrorType.
+    //  In most situations error reporting is done by issuing new context errors
+    //  as defined in ContextErrors.scala. However there are situations where this
+    //  is not enough and you have to manually update the type of the tree.
+    //  setError *has to* be called when 1) you are typing the tree for the first
+    //  time as otherwise it will have null for type and lead to NPEs (all of the typedXXX methods apply here)
+    //  or 2) you are dealing with OverloadedType which if won't be modified will
+    //  lead to SO. There are exceptions to this rule, all of which should
+    //  be briefly commented, but mostly their purpose is to reduce the number of spurious
+    //  errors.
     def setError[T <: Tree](tree: T): T = {
       debuglog("set error: "+ tree)
       // this breaks -Ydebug pretty radically
