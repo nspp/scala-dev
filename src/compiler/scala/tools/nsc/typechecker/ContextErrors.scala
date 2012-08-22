@@ -129,7 +129,6 @@ trait ContextErrors {
         issueNormalTypeError(tree,
           "stable identifier required, but "+tree+" found." + (
           if (isStableExceptVolatile(tree)) addendum else ""))
-        setError(tree)
       }
 
       def NoImplicitFoundError(tree: Tree, param: Symbol) = {
@@ -178,10 +177,8 @@ trait ContextErrors {
           explainTypes(found, req)
       }
 
-      def WithFilterError(tree: Tree, ex: AbsTypeError) = {
+      def WithFilterError(tree: Tree, ex: AbsTypeError) =
         issueTypeError(ex)
-        setError(tree)
-      }
 
       def ParentTypesError(templ: Template, ex: TypeError) = {
          templ.tpe = null
@@ -204,10 +201,8 @@ trait ContextErrors {
       }
 
       // typedAppliedTypeTree
-      def AppliedTypeNoParametersError(tree: Tree, errTpe: Type) = {
+      def AppliedTypeNoParametersError(tree: Tree, errTpe: Type) =
         issueNormalTypeError(tree, errTpe + " does not take type parameters")
-        setError(tree)
-      }
 
       def AppliedTypeWrongNumberOfArgsError(tree: Tree, tpt: Tree, tparams: List[Symbol]) = {
         val tptSafeString: String = try {
@@ -218,20 +213,15 @@ trait ContextErrors {
         }
         val msg = "wrong number of type arguments for "+tptSafeString+", should be "+tparams.length
         issueNormalTypeError(tree, msg)
-        setError(tree)
       }
 
       // typedTypeDef
       def LowerBoundError(tree: TypeDef, lowB: Type, highB: Type) =
         issueNormalTypeError(tree, "lower bound "+lowB+" does not conform to upper bound "+highB)
 
-      def HiddenSymbolWithError[T <: Tree](tree: T): T =
-        setError(tree)
-
-      def SymbolEscapesScopeError[T <: Tree](tree: T, badSymbol: Symbol): T = {
+      def SymbolEscapesScopeError[T <: Tree](tree: T, badSymbol: Symbol): Unit = {
         val modifierString = if (badSymbol.isPrivate) "private " else ""
         issueNormalTypeError(tree, modifierString + badSymbol + " escapes its defining scope as part of type "+tree.tpe)
-        setError(tree)
       }
 
       // typedDefDef
@@ -260,10 +250,8 @@ trait ContextErrors {
       private def ConstrArgsThisReferenceError(prefix: String, tree: Tree) =
         NormalTypeError(tree, s"$prefix constructor arguments cannot reference unconstructed `this`")
 
-      def TooManyArgumentListsForConstructor(tree: Tree) = {
+      def TooManyArgumentListsForConstructor(tree: Tree) =
         issueNormalTypeError(tree, "too many argument lists for constructor invocation")
-        setError(tree)
-      }
 
       // typedValDef
       def VolatileValueError(vdef: Tree) =
@@ -273,17 +261,13 @@ trait ContextErrors {
         issueNormalTypeError(vdef, "local variables must be initialized")
 
       //typedAssign
-      def AssignmentError(tree: Tree, varSym: Symbol) = {
+      def AssignmentError(tree: Tree, varSym: Symbol) =
         issueNormalTypeError(tree,
           if (varSym != null && varSym.isValue) "reassignment to val"
           else "assignment to non variable")
-        setError(tree)
-      }
 
-      def UnexpectedTreeAssignmentConversionError(tree: Tree) = {
+      def UnexpectedTreeAssignmentConversionError(tree: Tree) =
         issueNormalTypeError(tree, "Unexpected tree during assignment conversion.")
-        setError(tree)
-      }
 
       //typedSuper
       def MixinMissingParentClassNameError(tree: Tree, mix: Name, clazz: Symbol) =
@@ -329,60 +313,40 @@ trait ContextErrors {
           )
         }
         issueNormalTypeError(sel, errMsg)
-        // the error has to be set for the copied tree, otherwise
-        // the error remains persistent acros multiple compilations
-        // and causes problems
-        //setError(sel)
       }
 
       //typedNew
-      def IsAbstractError(tree: Tree, sym: Symbol) = {
+      def IsAbstractError(tree: Tree, sym: Symbol) =
         issueNormalTypeError(tree, sym + " is abstract; cannot be instantiated")
-        setError(tree)
-      }
 
-      def DoesNotConformToSelfTypeError(tree: Tree, sym: Symbol, tpe0: Type) = {
+      def DoesNotConformToSelfTypeError(tree: Tree, sym: Symbol, tpe0: Type) =
         issueNormalTypeError(tree, sym + " cannot be instantiated because it does not conform to its self-type " + tpe0)
-        setError(tree)
-      }
 
       //typedEta
-      def UnderscoreEtaError(tree: Tree) = {
+      def UnderscoreEtaError(tree: Tree) =
         issueNormalTypeError(tree, "_ must follow method; cannot follow " + tree.tpe)
-        setError(tree)
-      }
 
       //typedReturn
-      def ReturnOutsideOfDefError(tree: Tree) = {
+      def ReturnOutsideOfDefError(tree: Tree) =
         issueNormalTypeError(tree, "return outside method definition")
-        setError(tree)
-      }
 
-      def ReturnWithoutTypeError(tree: Tree, owner: Symbol) = {
+      def ReturnWithoutTypeError(tree: Tree, owner: Symbol) =
         issueNormalTypeError(tree, owner + " has return statement; needs result type")
-        setError(tree)
-      }
 
       //typedBind
-      def VariableInPatternAlternativeError(tree: Tree) = {
+      def VariableInPatternAlternativeError(tree: Tree) =
         issueNormalTypeError(tree, "illegal variable in pattern alternative")
-        //setError(tree)
-      }
 
       //typedCase
       def StarPositionInPatternError(tree: Tree) =
         issueNormalTypeError(tree, "_* may only come last")
 
       //typedFunction
-      def MaxFunctionArityError(fun: Tree) = {
+      def MaxFunctionArityError(fun: Tree) =
         issueNormalTypeError(fun, "implementation restricts functions to " + definitions.MaxFunctionArity + " parameters")
-        setError(fun)
-      }
 
-      def WrongNumberOfParametersError(tree: Tree, argpts: List[Type]) = {
+      def WrongNumberOfParametersError(tree: Tree, argpts: List[Type]) =
         issueNormalTypeError(tree, "wrong number of parameters; expected = " + argpts.length)
-        setError(tree)
-      }
 
       def MissingParameterTypeError(fun: Tree, vparam: ValDef, pt: Type) =
         if (vparam.mods.isSynthetic) fun match {
@@ -395,15 +359,11 @@ trait ContextErrors {
           "The argument types of an anonymous function must be fully known. (SLS 8.5)\n"+
           "Expected type was: " + pt.toLongString)
 
-      def ConstructorsOrderError(tree: Tree) = {
+      def ConstructorsOrderError(tree: Tree) =
         issueNormalTypeError(tree, "called constructor's definition must precede calling constructor's definition")
-        setError(tree)
-      }
 
-      def OnlyDeclarationsError(tree: Tree) = {
+      def OnlyDeclarationsError(tree: Tree) =
         issueNormalTypeError(tree, "only declarations allowed here")
-        setError(tree)
-      }
 
       // typedAnnotation
       def AnnotationNotAConstantError(tree: Tree) =
@@ -452,15 +412,11 @@ trait ContextErrors {
       private[ContextErrors] def TypedApplyWrongNumberOfTpeParametersErrorMessage(fun: Tree) =
         "wrong number of type parameters for "+treeSymTypeMsg(fun)
 
-      def TypedApplyWrongNumberOfTpeParametersError(tree: Tree, fun: Tree) = {
+      def TypedApplyWrongNumberOfTpeParametersError(tree: Tree, fun: Tree) =
         issueNormalTypeError(tree, TypedApplyWrongNumberOfTpeParametersErrorMessage(fun))
-        setError(tree)
-      }
 
-      def TypedApplyDoesNotTakeTpeParametersError(tree: Tree, fun: Tree) = {
+      def TypedApplyDoesNotTakeTpeParametersError(tree: Tree, fun: Tree) =
         issueNormalTypeError(tree, treeSymTypeMsg(fun)+" does not take type parameters.")
-        setError(tree)
-      }
 
       // doTypeApply
       //tryNamesDefaults
@@ -523,15 +479,11 @@ trait ContextErrors {
       }
 
       //checkClassType
-      def TypeNotAStablePrefixError(tpt: Tree, pre: Type) = {
+      def TypeNotAStablePrefixError(tpt: Tree, pre: Type) =
         issueNormalTypeError(tpt, "type "+pre+" is not a stable prefix")
-        setError(tpt)
-      }
 
-      def ClassTypeRequiredError(tree: Tree, found: AnyRef) = {
+      def ClassTypeRequiredError(tree: Tree, found: AnyRef) =
         issueNormalTypeError(tree, "class type required but "+found+" found")
-        setError(tree)
-      }
 
       // validateParentClasses
       def ParentSuperSubclassError(parent: Tree, superclazz: Symbol,
@@ -558,43 +510,32 @@ trait ContextErrors {
         NormalTypeError(parent, parentSym+" is inherited twice")
 
       //adapt
-      def MissingArgsForMethodTpeError(tree: Tree, meth: Symbol) = {
+      def MissingArgsForMethodTpeError(tree: Tree, meth: Symbol) =
         issueNormalTypeError(tree,
           "missing arguments for " + meth.fullLocationString + (
             if (meth.isConstructor) ""
             else ";\nfollow this method with `_' if you want to treat it as a partially applied function"
           ))
-        setError(tree)
-      }
 
-      def MissingTypeParametersError(tree: Tree) = {
+      def MissingTypeParametersError(tree: Tree) =
         issueNormalTypeError(tree, tree.symbol+" takes type parameters")
-        setError(tree)
-      }
 
-      def KindArityMismatchError(tree: Tree, pt: Type) = {
+      def KindArityMismatchError(tree: Tree, pt: Type) =
         issueNormalTypeError(tree,
           tree.tpe+" takes "+countElementsAsString(tree.tpe.typeParams.length, "type parameter")+
           ", expected: "+countAsString(pt.typeParams.length))
-        setError(tree)
-      }
 
-      def CaseClassConstructorError(tree: Tree) = {
+      def CaseClassConstructorError(tree: Tree) =
         issueNormalTypeError(tree, tree.symbol + " is not a case class constructor, nor does it have an unapply/unapplySeq method")
-        setError(tree)
-      }
 
-      def ConstructorPrefixError(tree: Tree, restpe: Type) = {
+      def ConstructorPrefixError(tree: Tree, restpe: Type) =
         issueNormalTypeError(tree, restpe.prefix+" is not a legal prefix for a constructor")
-        setError(tree)
-      }
 
       // SelectFromTypeTree
       def TypeSelectionFromVolatileTypeError(tree: Tree, qual: Tree) = {
         val hiBound = qual.tpe.bounds.hi
         val addendum = if (hiBound =:= qual.tpe) "" else s" (with upper bound ${hiBound})"
         issueNormalTypeError(tree, s"illegal type selection from volatile type ${qual.tpe}${addendum}")
-        setError(tree)
       }
 
       // packedType
@@ -605,10 +546,8 @@ trait ContextErrors {
         issueNormalTypeError(tree, "can't existentially abstract over parameterized type " + tp)
 
       // resolveClassTag
-      def MissingClassTagError(tree: Tree, tp: Type) = {
+      def MissingClassTagError(tree: Tree, tp: Type) =
         issueNormalTypeError(tree, "cannot find class tag for element type "+tp)
-        setError(tree)
-      }
 
       // cases where we do not necessarily return trees
       def DependentMethodTpeConversionToFunctionError(tree: Tree, tp: Type) =
@@ -621,18 +560,14 @@ trait ContextErrors {
       def FinitaryError(tparam: Symbol) =
         issueSymbolTypeError(tparam, "class graph is not finitary because type parameter "+tparam.name+" is expansively recursive")
 
-      def QualifyingClassError(tree: Tree, qual: Name) = {
+      def QualifyingClassError(tree: Tree, qual: Name) =
         issueNormalTypeError(tree,
           if (qual.isEmpty) tree + " can be used only in a class, object, or template"
           else qual + " is not an enclosing class")
-        setError(tree)
-      }
 
       // def stabilize
-      def NotAValueError(tree: Tree, sym: Symbol) = {
+      def NotAValueError(tree: Tree, sym: Symbol) =
         issueNormalTypeError(tree, sym.kindString + " " + sym.fullName + " is not a value")
-        setError(tree)
-      }
 
       def DefDefinedTwiceError(sym0: Symbol, sym1: Symbol) = {
         // Most of this hard work is associated with SI-4893.
@@ -819,19 +754,15 @@ trait ContextErrors {
           "\n --- because ---\n" + msg)
 
       // TODO: no test case
-      def NoConstructorInstanceError(tree: Tree, restpe: Type, pt: Type, msg: String) = {
+      def NoConstructorInstanceError(tree: Tree, restpe: Type, pt: Type, msg: String) =
         issueNormalTypeError(tree,
           "constructor of type " + restpe +
           " cannot be uniquely instantiated to expected type " + pt +
           "\n --- because ---\n" + msg)
-        setError(tree)
-      }
 
-      def ConstrInstantiationError(tree: Tree, restpe: Type, pt: Type) = {
+      def ConstrInstantiationError(tree: Tree, restpe: Type, pt: Type) =
         issueNormalTypeError(tree,
           "constructor cannot be instantiated to expected type" + foundReqMsg(restpe, pt))
-        setError(tree)
-      }
 
       // side-effect on the tree, break the overloaded type cycle in infer
       private def setErrorOnLastTry(lastTry: Boolean, tree: Tree) = if (lastTry) setError(tree)
@@ -1170,6 +1101,9 @@ trait ContextErrors {
   }
 
   object NamesDefaultsErrorsGen {
+    // Names defaults heavilly rely on making erroroneous arguments
+    // as there doesn't seem be an easier way to distinguish them from 
+    // correct ones at the moment.
     import typer.infer.setError
 
     def NameClashError(sym: Symbol, arg: Tree)(implicit context: Context) = {

@@ -432,7 +432,7 @@ abstract class UnCurry extends InfoTransform
             if (tp.typeSymbol.isBottomClass) getClassTag(AnyClass.tpe)
             else if (!tag.isEmpty) tag
             else if (tp.bounds.hi ne tp) getClassTag(tp.bounds.hi)
-            else localTyper.TyperErrorGen.MissingClassTagError(tree, tp)
+            else { localTyper.TyperErrorGen.MissingClassTagError(tree, tp); getClassTag(AnyClass.tpe) }
           }
           def traversableClassTag(tpe: Type): Tree = {
             (tpe baseType TraversableClass).typeArgs match {

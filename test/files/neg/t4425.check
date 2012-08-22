@@ -1,4 +1,7 @@
-t4425.scala:3: error: isInstanceOf cannot test if value types are references.
+t4425.scala:2: error: Implementation restriction: unapply member cannot have default arguments
+  object X { def unapply(x : Int)(y : Option[Int] = None) = None }
+                 ^
+t4425.scala:3: error: wrong number of arguments for object X
   42 match { case _ X _ => () }
                     ^
-one error found
+two errors found
