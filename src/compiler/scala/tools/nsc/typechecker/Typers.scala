@@ -2724,7 +2724,7 @@ trait Typers extends Modes with Adaptations with Tags {
 
                 if (isWarnablePureExpression(result)) context.warning(stat.pos,
                   "a pure expression does nothing in statement position; " +
-                  "you may be omitting necessary parentheses"
+                  "you may be omitting necessary parentheses", true // never hide this warning
                 )
                 result
               }
@@ -5202,6 +5202,10 @@ trait Typers extends Modes with Adaptations with Tags {
             exprTyped match {
               case macroDef if macroDef.symbol != null && macroDef.symbol.isTermMacro && !macroDef.symbol.isErroneous =>
                 MacroEtaError(exprTyped)
+                setError(exprTyped) // avoid spurious errors when expanding macros
+                                    // having the tree type set to ErrorType will
+                                    // stop it from looking for macro implementation
+                                    // (it would report unnecessary error at that point)
               case _ =>
                 typedEta(checkDead(exprTyped))
             }
