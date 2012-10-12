@@ -13,7 +13,7 @@ import java.util.regex.Pattern
 import scala.util.matching.Regex
 import scala.util.parsing.input._
 import scala.collection.immutable.PagedSeq
-import language.implicitConversions
+import scala.language.implicitConversions
 
 import debugging.{ParserLocation, NoParserLocation}
 

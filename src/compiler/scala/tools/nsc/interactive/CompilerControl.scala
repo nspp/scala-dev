@@ -1,5 +1,5 @@
 /* NSC -- new Scala compiler
- * Copyright 2009-2011 Scala Solutions and LAMP/EPFL
+ * Copyright 2009-2012 Scala Solutions and LAMP/EPFL
  * @author Martin Odersky
  */
 package scala.tools.nsc
@@ -69,11 +69,11 @@ trait CompilerControl { self: Global =>
    *  if it does not yet exist create a new one atomically
    *  Note: We want to get roid of this operation as it messes compiler invariants.
    */
-  @deprecated("use getUnitOf(s) or onUnitOf(s) instead")
+  @deprecated("use getUnitOf(s) or onUnitOf(s) instead", "2.10.0")
   def unitOf(s: SourceFile): RichCompilationUnit = getOrCreateUnitOf(s)
 
   /** The compilation unit corresponding to a position */
-  @deprecated("use getUnitOf(pos.source) or onUnitOf(pos.source) instead")
+  @deprecated("use getUnitOf(pos.source) or onUnitOf(pos.source) instead", "2.10.0")
   def unitOf(pos: Position): RichCompilationUnit = getOrCreateUnitOf(pos.source)
 
   /** Removes the CompilationUnit corresponding to the given SourceFile
@@ -232,7 +232,7 @@ trait CompilerControl { self: Global =>
   /** Tells the compile server to shutdown, and not to restart again */
   def askShutdown() = scheduler raise ShutdownReq
 
-  @deprecated("use parseTree(source) instead") // deleted 2nd parameter, as this has to run on 2.8 also.
+  @deprecated("use parseTree(source) instead", "2.10.0") // deleted 2nd parameter, as this has to run on 2.8 also.
   def askParse(source: SourceFile, response: Response[Tree]) = respond(response) {
     parseTree(source)
   }
@@ -251,6 +251,25 @@ trait CompilerControl { self: Global =>
 
   /** Asks for a computation to be done quickly on the presentation compiler thread */
   def ask[A](op: () => A): A = if (self.onCompilerThread) op() else scheduler doQuickly op
+
+  /** Asks for a computation to be done on presentation compiler thread, returning
+   *  a response with the result or an exception
+   */
+  def askForResponse[A](op: () => A): Response[A] = {
+    val r = new Response[A]
+    if (self.onCompilerThread) {
+      try   { r set op() }
+      catch { case exc: Throwable => r raise exc }
+      r
+    } else {
+      val ir = scheduler askDoQuickly op
+      ir onComplete {
+        case Left(result) => r set result
+        case Right(exc)   => r raise exc
+      }
+      r
+    }
+  }
 
   def onCompilerThread = Thread.currentThread == compileRunner
 
@@ -390,7 +409,7 @@ trait CompilerControl { self: Global =>
         case _ => println("don't know what to do with this " + action.getClass)
       }
     }
-    
+
     override def doQuickly[A](op: () => A): A = {
       throw new FailedInterrupt(new Exception("Posted a work item to a compiler that's shutting down"))
     }
