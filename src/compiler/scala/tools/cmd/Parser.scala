@@ -25,7 +25,7 @@ trait ParserUtil extends Parsers {
 
 object Parser extends RegexParsers with ParserUtil {
   override def skipWhitespace = false
-  
+
   def elemExcept(xs: Elem*): Parser[Elem] = elem("elemExcept", x => x != EofCh && !(xs contains x))
   def elemOf(xs: Elem*): Parser[Elem]     = elem("elemOf", xs contains _)
   def escaped(ch: Char): Parser[String] = "\\" + ch

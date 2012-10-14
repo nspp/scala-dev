@@ -18,7 +18,7 @@ object ParserMacros {
     }
     
     val DefDef(_, methodName, _, _, _, _) = c.enclosingMethod
-    val fileName = elem.pos.source.file.name
+    val fileName = elem.pos.source.file.path
     val line = elem.pos.line
     val charOffset = elem.pos.point
     val column = elem.pos.column
