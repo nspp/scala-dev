@@ -17,14 +17,13 @@ object ParserMacros {
       case Apply(fun, args)   => fun
     }
     
-    val rawTree: String = "[" + elem.toString + "||" + elem.getClass + "]"
     val DefDef(_, methodName, _, _, _, _) = c.enclosingMethod
     val fileName = elem.pos.source.file.name
     val line = elem.pos.line
     val charOffset = elem.pos.point
     val column = elem.pos.column
     c.universe.reify { SomeParserLocation(outer.splice, c.literal(charOffset).splice, c.literal(line).splice, c.literal(column).splice,
-                                 c.literal(fileName).splice, c.literal(methodName.toString).splice, c.literal(rawTree).splice) }
+                                 c.literal(fileName).splice, c.literal(methodName.toString).splice) }
     //c.reify {NoParserLocation}
   }
   

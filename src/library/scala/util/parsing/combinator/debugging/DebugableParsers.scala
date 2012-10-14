@@ -23,21 +23,9 @@ trait LocationAwareParser {
       // Set next
       nextLeaf = Leaf(loc, which.toString, Parsed)
 
-      // Enter controller
-      //Controller.enter(z)
-
-
-      //z = z.replaceHeadWith(item).get.next
-      // Update the status of the item before (if any)
-      //// z = updateLeftStatus
-
-      //// Construct new Item
-      //var item = Word(Leaf(loc, name, Unparsed))
-      //// Move to next position and Add word to zipper
-
-      Builder.print
-      println("(word)")
-      println("")
+      /* Builder.print */
+      /* println("(word)") */
+      /* println("") */
     }
 
     def tunnel : Unit = {
@@ -64,9 +52,9 @@ trait LocationAwareParser {
       // Now replace head with new item and enter
       z = z.down.get.replaceWith(item)
 
-      Builder.print
-      println("(or)")
-      println("")
+      /* Builder.print */
+      /* println("(or)") */
+      /* println("") */
     }
 
     // Replace first element of list with And( Word(), Word(), ... , Word() );
@@ -84,9 +72,9 @@ trait LocationAwareParser {
       else z = z.down.get.replaceWith(item)
       // Now replace head with new item and enter
 
-      Builder.print
-      println("(and)")
-      println("")
+      /* Builder.print */
+      /* println("(and)") */
+      /* println("") */
     }
 
     // If an element of an And tree failed, we mark it as failed and go up
@@ -103,9 +91,9 @@ trait LocationAwareParser {
       // move to next
       z = z.next
 
-      //println(z.toString)
-      //println("")
-      //println("")
+      println(z.toString)
+      println("")
+      println("")
     }
 
     // In case a word has failed parsing, check if we should fail the parent too
@@ -134,9 +122,9 @@ trait LocationAwareParser {
       // Then step to next
       z = z.next
 
-      //println(z.toString)
-      //println("")
-      //println("")
+      println(z.toString)
+      println("")
+      println("")
     }
 
     // In case a word was parsed, check if we should parse the parent too
@@ -180,7 +168,7 @@ trait LocationAwareParser {
     }
 
     def word(l : Int)(which : ParserKind) : Unit = which match { 
-      case WordParser(_,loc) if l != level      => Builder.tunnel; Builder.word(loc, which)
+      case WordParser(_,loc) if l != level      => Builder.tunnel; set(which)
       case _                                    => set(which)
     }
 
@@ -214,10 +202,6 @@ trait LocationAwareParser {
       case _                                    => go = default(_)
     }
 
-
-
-    def equalLevels(lvl : Int) : Boolean = (getLevel == lvl)
-
     def incLevel : Unit = { level = level + 1 }
     def decLevel : Unit = { level = level - 1 }
     def getLevel : Int = level
@@ -233,6 +217,7 @@ trait LocationAwareParser {
     def ignore : Boolean = s match {
       case s if(s.indexOf("Parser") >= 0)         => true
       case s if(s.indexOf("parser-map-") >= 0)    => true
+      case s if(s != "" && s.head == '`')         => true
       case otherwise                              => false
     }
     s match {
@@ -248,9 +233,10 @@ trait LocationAwareParser {
 
 
 
-trait DebugableParsers extends LocationAwareParser {
+trait DebugableParsers extends LocationAwareParser with Controllers {
   self: Parsers =>
 
+  var contr : Controller = null
   val debug: Boolean = true//(sys.props.getOrElse("parser.combinators.debug", "false") == "true")
 
   trait NoLocationParser[+T] {
@@ -258,6 +244,10 @@ trait DebugableParsers extends LocationAwareParser {
     val location: ParserLocation = NoParserLocation
   }
 
+  def registerController(c : Controller) : Unit = {
+    // Set controller
+    contr = c
+  }
 
   trait DebugableParser[+T] {
     selfP: Parser[T] =>
@@ -270,23 +260,59 @@ trait DebugableParsers extends LocationAwareParser {
     def enterRes(in: Input): Unit = {
       if (debug && location != NoParserLocation) {
 
-        println("Name:  \t " + name)
-        println("Method:\t" + printMethod(location))
+        // println("Name:  \t " + name)
+        // println("Method:\t" + printMethod(location))
 
         // Redefine name for easier reading
         if (name == "") name = "Undefined"
 
-        // Call the dispatcher with name and level
+        // Get parserKind
+        val p : ParserKind = toParserKind(name, location)
 
+        // Call the dispatcher with name and level
         Dispatcher.incLevel
-        Dispatcher.go(toParserKind(name, location))
-        
-        println("Level: \t" + Dispatcher.getLevel)
-        println("")
+        Dispatcher.go(p)
+
+        //println("Level: \t" + Dispatcher.getLevel)
+        //println("")
+
+        // Check if we are taking a step
+        p match {
+          case WordParser(_,_)      => step
+          case _                    => {}
+        }
 
       } else {
         if (java.lang.Boolean.getBoolean("parsec.debug"))
           println("NoParserLocation with name: " + name)
+      }
+    }
+
+    def step : Unit = {
+      contr.synchronized {
+        // Stop the controller
+
+        contr.request.synchronized {
+          // Once we resume, fill in some information
+          contr.request.field = Builder.z
+          // Notify the request that it has been filled
+          contr.request.notify
+        }
+        while (contr.request.field == Builder.z) contr.wait
+      }
+    }
+
+    def endStep : Unit = {
+      contr.synchronized {
+        // Stop the controller
+
+        contr.request.synchronized {
+          // Once we resume, fill in some information
+          contr.request.field = Builder.z
+          contr.request.isDone = true
+          // Notify the request that it has been filled
+          contr.request.notify
+        }
       }
     }
 
@@ -304,6 +330,10 @@ trait DebugableParsers extends LocationAwareParser {
           }
         }
         println("Level: \t" + Dispatcher.getLevel)
+
+        // If level is 0, then we are done
+        if (Dispatcher.getLevel == 0) endStep
+
       }
     }
 
