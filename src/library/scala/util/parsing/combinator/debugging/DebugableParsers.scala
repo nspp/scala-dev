@@ -9,24 +9,6 @@ import language.implicitConversions
 
 import scala.collection.{mutable, immutable}
 
-trait Listener {
-  def stepIn(id: Int, name: String, debugging.ParserLocation): Option[Notification]
-  def stepOut(id: Int): Option[Notification]
-}
-
-abstract class Notification {
-  var ready = false
-
-  def isReady = this.synchronized {
-    ready
-  }
-
-  def setReady = this.synchronized {
-    ready = true
-    notify()
-  }
-}
-
 trait LocationAwareParser {
 
   object Builder {
@@ -258,13 +240,15 @@ trait DebugableParsers extends DefaultParser with LocationAwareParser with Contr
 
   var contr : Controller = null
 
-  private var listeners: List[Listener] = List
+  private var listeners: List[Listener] = Nil
 
   def addListener(elem: Listener) = {
     this.synchronized {
-      listeners += elem
+      listeners = elem :: listeners
     }
   }
+
+  private[this] var ids = 0
 
   object DebuggableParserFactory extends ParserFactory {
     def apply[T](f: Input => ParseResult[T]): Parser[T] = new DebugableParser[T] {
@@ -314,6 +298,11 @@ trait DebugableParsers extends DefaultParser with LocationAwareParser with Contr
 
   trait DebugableParser[+T] extends DefaultParser[T] {
 
+    val id = {
+      ids += 1
+      ids
+    }
+
     val location: debugging.ParserLocation
     def ps: List[Parser[T]] // TODO must respect the order
     def ls: List[debugging.ParserLocation] = List()
@@ -349,13 +338,10 @@ trait DebugableParsers extends DefaultParser with LocationAwareParser with Contr
         p match {
           case WordParser(_,_)      =>
             listeners.synchronized {
-              val notifiers = listeners.flatMap(_.step(name, location))
-              notifiers forall (n => n.synchronized { 
-                while (n.ready) n.wait()
-              })
+              val notifiers = listeners.flatMap(_.stepIn(id, name, location, Builder.z))
+              waitForAllAcks(notifiers)
             }
-            val notifiers =
-            step
+            //step
           case _                    => {}
         }
 
@@ -407,9 +393,32 @@ trait DebugableParsers extends DefaultParser with LocationAwareParser with Contr
         }
         println("Level: \t" + Dispatcher.getLevel)
 
-        // If level is 0, then we are done
-        if (Dispatcher.getLevel == 0) endStep
+
+        if (Dispatcher.getLevel == 0) {
+          // fixme: looks to me like there was some sort of hack
+          // left for level 0, this needs to be removed
+
+
+          // If level is 0, then we are done
+          //if (Dispatcher.getLevel == 0) endStep
+          listeners.synchronized {
+            val notifiers = listeners.flatMap(_.stepIn(id, name, location, Builder.z))
+            waitForAllAcks(notifiers)
+          }
+        }
+
+        listeners.synchronized {
+          val notifiers = listeners.flatMap(_.stepOut(id, Dispatcher.getLevel == 0))
+          waitForAllAcks(notifiers)
+        }
       }
+    }
+
+    // blocking operation
+    private def waitForAllAcks(acks: List[Notification]): Unit = {
+      acks foreach (ack => ack.synchronized { 
+        while (!ack.ready) ack.wait()
+      })
     }
 
     private def printMethod(loc : ParserLocation): String = loc.outer match {

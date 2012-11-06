@@ -29,7 +29,7 @@ trait DefaultParser {
           lastNoSuccessVar.value.getOrElse(ns)
       }
     }
-  })
+  }
 
   def OnceParser[T](f: Input => ParseResult[T])(implicit loc: debugging.ParserLocation): Parser[T] with OnceParser[T]
     = new DefaultParser[T] with OnceParser[T] { def consume(in: Input) = f(in) }
