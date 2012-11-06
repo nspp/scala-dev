@@ -82,8 +82,7 @@ trait RegexParsers extends Parsers {
       offset
 
   /** A parser that matches a literal string */
-  implicit def literal(s: String): Parser[String] = new Parser[String] with NoLocationParser[String] {
-    def consume(in: Input) = {
+  implicit def literal(s: String): Parser[String] = mkParser[String] { (in: Input) =>
       val source = in.source
       val offset = in.offset
       val start = handleWhiteSpace(source, offset)
@@ -99,12 +98,10 @@ trait RegexParsers extends Parsers {
         val found = if (start == source.length()) "end of source" else "`"+source.charAt(start)+"'"
         Failure("`"+s+"' expected but "+found+" found", in.drop(start - offset))
       }
-    }
   }
 
   /** A parser that matches a regex string */
-  implicit def regex(r: Regex): Parser[String] = new Parser[String] with NoLocationParser[String] {
-    def consume(in: Input) = {
+  implicit def regex(r: Regex): Parser[String] = mkParser[String] { (in: Input) =>
       val source = in.source
       val offset = in.offset
       val start = handleWhiteSpace(source, offset)
@@ -116,7 +113,6 @@ trait RegexParsers extends Parsers {
           val found = if (start == source.length()) "end of source" else "`"+source.charAt(start)+"'"
           Failure("string matching regex `"+r+"' expected but "+found+" found", in.drop(start - offset))
       }
-    }
   }
 
   /** `positioned` decorates a parser's result with the start position of the input it consumed.
@@ -129,18 +125,15 @@ trait RegexParsers extends Parsers {
    */
   override def positioned[T <: Positional](p: => Parser[T])(implicit loc: ParserLocation): Parser[T] = {
     val pp = super.positioned(p)
-    new Parser[T] {
-      def consume(in: Input) = {
-        val offset = in.offset
-        val start = handleWhiteSpace(in.source, offset)
-        pp(in.drop (start - offset))
-      }
-      val location: ParserLocation = loc
+    mkParser[T] { (in: Input) =>
+      val offset = in.offset
+      val start = handleWhiteSpace(in.source, offset)
+      pp(in.drop (start - offset))
     }
   }
 
-  override def phrase[T](p: Parser[T])(implicit loc: ParserLocation): Parser[T] =
-    super.phrase(p <~ opt("""\z""".r))
+  abstract override def phrase[T](p: Parser[T])(implicit loc: ParserLocation): Parser[T] =
+    super.phrase(p <~ opt("""\z""".r))(loc)
 
   /** Parse some prefix of reader `in` with parser `p`. */
   def parse[T](p: Parser[T], in: Reader[Char]): ParseResult[T] =

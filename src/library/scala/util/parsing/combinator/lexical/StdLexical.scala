@@ -32,7 +32,7 @@ import scala.collection.mutable
  * @author Iulian Dragos
  * @author Adriaan Moors
  */
-class StdLexical extends Lexical with StdTokens {
+class StdLexical extends Lexical with StdTokens with DefaultParser {
   private implicit val noloc: debugging.ParserLocation = debugging.NoParserLocation // fix with macros
   
   // see `token` in `Scanners`

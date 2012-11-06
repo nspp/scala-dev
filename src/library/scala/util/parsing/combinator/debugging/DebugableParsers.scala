@@ -7,6 +7,26 @@ import scala.annotation.tailrec
 import annotation.migration
 import language.implicitConversions
 
+import scala.collection.{mutable, immutable}
+
+trait Listener {
+  def stepIn(id: Int, name: String, debugging.ParserLocation): Option[Notification]
+  def stepOut(id: Int): Option[Notification]
+}
+
+abstract class Notification {
+  var ready = false
+
+  def isReady = this.synchronized {
+    ready
+  }
+
+  def setReady = this.synchronized {
+    ready = true
+    notify()
+  }
+}
+
 trait LocationAwareParser {
 
   object Builder {
@@ -233,32 +253,81 @@ trait LocationAwareParser {
 
 
 
-trait DebugableParsers extends LocationAwareParser with Controllers {
+trait DebugableParsers extends DefaultParser with LocationAwareParser with Controllers {
   self: Parsers =>
 
   var contr : Controller = null
-  val debug: Boolean = true//(sys.props.getOrElse("parser.combinators.debug", "false") == "true")
 
-  trait NoLocationParser[+T] {
-    selfP: Parser[T] =>
-    val location: ParserLocation = NoParserLocation
+  private var listeners: List[Listener] = List
+
+  def addListener(elem: Listener) = {
+    this.synchronized {
+      listeners += elem
+    }
   }
 
+  object DebuggableParserFactory extends ParserFactory {
+    def apply[T](f: Input => ParseResult[T]): Parser[T] = new DebugableParser[T] {
+      def consume(in: Input) = f(in)
+      val location: debugging.ParserLocation = debugging.NoParserLocation
+      def ps = Nil
+    }
+    def apply[T](f: Input => ParseResult[T], loc0: debugging.ParserLocation): Parser[T]
+      = new DebugableParser[T] {
+          def consume(in: Input) = f(in)
+          val location: debugging.ParserLocation = loc0
+          def ps = Nil
+        }
+    def apply[T](f: Input => ParseResult[T], loc0: debugging.ParserLocation, ps0: => List[Parser[T]]): Parser[T]
+      = new DebugableParser[T] {
+          def consume(in: Input) = f(in)
+          val location: debugging.ParserLocation = loc0
+          def ps: List[Parser[T]] = ps0
+        }
+    }
+
+  abstract override val mkParser: ParserFactory = DebuggableParserFactory
+
+  abstract override def phrase[T](p: Parser[T])(implicit loc: debugging.ParserLocation): Parser[T] = new DebugableParser[T] {
+    def consume(in: Input) = lastNoSuccessVar.withValue(None) {
+      p(in) match {
+      case s @ Success(out, in1) =>
+        if (in1.atEnd)
+          s
+        else
+            lastNoSuccessVar.value filterNot { _.next.pos < in1.pos } getOrElse Failure("end of input expected", in1)
+        case ns => lastNoSuccessVar.value.getOrElse(ns)
+      }
+    }
+    
+    val location: debugging.ParserLocation = loc
+    def ps = Nil
+  }.named("phrase") // should be substituted by the 'real' name of the parser location
+
+  abstract override def OnceParser[T](f: Input => ParseResult[T])(implicit loc: debugging.ParserLocation): Parser[T] with OnceParser[T]
+    = new DebugableParser[T] with OnceParser[T] {def consume(in: Input) = f(in); val location = loc; def ps = Nil }
+
+
   def registerController(c : Controller) : Unit = {
-    // Set controller
     contr = c
   }
 
-  trait DebugableParser[+T] {
-    selfP: Parser[T] =>
+  trait DebugableParser[+T] extends DefaultParser[T] {
 
     val location: debugging.ParserLocation
-    def ps: List[Parser[T]] = List() // TODO must respect the order
+    def ps: List[Parser[T]] // TODO must respect the order
     def ls: List[debugging.ParserLocation] = List()
+
+    override def apply(in: Input): ParseResult[T] = {
+      enterRes(in)
+      val res = consume(in)
+      exitRes(res)
+      res
+    }
 
 
     def enterRes(in: Input): Unit = {
-      if (debug && location != NoParserLocation) {
+      if (location != NoParserLocation) {
 
         // println("Name:  \t " + name)
         // println("Method:\t" + printMethod(location))
@@ -278,7 +347,15 @@ trait DebugableParsers extends LocationAwareParser with Controllers {
 
         // Check if we are taking a step
         p match {
-          case WordParser(_,_)      => step
+          case WordParser(_,_)      =>
+            listeners.synchronized {
+              val notifiers = listeners.flatMap(_.step(name, location))
+              notifiers forall (n => n.synchronized { 
+                while (n.ready) n.wait()
+              })
+            }
+            val notifiers =
+            step
           case _                    => {}
         }
 
@@ -317,8 +394,7 @@ trait DebugableParsers extends LocationAwareParser with Controllers {
     }
 
     def exitRes[U >: T](res: ParseResult[U]): Unit = {
-      if (debug && location != NoParserLocation) {
-
+      if (location != NoParserLocation) {
         Dispatcher.decLevel
         res match {
           case Success(res0, next) =>
@@ -333,7 +409,6 @@ trait DebugableParsers extends LocationAwareParser with Controllers {
 
         // If level is 0, then we are done
         if (Dispatcher.getLevel == 0) endStep
-
       }
     }
 

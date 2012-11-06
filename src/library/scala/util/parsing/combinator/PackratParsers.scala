@@ -13,7 +13,7 @@ import scala.util.parsing.input.{ Reader, Position }
 import scala.collection.mutable
 import scala.language.implicitConversions
 
-import debugging.ParserLocation
+import debugging.{ParserLocation, NoParserLocation}
 
 /**
  *  `PackratParsers` is a component that extends the parser combinators
@@ -53,7 +53,7 @@ import debugging.ParserLocation
  * @author Tiark Rompf
  */
 
-trait PackratParsers extends Parsers {
+trait PackratParsers extends Parsers with DefaultParser {
 
   //type Input = PackratReader[Elem]
 
@@ -111,7 +111,6 @@ trait PackratParsers extends Parsers {
         case in: PackratReader[_] => q(in)
         case in => q(new PackratReader(in))
       }
-      val location: ParserLocation = loc
     }
   }
 
@@ -137,7 +136,9 @@ trait PackratParsers extends Parsers {
   /**
    * The root class of packrat parsers.
    */
-  abstract class PackratParser[+T] extends super.Parser[T]
+  abstract class PackratParser[+T] extends DefaultParser[T] {
+    val location: ParserLocation = NoParserLocation
+  }
 
   /**
    * Implicitly convert a parser to a packrat parser.
@@ -147,7 +148,7 @@ trait PackratParsers extends Parsers {
    * }}} */
   implicit def parser2packrat[T](p: => super.Parser[T]): PackratParser[T] = {
     lazy val q = p
-    memo(Parser {in => q(in)})
+    memo(mkParser {in => q(in)})
   }
 
   /*
@@ -234,7 +235,7 @@ to update each parser involved in the recursion.
    * and rely on implicit conversion instead.
    */
   def memo[T](p: super.Parser[T]): PackratParser[T] = {
-    new PackratParser[T] with NoLocationParser[T] {
+    new PackratParser[T] {
       def consume(in: Input) = {
         /*
          * transformed reader

@@ -15,7 +15,7 @@ case class Number(n: Int)
 case class Str(s: String)
 
 @deprecated("This class will be removed", "2.10.0")
-object RegexTest extends RegexParsers {
+object RegexTest extends DefaultParser with RegexParsers {
   implicit val loc: ParserLocation = NoParserLocation
   
   val ident: Parser[Any] = """[a-zA-Z_]\w*""".r ^^ (s => Ident(s))

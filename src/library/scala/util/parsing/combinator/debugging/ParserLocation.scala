@@ -8,21 +8,26 @@ trait ParserLocation {
     val column: Int
     val fileName: String
     val outerMethod: String // String for now
+    def isValid: Boolean // NoParserLocation, cannot just use the object because
+                         // of implicit resolution ambiguity problem
 }
   
-case class SomeParserLocation(
+class SomeParserLocation(
   val outer: ParserLocation,
   val offset: Int,
   val line: Int,
   val column: Int,
   val fileName: String,
-  val outerMethod: String) extends ParserLocation
+  val outerMethod: String) extends ParserLocation {
+  def isValid = true
+}
   
-case object NoParserLocation extends ParserLocation {
-  val outer = null
-  val offset = -1
-  val line = -1
-  val column = -1
-  val fileName = "<none>"
-  val outerMethod = "<none>"
+object NoParserLocation extends SomeParserLocation(
+  outer = null, 
+  offset = -1,
+  line = -1,
+  column = -1,
+  fileName = "<none>",
+  outerMethod = "<none>") {
+  override def isValid = false
 }
