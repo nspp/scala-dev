@@ -334,13 +334,19 @@ trait DebugableParsers extends DefaultParser with LocationAwareParser with Contr
         //println("Level: \t" + Dispatcher.getLevel)
         //println("")
 
+        listeners.synchronized {
+          val notifiers = listeners.flatMap(_.stepIn(id, name, location, Builder.z))
+          waitForAllAcks(notifiers)
+        }
+
+
         // Check if we are taking a step
         p match {
           case WordParser(_,_)      =>
-            listeners.synchronized {
+            /*listeners.synchronized {
               val notifiers = listeners.flatMap(_.stepIn(id, name, location, Builder.z))
               waitForAllAcks(notifiers)
-            }
+            }*/
             //step
           case _                    => {}
         }
@@ -394,7 +400,7 @@ trait DebugableParsers extends DefaultParser with LocationAwareParser with Contr
         println("Level: \t" + Dispatcher.getLevel)
 
 
-        if (Dispatcher.getLevel == 0) {
+        /*if (Dispatcher.getLevel == 0) {
           // fixme: looks to me like there was some sort of hack
           // left for level 0, this needs to be removed
 
@@ -405,7 +411,7 @@ trait DebugableParsers extends DefaultParser with LocationAwareParser with Contr
             val notifiers = listeners.flatMap(_.stepIn(id, name, location, Builder.z))
             waitForAllAcks(notifiers)
           }
-        }
+        }*/
 
         listeners.synchronized {
           val notifiers = listeners.flatMap(_.stepOut(id, Dispatcher.getLevel == 0))
