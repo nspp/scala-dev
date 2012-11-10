@@ -110,7 +110,7 @@ case class JSONArray (list : List[Any]) extends JSONType {
  *
  *  @author Derek Chen-Becker <"java"+@+"chen-becker"+"."+"org">
  */
-class Parser extends StdTokenParsers with ImplicitConversions {
+class Parser extends StdTokenParsers with ImplicitConversions with DefaultParser {
   // Fill in abstract defs
   type Tokens = Lexer
   val lexical = new Tokens

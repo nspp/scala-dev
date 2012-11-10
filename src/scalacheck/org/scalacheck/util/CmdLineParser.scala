@@ -9,7 +9,7 @@
 
 package org.scalacheck.util
 
-import scala.util.parsing.combinator.Parsers
+import scala.util.parsing.combinator.{ Parsers, DefaultParser }
 import scala.util.parsing.input.Reader
 import scala.util.parsing.input.Position
 import scala.collection.Set
@@ -17,7 +17,7 @@ import org.scalacheck.Test
 
 import scala.util.parsing.combinator.debugging.NoParserLocation
 
-trait CmdLineParser extends Parsers {
+trait CmdLineParser extends Parsers with DefaultParser {
   
   implicit val noloc = NoParserLocation
 

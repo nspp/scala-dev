@@ -414,7 +414,7 @@ trait DebugableParsers extends DefaultParser with LocationAwareParser with Contr
         }*/
 
         listeners.synchronized {
-          val notifiers = listeners.flatMap(_.stepOut(id, Dispatcher.getLevel == 0))
+          val notifiers = listeners.flatMap(_.stepOut(id, res.successful, Dispatcher.getLevel == 0))
           waitForAllAcks(notifiers)
         }
       }

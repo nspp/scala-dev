@@ -8,5 +8,5 @@ trait Listener {
 
   // todo: last will be redundant if we manage 
   // to track that info correctly on the client side
-  def stepOut(id: Int, last: Boolean): Option[Notification]
+  def stepOut(id: Int, success: Boolean, last: Boolean): Option[Notification]
 }

@@ -114,7 +114,7 @@ case class CommandLine(
   override def toString() = "CommandLine(\n%s)\n" format (args map ("  " + _ + "\n") mkString)
 }
 
-object CommandLineParser extends RegexParsers with ParserUtil {
+object CommandLineParser extends DefaultParser with RegexParsers with ParserUtil {
   override def skipWhitespace = false
 
   def elemExcept(xs: Elem*): Parser[Elem] = elem("elemExcept", x => x != EofCh && !(xs contains x))

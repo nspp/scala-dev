@@ -32,7 +32,7 @@ import scala.util.parsing.combinator.debugging.NoParserLocation
  *
  * @author Derek Chen-Becker <"java"+@+"chen-becker"+"."+"org">
  */
-object JSON extends Parser {
+object JSON extends Parser with DefaultParser {
 
   /**
    * This method converts ''raw'' results back into the original, deprecated

@@ -23,7 +23,7 @@ trait ParserUtil extends Parsers {
   protected implicit val noloc = NoParserLocation
 }
 
-object Parser extends RegexParsers with ParserUtil {
+object Parser extends DefaultParser with RegexParsers with ParserUtil {
   override def skipWhitespace = false
 
   def elemExcept(xs: Elem*): Parser[Elem] = elem("elemExcept", x => x != EofCh && !(xs contains x))
