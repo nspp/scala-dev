@@ -1,5 +1,5 @@
 /* NSC -- new Scala compiler
- * Copyright 2005-2012 LAMP/EPFL
+ * Copyright 2005-2013 LAMP/EPFL
  * @author  Martin Odersky
  */
 
@@ -8,12 +8,11 @@ package scala.tools.nsc
 import java.io.{ File, FileOutputStream, PrintWriter, IOException, FileNotFoundException }
 import java.nio.charset.{ Charset, CharsetDecoder, IllegalCharsetNameException, UnsupportedCharsetException }
 import scala.compat.Platform.currentTime
-import scala.tools.util.PathResolver
 import scala.collection.{ mutable, immutable }
 import io.{ SourceReader, AbstractFile, Path }
 import reporters.{ Reporter, ConsoleReporter }
-import util.{ Exceptional, ClassPath, MergedClassPath, StatisticsInfo, ScalaClassLoader, returning }
-import scala.reflect.internal.util.{ NoPosition, OffsetPosition, SourceFile, NoSourceFile, BatchSourceFile, ScriptSourceFile }
+import util.{ ClassPath, MergedClassPath, StatisticsInfo, returning, stackTraceString, stackTraceHeadString }
+import scala.reflect.internal.util.{ OffsetPosition, SourceFile, NoSourceFile, BatchSourceFile, ScriptSourceFile }
 import scala.reflect.internal.pickling.{ PickleBuffer, PickleFormat }
 import symtab.{ Flags, SymbolTable, SymbolLoaders, SymbolTrackers }
 import symtab.classfile.Pickler
@@ -29,8 +28,6 @@ import backend.jvm.{GenJVM, GenASM}
 import backend.opt.{ Inliners, InlineExceptionHandlers, ClosureElimination, DeadCodeElimination }
 import backend.icode.analysis._
 import scala.language.postfixOps
-import scala.reflect.internal.StdAttachments
-import scala.reflect.ClassTag
 
 class Global(var currentSettings: Settings, var reporter: Reporter)
     extends SymbolTable
@@ -298,7 +295,6 @@ class Global(var currentSettings: Settings, var reporter: Reporter)
 
   private val reader: SourceReader = {
     val defaultEncoding = Properties.sourceEncoding
-    val defaultReader   = Properties.sourceReader
 
     def loadCharset(name: String) =
       try Some(Charset.forName(name))
@@ -1046,6 +1042,16 @@ class Global(var currentSettings: Settings, var reporter: Reporter)
   def currentUnit: CompilationUnit = if (currentRun eq null) NoCompilationUnit else currentRun.currentUnit
   def currentSource: SourceFile    = if (currentUnit.exists) currentUnit.source else lastSeenSourceFile
 
+  def isGlobalInitialized = (
+       definitions.isDefinitionsInitialized
+    && rootMirror.isMirrorInitialized
+  )
+  override def isPastTyper = (
+       (curRun ne null)
+    && isGlobalInitialized // defense against init order issues
+    && (globalPhase.id > currentRun.typerPhase.id)
+  )
+
   // TODO - trim these to the absolute minimum.
   @inline final def exitingErasure[T](op: => T): T        = exitingPhase(currentRun.erasurePhase)(op)
   @inline final def exitingPostErasure[T](op: => T): T    = exitingPhase(currentRun.posterasurePhase)(op)
@@ -1183,9 +1189,6 @@ class Global(var currentSettings: Settings, var reporter: Reporter)
 
     /** Has any macro expansion used a fallback during this run? */
     var seenMacroExpansionsFallingBack = false
-
-    /** To be initialized from firstPhase. */
-    private var terminalPhase: Phase = NoPhase
 
     private val unitbuf = new mutable.ListBuffer[CompilationUnit]
     val compiledFiles   = new mutable.HashSet[String]
@@ -1519,12 +1522,11 @@ class Global(var currentSettings: Settings, var reporter: Reporter)
     def compileUnits(units: List[CompilationUnit], fromPhase: Phase) {
       try compileUnitsInternal(units, fromPhase)
       catch { case ex: Throwable =>
-        val shown = if (settings.verbose.value) {
-          val pw = new java.io.PrintWriter(new java.io.StringWriter)
-          ex.printStackTrace(pw)
-          pw.toString
-        } else ex.getClass.getName
-        // ex.printStackTrace(Console.out) // DEBUG for fsc, note that error stacktraces do not print in fsc
+        val shown = if (settings.verbose.value)
+           stackTraceString(ex)
+         else
+           stackTraceHeadString(ex) // note that error stacktraces do not print in fsc
+
         globalError(supplementErrorMessage("uncaught exception during compilation: " + shown))
         throw ex
       }
@@ -1720,7 +1722,7 @@ class Global(var currentSettings: Settings, var reporter: Reporter)
     val printer = new icodes.TextPrinter(null, icodes.linearizer)
     icodes.classes.values.foreach((cls) => {
       val suffix = if (cls.symbol.hasModuleFlag) "$.icode" else ".icode"
-      var file = getFile(cls.symbol, suffix)
+      val file = getFile(cls.symbol, suffix)
 //      if (file.exists())
 //        file = new File(file.getParentFile(), file.getName() + "1")
       try {
@@ -1743,12 +1745,9 @@ class Global(var currentSettings: Settings, var reporter: Reporter)
   // deprecated method: but I see no simple way out, so I leave it for now.
   def forJVM           = settings.target.value startsWith "jvm"
   override def forMSIL = settings.target.value startsWith "msil"
-  def forInteractive   = onlyPresentation
-  def forScaladoc      = onlyPresentation
+  def forInteractive   = false
+  def forScaladoc      = false
   def createJavadoc    = false
-
-  @deprecated("Use forInteractive or forScaladoc, depending on what you're after", "2.9.0")
-  def onlyPresentation = false
 }
 
 object Global {

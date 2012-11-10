@@ -1,5 +1,5 @@
 /* NSC -- new Scala compiler
- * Copyright 2005-2012 LAMP/EPFL
+ * Copyright 2005-2013 LAMP/EPFL
  * @author  Martin Odersky
  */
 
@@ -91,6 +91,7 @@ trait Types extends api.Types { self: SymbolTable =>
 
   private final val printLubs = sys.props contains "scalac.debug.lub"
   private final val traceTypeVars = sys.props contains "scalac.debug.tvar"
+  private final val breakCycles = settings.breakCycles.value
   /** In case anyone wants to turn off lub verification without reverting anything. */
   private final val verifyLubs = true
   /** In case anyone wants to turn off type parameter bounds being used
@@ -99,10 +100,6 @@ trait Types extends api.Types { self: SymbolTable =>
   private final val propagateParameterBoundsToTypeVars = sys.props contains "scalac.debug.prop-constraints"
 
   protected val enableTypeVarExperimentals = settings.Xexperimental.value
-
-  /** Empty immutable maps to avoid allocations. */
-  private val emptySymMap   = immutable.Map[Symbol, Symbol]()
-  private val emptySymCount = immutable.Map[Symbol, Int]()
 
   /** The current skolemization level, needed for the algorithms
    *  in isSameType, isSubType that do constraint solving under a prefix.
@@ -1403,9 +1400,11 @@ trait Types extends api.Types { self: SymbolTable =>
   final class UniqueThisType(sym: Symbol) extends ThisType(sym) { }
 
   object ThisType extends ThisTypeExtractor {
-    def apply(sym: Symbol): Type =
-      if (phase.erasedTypes) sym.tpe_*
-      else unique(new UniqueThisType(sym))
+    def apply(sym: Symbol): Type = (
+      if (!phase.erasedTypes) unique(new UniqueThisType(sym))
+      else if (sym.isImplClass) sym.typeOfThis
+      else sym.tpe_*
+    )
   }
 
   /** A class for singleton types of the form `<prefix>.<sym.name>.type`.
@@ -1517,8 +1516,8 @@ trait Types extends api.Types { self: SymbolTable =>
     }
     private def lowerString = if (emptyLowerBound) "" else " >: " + lo
     private def upperString = if (emptyUpperBound) "" else " <: " + hi
-    private def emptyLowerBound = typeIsNothing(lo)
-    private def emptyUpperBound = typeIsAny(hi)
+    private def emptyLowerBound = typeIsNothing(lo) || lo.isWildcard
+    private def emptyUpperBound = typeIsAny(hi) || hi.isWildcard
     def isEmptyBounds = emptyLowerBound && emptyUpperBound
 
     // override def isNullable: Boolean = NullClass.tpe <:< lo;
@@ -1615,6 +1614,38 @@ trait Types extends api.Types { self: SymbolTable =>
     )
   }
 
+  protected def computeBaseClasses(tpe: Type): List[Symbol] = {
+    val parents = tpe.parents // adriaan says tpe.parents does work sometimes, so call it only once
+    val baseTail = (
+      if (parents.isEmpty || parents.head.isInstanceOf[PackageTypeRef]) Nil
+      else {
+        //Console.println("computing base classes of " + typeSymbol + " at phase " + phase);//DEBUG
+        // optimized, since this seems to be performance critical
+        val superclazz = parents.head // parents.isEmpty was already excluded
+        var mixins     = parents.tail
+        val sbcs       = superclazz.baseClasses
+        var bcs        = sbcs
+        def isNew(clazz: Symbol): Boolean = (
+          superclazz.baseTypeIndex(clazz) < 0 &&
+          { var p = bcs;
+            while ((p ne sbcs) && (p.head != clazz)) p = p.tail;
+            p eq sbcs
+          }
+        )
+        while (!mixins.isEmpty) {
+          def addMixinBaseClasses(mbcs: List[Symbol]): List[Symbol] =
+            if (mbcs.isEmpty) bcs
+            else if (isNew(mbcs.head)) mbcs.head :: addMixinBaseClasses(mbcs.tail)
+            else addMixinBaseClasses(mbcs.tail)
+          bcs = addMixinBaseClasses(mixins.head.baseClasses)
+          mixins = mixins.tail
+        }
+        bcs
+      }
+    )
+    tpe.typeSymbol :: baseTail
+  }
+
   protected def defineBaseTypeSeqOfCompoundType(tpe: CompoundType) = {
     val period = tpe.baseTypeSeqPeriod
     if (period != currentPeriod) {
@@ -1675,41 +1706,61 @@ trait Types extends api.Types { self: SymbolTable =>
       throw new TypeError("illegal cyclic inheritance involving " + tpe.typeSymbol)
   }
 
-  protected def defineBaseClassesOfCompoundType(tpe: CompoundType) = {
-    def computeBaseClasses: List[Symbol] =
-      if (tpe.parents.isEmpty) List(tpe.typeSymbol)
-      else {
-        //Console.println("computing base classes of " + typeSymbol + " at phase " + phase);//DEBUG
-        // optimized, since this seems to be performance critical
-        val superclazz = tpe.firstParent
-        var mixins = tpe.parents.tail
-        val sbcs = superclazz.baseClasses
-        var bcs = sbcs
-        def isNew(clazz: Symbol): Boolean =
-          superclazz.baseTypeIndex(clazz) < 0 &&
-          { var p = bcs;
-            while ((p ne sbcs) && (p.head != clazz)) p = p.tail;
-            p eq sbcs
-          }
-        while (!mixins.isEmpty) {
-          def addMixinBaseClasses(mbcs: List[Symbol]): List[Symbol] =
-            if (mbcs.isEmpty) bcs
-            else if (isNew(mbcs.head)) mbcs.head :: addMixinBaseClasses(mbcs.tail)
-            else addMixinBaseClasses(mbcs.tail)
-          bcs = addMixinBaseClasses(mixins.head.baseClasses)
-          mixins = mixins.tail
+  object baseClassesCycleMonitor {
+    private var open: List[Symbol] = Nil
+    @inline private def cycleLog(msg: => String) {
+      if (settings.debug.value)
+        Console.err.println(msg)
+    }
+    def size = open.size
+    def push(clazz: Symbol) {
+      cycleLog("+ " + ("  " * size) + clazz.fullNameString)
+      open ::= clazz
+    }
+    def pop(clazz: Symbol) {
+      assert(open.head eq clazz, (clazz, open))
+      open = open.tail
+    }
+    def isOpen(clazz: Symbol) = open contains clazz
+  }
+
+  protected def defineBaseClassesOfCompoundType(tpe: CompoundType) {
+    def define() = defineBaseClassesOfCompoundType(tpe, force = false)
+    if (!breakCycles || isPastTyper) define()
+    else tpe match {
+      // non-empty parents helpfully excludes all package classes
+      case tpe @ ClassInfoType(_ :: _, _, clazz) if !clazz.isAnonOrRefinementClass =>
+        // Cycle: force update
+        if (baseClassesCycleMonitor isOpen clazz)
+          defineBaseClassesOfCompoundType(tpe, force = true)
+        else {
+          baseClassesCycleMonitor push clazz
+          try define()
+          finally baseClassesCycleMonitor pop clazz
         }
-        tpe.typeSymbol :: bcs
-      }
+      case _ =>
+        define()
+    }
+  }
+  private def defineBaseClassesOfCompoundType(tpe: CompoundType, force: Boolean) {
     val period = tpe.baseClassesPeriod
-    if (period != currentPeriod) {
+    if (period == currentPeriod) {
+      if (force && breakCycles) {
+        def what = tpe.typeSymbol + " in " + tpe.typeSymbol.owner.fullNameString
+        val bcs  = computeBaseClasses(tpe)
+        tpe.baseClassesCache = bcs
+        warning(s"Breaking cycle in base class computation of $what ($bcs)")
+      }
+    }
+    else {
       tpe.baseClassesPeriod = currentPeriod
       if (!isValidForBaseClasses(period)) {
         val start = if (Statistics.canEnable) Statistics.pushTimer(typeOpsStack, baseClassesNanos) else null
         try {
           tpe.baseClassesCache = null
-          tpe.baseClassesCache = tpe.memo(computeBaseClasses)(tpe.typeSymbol :: _.baseClasses.tail)
-        } finally {
+          tpe.baseClassesCache = tpe.memo(computeBaseClasses(tpe))(tpe.typeSymbol :: _.baseClasses.tail)
+        }
+        finally {
           if (Statistics.canEnable) Statistics.popTimer(typeOpsStack, start)
         }
       }
@@ -1948,7 +1999,7 @@ trait Types extends api.Types { self: SymbolTable =>
       var change = false
       for ((from, targets) <- refs(NonExpansive).iterator)
         for (target <- targets) {
-          var thatInfo = classInfo(target)
+          val thatInfo = classInfo(target)
           if (thatInfo.state != Initialized)
             change = change | thatInfo.propagate()
           addRefs(NonExpansive, from, thatInfo.getRefs(NonExpansive, target))
@@ -1956,7 +2007,7 @@ trait Types extends api.Types { self: SymbolTable =>
         }
       for ((from, targets) <- refs(Expansive).iterator)
         for (target <- targets) {
-          var thatInfo = classInfo(target)
+          val thatInfo = classInfo(target)
           if (thatInfo.state != Initialized)
             change = change | thatInfo.propagate()
           addRefs(Expansive, from, thatInfo.getRefs(NonExpansive, target))
@@ -3870,7 +3921,17 @@ trait Types extends api.Types { self: SymbolTable =>
     def avoidWiden: Boolean = avoidWidening
 
     def addLoBound(tp: Type, isNumericBound: Boolean = false) {
-      if (!lobounds.contains(tp)) {
+      // For some reason which is still a bit fuzzy, we must let Nothing through as
+      // a lower bound despite the fact that Nothing is always a lower bound.  My current
+      // supposition is that the side-effecting type constraint accumulation mechanism
+      // depends on these subtype tests being performed to make forward progress when
+      // there are mutally recursive type vars.
+      // See pos/t6367 and pos/t6499 for the competing test cases.
+      val mustConsider = tp.typeSymbol match {
+        case NothingClass => true
+        case _            => !(lobounds contains tp)
+      }
+      if (mustConsider) {
         if (isNumericBound && isNumericValueType(tp)) {
           if (numlo == NoType || isNumericSubType(numlo, tp))
             numlo = tp
@@ -3890,7 +3951,13 @@ trait Types extends api.Types { self: SymbolTable =>
     }
 
     def addHiBound(tp: Type, isNumericBound: Boolean = false) {
-      if (!hibounds.contains(tp)) {
+      // My current test case only demonstrates the need to let Nothing through as
+      // a lower bound, but I suspect the situation is symmetrical.
+      val mustConsider = tp.typeSymbol match {
+        case AnyClass => true
+        case _        => !(hibounds contains tp)
+      }
+      if (mustConsider) {
         checkWidening(tp)
         if (isNumericBound && isNumericValueType(tp)) {
           if (numhi == NoType || isNumericSubType(tp, numhi))
@@ -4004,7 +4071,7 @@ trait Types extends api.Types { self: SymbolTable =>
         variance = -variance
         val tparams1 = mapOver(tparams)
         variance = -variance
-        var result1 = this(result)
+        val result1 = this(result)
         if ((tparams1 eq tparams) && (result1 eq result)) tp
         else PolyType(tparams1, result1.substSym(tparams, tparams1))
       case TypeBounds(lo, hi) =>
@@ -4066,7 +4133,7 @@ trait Types extends api.Types { self: SymbolTable =>
         else copyMethodType(tp, params1, result1.substSym(params, params1))
       case PolyType(tparams, result) =>
         val tparams1 = mapOver(tparams)
-        var result1 = this(result)
+        val result1 = this(result)
         if ((tparams1 eq tparams) && (result1 eq result)) tp
         else PolyType(tparams1, result1.substSym(tparams, tparams1))
       case NullaryMethodType(result) =>
@@ -4096,7 +4163,7 @@ trait Types extends api.Types { self: SymbolTable =>
         copyRefinedType(rtp, parents1, decls1)
       case ExistentialType(tparams, result) =>
         val tparams1 = mapOver(tparams)
-        var result1 = this(result)
+        val result1 = this(result)
         if ((tparams1 eq tparams) && (result1 eq result)) tp
         else newExistentialType(tparams1, result1.substSym(tparams, tparams1))
       case OverloadedType(pre, alts) =>
@@ -5730,6 +5797,8 @@ trait Types extends api.Types { self: SymbolTable =>
    *  types which are used internally in type applications and
    *  types which are not.
    */
+  /**** Not used right now, but kept around to document which Types
+   *    land in which bucket.
   private def isInternalTypeNotUsedAsTypeArg(tp: Type): Boolean = tp match {
     case AntiPolyType(pre, targs)            => true
     case ClassInfoType(parents, defs, clazz) => true
@@ -5740,6 +5809,7 @@ trait Types extends api.Types { self: SymbolTable =>
     case TypeBounds(lo, hi)                  => true
     case _                                   => false
   }
+  ****/
   private def isInternalTypeUsedAsTypeArg(tp: Type): Boolean = tp match {
     case WildcardType           => true
     case BoundedWildcardType(_) => true
@@ -6277,21 +6347,26 @@ trait Types extends api.Types { self: SymbolTable =>
         })
         if (!cyclic) {
           if (up) {
-            if (bound.typeSymbol != AnyClass)
+            if (bound.typeSymbol != AnyClass) {
+              log(s"$tvar addHiBound $bound.instantiateTypeParams($tparams, $tvars)")
               tvar addHiBound bound.instantiateTypeParams(tparams, tvars)
+            }
             for (tparam2 <- tparams)
               tparam2.info.bounds.lo.dealias match {
                 case TypeRef(_, `tparam`, _) =>
+                  log(s"$tvar addHiBound $tparam2.tpeHK.instantiateTypeParams($tparams, $tvars)")
                   tvar addHiBound tparam2.tpeHK.instantiateTypeParams(tparams, tvars)
                 case _ =>
               }
           } else {
             if (bound.typeSymbol != NothingClass && bound.typeSymbol != tparam) {
+              log(s"$tvar addLoBound $bound.instantiateTypeParams($tparams, $tvars)")
               tvar addLoBound bound.instantiateTypeParams(tparams, tvars)
             }
             for (tparam2 <- tparams)
               tparam2.info.bounds.hi.dealias match {
                 case TypeRef(_, `tparam`, _) =>
+                  log(s"$tvar addLoBound $tparam2.tpeHK.instantiateTypeParams($tparams, $tvars)")
                   tvar addLoBound tparam2.tpeHK.instantiateTypeParams(tparams, tvars)
                 case _ =>
               }
@@ -6300,14 +6375,15 @@ trait Types extends api.Types { self: SymbolTable =>
         tvar.constr.inst = NoType // necessary because hibounds/lobounds may contain tvar
 
         //println("solving "+tvar+" "+up+" "+(if (up) (tvar.constr.hiBounds) else tvar.constr.loBounds)+((if (up) (tvar.constr.hiBounds) else tvar.constr.loBounds) map (_.widen)))
-
-        tvar setInst (
+        val newInst = (
           if (up) {
             if (depth != AnyDepth) glb(tvar.constr.hiBounds, depth) else glb(tvar.constr.hiBounds)
           } else {
             if (depth != AnyDepth) lub(tvar.constr.loBounds, depth) else lub(tvar.constr.loBounds)
-          })
-
+          }
+        )
+        log(s"$tvar setInst $newInst")
+        tvar setInst newInst
         //Console.println("solving "+tvar+" "+up+" "+(if (up) (tvar.constr.hiBounds) else tvar.constr.loBounds)+((if (up) (tvar.constr.hiBounds) else tvar.constr.loBounds) map (_.widen))+" = "+tvar.constr.inst)//@MDEBUG
       }
     }
@@ -7164,8 +7240,12 @@ trait Types extends api.Types { self: SymbolTable =>
   /** Members of the given class, other than those inherited
    *  from Any or AnyRef.
    */
-  def nonTrivialMembers(clazz: Symbol): Iterable[Symbol] =
-    clazz.info.members filterNot (sym => sym.owner == ObjectClass || sym.owner == AnyClass)
+  def nonTrivialMembers(clazz: Symbol): Scope = clazz.info.members filterNot isUniversalMember
+
+  /** Members which can be imported into other scopes.
+   */
+  def importableMembers(clazz: Symbol): Scope = importableMembers(clazz.info)
+  def importableMembers(pre: Type): Scope     = pre.members filter isImportable
 
   def objToAny(tp: Type): Type =
     if (!phase.erasedTypes && tp.typeSymbol == ObjectClass) AnyClass.tpe

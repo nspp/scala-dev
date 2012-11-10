@@ -1,6 +1,6 @@
 /*                     __                                               *\
 **     ________ ___   / /  ___     Scala API                            **
-**    / __/ __// _ | / /  / _ |    (c) 2003-2011, LAMP/EPFL             **
+**    / __/ __// _ | / /  / _ |    (c) 2003-2013, LAMP/EPFL             **
 **  __\ \/ /__/ __ |/ /__/ __ |    http://scala-lang.org/               **
 ** /____/\___/_/ |_/____/_/ | |                                         **
 **                          |/                                          **
@@ -266,7 +266,7 @@ trait FlatHashTable[A] extends FlatHashTable.HashUtils[A] {
     val totalbuckets = totalSizeMapBuckets
     var bucketidx = 0
     var tableidx = 0
-    var tbl = table
+    val tbl = table
     var tableuntil = sizeMapBucketSize min tbl.length
     while (bucketidx < totalbuckets) {
       var currbucketsz = 0

@@ -1,6 +1,5 @@
 package scala.tools.reflect
 
-import scala.reflect.macros.{ReificationError, UnexpectedReificationError}
 import scala.reflect.macros.runtime.Context
 import scala.collection.mutable.ListBuffer
 import scala.collection.mutable.Stack

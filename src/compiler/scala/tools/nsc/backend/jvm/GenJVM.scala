@@ -1,12 +1,11 @@
 /* NSC -- new Scala compiler
- * Copyright 2005-2012 LAMP/EPFL
+ * Copyright 2005-2013 LAMP/EPFL
  * @author  Iulian Dragos
  */
 
 package scala.tools.nsc
 package backend.jvm
 
-import java.io.{ByteArrayOutputStream, DataOutputStream, OutputStream }
 import java.nio.ByteBuffer
 import scala.collection.{ mutable, immutable }
 import scala.reflect.internal.pickling.{ PickleFormat, PickleBuffer }
@@ -16,8 +15,6 @@ import scala.reflect.internal.ClassfileConstants._
 import ch.epfl.lamp.fjbg._
 import JAccessFlags._
 import JObjectType.{ JAVA_LANG_STRING, JAVA_LANG_OBJECT }
-import java.util.jar.{ JarEntry, JarOutputStream }
-import scala.tools.nsc.io.AbstractFile
 import scala.language.postfixOps
 
 /** This class ...
@@ -36,20 +33,6 @@ abstract class GenJVM extends SubComponent with GenJVMUtil with GenAndroid with 
 
   /** Create a new phase */
   override def newPhase(p: Phase): Phase = new JvmPhase(p)
-
-  private def outputDirectory(sym: Symbol): AbstractFile =
-    settings.outputDirs outputDirFor enteringFlatten(sym.sourceFile)
-
-  private def getFile(base: AbstractFile, clsName: String, suffix: String): AbstractFile = {
-    var dir = base
-    val pathParts = clsName.split("[./]").toList
-    for (part <- pathParts.init) {
-      dir = dir.subdirectoryNamed(part)
-    }
-    dir.fileNamed(pathParts.last + suffix)
-  }
-  private def getFile(sym: Symbol, clsName: String, suffix: String): AbstractFile =
-    getFile(outputDirectory(sym), clsName, suffix)
 
   /** JVM code generation phase
    */
@@ -87,7 +70,6 @@ abstract class GenJVM extends SubComponent with GenJVMUtil with GenAndroid with 
         // Before erasure so we can identify generic mains.
         enteringErasure {
           val companion     = sym.linkedClassOfClass
-          val companionMain = companion.tpe.member(nme.main)
 
           if (hasJavaMainMethod(companion))
             failNoForwarder("companion contains its own main method")
@@ -218,7 +200,6 @@ abstract class GenJVM extends SubComponent with GenJVMUtil with GenAndroid with 
 
     // Additional interface parents based on annotations and other cues
     def newParentForAttr(attr: Symbol): Option[Symbol] = attr match {
-      case SerializableAttr => Some(SerializableClass)
       case CloneableAttr    => Some(JavaCloneableClass)
       case RemoteAttr       => Some(RemoteInterfaceClass)
       case _                => None
@@ -529,9 +510,6 @@ abstract class GenJVM extends SubComponent with GenJVMUtil with GenAndroid with 
      * @author Ross Judson (ross.judson@soletta.com)
      */
     def genBeanInfoClass(c: IClass) {
-      val description = c.symbol getAnnotation BeanDescriptionAttr
-      // informProgress(description.toString)
-
       val beanInfoClass = fjbgContext.JClass(javaFlags(c.symbol),
             javaName(c.symbol) + "BeanInfo",
             "scala/beans/ScalaBeanInfo",
@@ -1078,7 +1056,7 @@ abstract class GenJVM extends SubComponent with GenJVMUtil with GenAndroid with 
 
       var i = 0
       var index = 0
-      var argTypes = mirrorMethod.getArgumentTypes()
+      val argTypes = mirrorMethod.getArgumentTypes()
       while (i < argTypes.length) {
         mirrorCode.emitLOAD(index, argTypes(i))
         index += argTypes(i).getSize()
@@ -1110,7 +1088,6 @@ abstract class GenJVM extends SubComponent with GenJVMUtil with GenAndroid with 
 
       val className    = jclass.getName
       val linkedClass  = moduleClass.companionClass
-      val linkedModule = linkedClass.companionSymbol
       lazy val conflictingNames: Set[Name] = {
         linkedClass.info.members collect { case sym if sym.name.isTermName => sym.name } toSet
       }
@@ -1354,9 +1331,9 @@ abstract class GenJVM extends SubComponent with GenJVMUtil with GenAndroid with 
             case LOAD_LOCAL(local)     => jcode.emitLOAD(indexOf(local), javaType(local.kind))
 
             case lf @ LOAD_FIELD(field, isStatic) =>
-              var owner = javaName(lf.hostClass)
+              val owner = javaName(lf.hostClass)
               debuglog("LOAD_FIELD with owner: " + owner +
-                    " flags: " + Flags.flagsToString(field.owner.flags))
+                    " flags: " + field.owner.flagString)
               val fieldJName = javaName(field)
               val fieldJType = javaType(field)
               if (isStatic) jcode.emitGETSTATIC(owner, fieldJName, fieldJType)
@@ -1364,7 +1341,7 @@ abstract class GenJVM extends SubComponent with GenJVMUtil with GenAndroid with 
 
             case LOAD_MODULE(module) =>
               // assert(module.isModule, "Expected module: " + module)
-              debuglog("generating LOAD_MODULE for: " + module + " flags: " + Flags.flagsToString(module.flags));
+              debuglog("generating LOAD_MODULE for: " + module + " flags: " + module.flagString);
               if (clasz.symbol == module.moduleClass && jmethod.getName() != nme.readResolve.toString)
                 jcode.emitALOAD_0()
               else

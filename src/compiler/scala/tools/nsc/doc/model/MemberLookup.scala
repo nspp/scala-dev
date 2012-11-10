@@ -4,8 +4,6 @@ package model
 
 import comment._
 
-import scala.reflect.internal.util.FakePos //Position
-
 /** This trait extracts all required information for documentation from compilation units */
 trait MemberLookup {
   thisFactory: ModelFactory =>
@@ -19,7 +17,7 @@ trait MemberLookup {
   def memberLookup(pos: Position, query: String, inTplOpt: Option[DocTemplateImpl]): LinkTo = {
     assert(modelFinished)
 
-    var members = breakMembers(query)
+    val members = breakMembers(query)
     //println(query + " => " + members)
 
     // (1) First look in the root package, as most of the links are qualified
@@ -48,9 +46,9 @@ trait MemberLookup {
           }
 
           if (sym.isClass || sym.isModule || sym.isTrait || sym.isPackage)
-            findExternalLink(linkName(sym))
+            findExternalLink(sym, linkName(sym))
           else if (owner.isClass || owner.isModule || owner.isTrait || owner.isPackage)
-            findExternalLink(linkName(owner) + "@" + externalSignature(sym))
+            findExternalLink(sym, linkName(owner) + "@" + externalSignature(sym))
           else
             None
         }
@@ -120,19 +118,17 @@ trait MemberLookup {
   private object OnlyTerm extends SearchStrategy
 
   private def lookupInRootPackage(pos: Position, members: List[String]) =
-    if (members.length == 1)
-      lookupInTemplate(pos, members, EmptyPackage) ::: lookupInTemplate(pos, members, RootPackage)
-    else
-      lookupInTemplate(pos, members, RootPackage)
+    lookupInTemplate(pos, members, EmptyPackage) ::: lookupInTemplate(pos, members, RootPackage)
 
   private def createLinks(syms: List[(Symbol, Symbol)]): List[LinkTo] =
     syms.flatMap { case (sym, owner) =>
-      if (sym.isClass || sym.isModule || sym.isTrait || sym.isPackage)
-        findTemplateMaybe(sym) map (LinkToTpl(_))
-      else
-        findTemplateMaybe(owner) flatMap { inTpl =>
-          inTpl.members find (_.asInstanceOf[EntityImpl].sym == sym) map (LinkToMember(_, inTpl))
-        }
+      findTemplateMaybe(sym) match {
+        case Some(tpl) => LinkToTpl(tpl) :: Nil
+        case None =>
+          findTemplateMaybe(owner) flatMap { inTpl =>
+            inTpl.members find (_.asInstanceOf[EntityImpl].sym == sym) map (LinkToMember(_, inTpl))
+          }
+      }
     }
 
   private def lookupInTemplate(pos: Position, members: List[String], container: Symbol): List[(Symbol, Symbol)] = {
@@ -153,7 +149,7 @@ trait MemberLookup {
 
       case tplName::rest =>
         def completeSearch(syms: List[Symbol]) =
-          syms filter {sym => sym.isPackage || sym.isClass || sym.isModule} flatMap (lookupInTemplate(pos, rest, _))
+          syms flatMap (lookupInTemplate(pos, rest, _))
 
         completeSearch(lookupInTemplate(pos, tplName, container, OnlyTerm)) match {
           case Nil => completeSearch(lookupInTemplate(pos, tplName, container, OnlyType))
@@ -173,7 +169,7 @@ trait MemberLookup {
     // and removing NoType classes
     def cleanupBogusClasses(syms: List[Symbol]) = { syms.filter(_.info != NoType) }
 
-    def syms(name: Name) = container.info.nonPrivateMember(name).alternatives
+    def syms(name: Name) = container.info.nonPrivateMember(name.encodedName).alternatives
     def termSyms = cleanupBogusClasses(syms(newTermName(name)))
     def typeSyms = cleanupBogusClasses(syms(newTypeName(name)))
 

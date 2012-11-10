@@ -1,5 +1,5 @@
 /* NSC -- new Scala compiler
- * Copyright 2005-2012 LAMP/EPFL
+ * Copyright 2005-2013 LAMP/EPFL
  * @author  Martin Odersky
  */
 
@@ -10,7 +10,6 @@ import java.io.IOException
 import scala.compat.Platform.currentTime
 import scala.tools.nsc.util.{ ClassPath }
 import classfile.ClassfileParser
-import scala.reflect.internal.Flags._
 import scala.reflect.internal.MissingRequirementError
 import scala.reflect.internal.util.Statistics
 import scala.tools.nsc.io.{ AbstractFile, MsilFile }
@@ -162,8 +161,8 @@ abstract class SymbolLoaders {
 
     private def setSource(sym: Symbol) {
       sourcefile foreach (sf => sym match {
-        case cls: ClassSymbol => cls.sourceFile = sf
-        case mod: ModuleSymbol => mod.moduleClass.sourceFile = sf
+        case cls: ClassSymbol => cls.associatedFile = sf
+        case mod: ModuleSymbol => mod.moduleClass.associatedFile = sf
         case _ => ()
       })
     }
@@ -226,7 +225,6 @@ abstract class SymbolLoaders {
       assert(root.isPackageClass, root)
       root.setInfo(new PackageClassInfoType(newScope, root))
 
-      val sourcepaths = classpath.sourcepaths
       if (!root.isRoot) {
         for (classRep <- classpath.classes if platform.doLoad(classRep)) {
           initializeFromClassPath(root, classRep)

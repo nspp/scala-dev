@@ -1,5 +1,5 @@
 /* NSC -- new Scala compiler
- * Copyright 2005-2012 LAMP/EPFL
+ * Copyright 2005-2013 LAMP/EPFL
  * @author  Paul Phillips
  */
 
@@ -142,7 +142,6 @@ object ScalaClassLoader {
          with HasClassPath {
 
     private var classloaderURLs: Seq[URL] = urls
-    private def classpathString = ClassPath.fromURLs(urls: _*)
     def classPathURLs: Seq[URL] = classloaderURLs
     def classPath: ClassPath[_] = JavaClassPath fromURLs classPathURLs
 

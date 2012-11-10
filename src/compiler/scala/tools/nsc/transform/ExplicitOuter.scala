@@ -1,5 +1,5 @@
 /* NSC -- new Scala compiler
- * Copyright 2005-2012 LAMP/EPFL
+ * Copyright 2005-2013 LAMP/EPFL
  * @author Martin Odersky
  */
 
@@ -158,10 +158,7 @@ abstract class ExplicitOuter extends InfoTransform
       var decls1 = decls
       if (isInner(clazz) && !clazz.isInterface) {
         decls1 = decls.cloneScope
-        val outerAcc = clazz.newMethod(nme.OUTER, clazz.pos) // 3
-        outerAcc expandName clazz
-
-        decls1 enter newOuterAccessor(clazz)
+        decls1 enter newOuterAccessor(clazz) // 3
         if (hasOuterField(clazz)) //2
           decls1 enter newOuterField(clazz)
       }
@@ -335,7 +332,7 @@ abstract class ExplicitOuter extends InfoTransform
      */
     def outerAccessorDef: Tree = {
       val outerAcc = outerAccessor(currentClass)
-      var rhs: Tree =
+      val rhs: Tree =
         if (outerAcc.isDeferred) EmptyTree
         else This(currentClass) DOT outerField(currentClass)
 
@@ -493,8 +490,11 @@ abstract class ExplicitOuter extends InfoTransform
         case Select(qual, name) =>
           // make not private symbol acessed from inner classes, as well as
           // symbols accessed from @inline methods
+          //
+          // See SI-6552 for an example of why `sym.owner.enclMethod hasAnnotation ScalaInlineClass`
+          // is not suitable; if we make a method-local class non-private, it mangles outer pointer names.
           if (currentClass != sym.owner ||
-              (sym.owner.enclMethod hasAnnotation ScalaInlineClass))
+              (closestEnclMethod(currentOwner) hasAnnotation ScalaInlineClass))
             sym.makeNotPrivate(sym.owner)
 
           val qsym = qual.tpe.widen.typeSymbol

@@ -1,5 +1,5 @@
 /* NSC -- new Scala compiler
- * Copyright 2006-2012 LAMP/EPFL
+ * Copyright 2006-2013 LAMP/EPFL
  * @author  Martin Odersky
  */
 
@@ -11,7 +11,6 @@ import java.net.URL
 import scala.collection.{ mutable, immutable }
 import io.{ File, Directory, Path, Jar, AbstractFile }
 import scala.reflect.internal.util.StringOps.splitWhere
-import scala.reflect.ClassTag
 import Jar.isJarOrZip
 import File.pathSeparator
 import java.net.MalformedURLException
@@ -31,10 +30,6 @@ object ClassPath {
     /** Get all subdirectories, jars, zips out of a directory. */
     def lsDir(dir: Directory, filt: String => Boolean = _ => true) =
       dir.list filter (x => filt(x.name) && (x.isDirectory || isJarOrZip(x))) map (_.path) toList
-
-    def basedir(s: String) =
-      if (s contains File.separator) s.substring(0, s.lastIndexOf(File.separator))
-      else "."
 
     if (pattern == "*") lsDir(Directory("."))
     else if (pattern endsWith wildSuffix) lsDir(Directory(pattern dropRight 2))

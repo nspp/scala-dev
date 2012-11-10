@@ -1,5 +1,5 @@
 /* NSC -- new Scala compiler
- * Copyright 2005-2012 LAMP/EPFL
+ * Copyright 2005-2013 LAMP/EPFL
  * @author  Martin Odersky
  */
 
@@ -31,7 +31,7 @@ trait Definitions extends api.StandardDefinitions {
     val clazz = owner.newClassSymbol(name, NoPosition, flags)
     clazz setInfoAndEnter ClassInfoType(parents, newScope, clazz)
   }
-  private def newMethod(owner: Symbol, name: TermName, formals: List[Type], restpe: Type, flags: Long = 0L): MethodSymbol = {
+  private def newMethod(owner: Symbol, name: TermName, formals: List[Type], restpe: Type, flags: Long): MethodSymbol = {
     val msym   = owner.newMethod(name.encode, NoPosition, flags)
     val params = msym.newSyntheticValueParams(formals)
     msym setInfo MethodType(params, restpe)
@@ -235,6 +235,26 @@ trait Definitions extends api.StandardDefinitions {
       scope.sorted foreach fullyInitializeSymbol
       scope
     }
+    /** Is this symbol a member of Object or Any? */
+    def isUniversalMember(sym: Symbol) = (
+         (sym ne NoSymbol)
+      && (ObjectClass isSubClass sym.owner)
+    )
+
+    /** Is this symbol unimportable? Unimportable symbols include:
+     *  - constructors, because <init> is not a real name
+     *  - private[this] members, which cannot be referenced from anywhere else
+     *  - members of Any or Object, because every instance will inherit a
+     *    definition which supersedes the imported one
+     */
+    def isUnimportable(sym: Symbol) = (
+         (sym eq NoSymbol)
+      || sym.isConstructor
+      || sym.isPrivateLocal
+      || isUniversalMember(sym)
+    )
+    def isImportable(sym: Symbol) = !isUnimportable(sym)
+
     /** Is this type equivalent to Any, AnyVal, or AnyRef? */
     def isTrivialTopType(tp: Type) = (
          tp =:= AnyClass.tpe
@@ -540,10 +560,12 @@ trait Definitions extends api.StandardDefinitions {
     lazy val ScalaLongSignatureAnnotation = requiredClass[scala.reflect.ScalaLongSignature]
 
     // Option classes
-    lazy val OptionClass: ClassSymbol = requiredClass[Option[_]]
-    lazy val SomeClass: ClassSymbol   = requiredClass[Some[_]]
-    lazy val NoneModule: ModuleSymbol = requiredModule[scala.None.type]
-    lazy val SomeModule: ModuleSymbol = requiredModule[scala.Some.type]
+    lazy val OptionClass: ClassSymbol   = requiredClass[Option[_]]
+    lazy val OptionModule: ModuleSymbol = requiredModule[scala.Option.type]
+      lazy val Option_apply             = getMemberMethod(OptionModule, nme.apply)
+    lazy val SomeClass: ClassSymbol     = requiredClass[Some[_]]
+    lazy val NoneModule: ModuleSymbol   = requiredModule[scala.None.type]
+    lazy val SomeModule: ModuleSymbol   = requiredModule[scala.Some.type]
 
     def compilerTypeFromTag(tt: ApiUniverse # WeakTypeTag[_]): Type = tt.in(rootMirror).tpe
     def compilerSymbolFromTag(tt: ApiUniverse # WeakTypeTag[_]): Symbol = tt.in(rootMirror).tpe.typeSymbol
@@ -668,6 +690,11 @@ trait Definitions extends api.StandardDefinitions {
     def getProductArgs(tpe: Type): List[Type] = tpe.baseClasses find isProductNClass match {
       case Some(x)  => tpe.baseType(x).typeArgs
       case _        => Nil
+    }
+
+    def dropNullaryMethod(tp: Type) = tp match {
+      case NullaryMethodType(restpe) => restpe
+      case _                         => tp
     }
 
     def unapplyUnwrap(tpe:Type) = tpe.finalResultType.normalize match {
@@ -861,6 +888,12 @@ trait Definitions extends api.StandardDefinitions {
         parents filterNot (_.typeSymbol eq ObjectClass)
       else
         removeRedundantObjects(parents)
+    }
+
+    /** Flatten curried parameter lists of a method type. */
+    def allParameters(tpe: Type): List[Symbol] = tpe match {
+      case MethodType(params, res) => params ::: allParameters(res)
+      case _                       => Nil
     }
 
     def typeStringNoPackage(tp: Type) =
@@ -1057,7 +1090,6 @@ trait Definitions extends api.StandardDefinitions {
       }
     }
     def getMemberClass(owner: Symbol, name: Name): ClassSymbol = {
-      val y = getMember(owner, name.toTypeName)
       getMember(owner, name.toTypeName) match {
         case x: ClassSymbol => x
         case _              => fatalMissingSymbol(owner, name, "member class")
@@ -1221,21 +1253,10 @@ trait Definitions extends api.StandardDefinitions {
       else flatNameString(etp.typeSymbol, '.')
     }
 
-   /** Surgery on the value classes.  Without this, AnyVals defined in source
-     *  files end up with an AnyRef parent.  It is likely there is a better way
-     *  to evade that AnyRef.
-     */
-    private def setParents(sym: Symbol, parents: List[Type]): Symbol = sym.rawInfo match {
-      case ClassInfoType(_, scope, clazz) =>
-        sym setInfo ClassInfoType(parents, scope, clazz)
-      case _ =>
-        sym
-    }
-
     def init() {
       if (isInitialized) return
       // force initialization of every symbol that is synthesized or hijacked by the compiler
-      val forced = symbolsNotPresentInBytecode
+      val _ = symbolsNotPresentInBytecode
       isInitialized = true
     } //init
 

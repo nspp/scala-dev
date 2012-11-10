@@ -5,7 +5,7 @@ import internal.Flags
 import java.lang.{Class => jClass, Package => jPackage}
 import scala.collection.mutable
 
-trait SymbolLoaders { self: SymbolTable =>
+private[reflect] trait SymbolLoaders { self: SymbolTable =>
 
   /** The standard completer for top-level classes
    *  @param clazz   The top-level class
@@ -116,7 +116,7 @@ trait SymbolLoaders { self: SymbolTable =>
         currentMirror.tryJavaClass(path) match {
           case Some(cls) =>
             val loadingMirror = currentMirror.mirrorDefining(cls)
-            val (clazz, module) =
+            val (_, module) =
               if (loadingMirror eq currentMirror) {
                 createClassModule(pkgClass, name.toTypeName, new TopClassCompleter(_, _))
               } else {

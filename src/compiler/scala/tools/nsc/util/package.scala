@@ -1,5 +1,5 @@
 /* NSC -- new Scala compiler
- * Copyright 2005-2012 LAMP/EPFL
+ * Copyright 2005-2013 LAMP/EPFL
  * @author Paul Phillips
  */
 
@@ -82,6 +82,18 @@ package object util {
     bs.toString()
   }
   def stackTraceString(ex: Throwable): String = stringFromWriter(ex printStackTrace _)
+
+  /** A one line string which contains the class of the exception, the
+   *  message if any, and the first non-Predef location in the stack trace
+   *  (to exclude assert, require, etc.)
+   */
+  def stackTraceHeadString(ex: Throwable): String = {
+    val frame = ex.getStackTrace.dropWhile(_.getClassName contains "Predef").head
+    val msg   = ex.getMessage match { case null | "" => "" ; case s => s"""("$s")""" }
+    val clazz = ex.getClass.getName.split('.').last
+
+    s"$clazz$msg @ $frame"
+  }
 
   lazy val trace = new SimpleTracer(System.out)
   lazy val errtrace = new SimpleTracer(System.err)

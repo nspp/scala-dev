@@ -1,5 +1,5 @@
 /* NSC -- new Scala compiler
- * Copyright 2005-2012 LAMP/EPFL
+ * Copyright 2005-2013 LAMP/EPFL
  * @author  Martin Odersky
  */
 
@@ -8,9 +8,7 @@ package typechecker
 
 import scala.collection.mutable
 import scala.annotation.tailrec
-import scala.ref.WeakReference
 import symtab.Flags._
-import scala.tools.nsc.io.AbstractFile
 
 /** This trait declares methods to create symbols and to enter them into scopes.
  *
@@ -113,10 +111,8 @@ trait Namers extends MethodSynthesis {
       || (context.unit.isJava)
     )
     def noFinishGetterSetter(vd: ValDef) = (
-         vd.mods.isPrivateLocal
-      || vd.symbol.isModuleVar
-      || vd.symbol.isLazy
-    )
+         (vd.mods.isPrivateLocal && !vd.mods.isLazy) // all lazy vals need accessors, even private[this]
+      || vd.symbol.isModuleVar)
 
     def setPrivateWithin[T <: Symbol](tree: Tree, sym: T, mods: Modifiers): T =
       if (sym.isPrivateLocal || !mods.hasAccessBoundary) sym
@@ -339,11 +335,10 @@ trait Namers extends MethodSynthesis {
     }
 
     private def enterClassSymbol(tree: ClassDef, clazz: ClassSymbol): Symbol = {
-      val file = contextFile
       if (clazz.sourceFile != null && clazz.sourceFile != contextFile)
         debugwarn("!!! Source mismatch in " + clazz + ": " + clazz.sourceFile + " vs. " + contextFile)
 
-      clazz.sourceFile = contextFile
+      clazz.associatedFile = contextFile
       if (clazz.sourceFile != null) {
         assert(currentRun.canRedefine(clazz) || clazz.sourceFile == currentRun.symSource(clazz), clazz.sourceFile)
         currentRun.symSource(clazz) = clazz.sourceFile
@@ -383,8 +378,8 @@ trait Namers extends MethodSynthesis {
       if (sym eq NoSymbol) return
 
       val ctx    = if (context.owner.isPackageObjectClass) context.outer else context
-      val module = if (sym.isModule) sym else ctx.scope lookup tree.name.toTermName
-      val clazz  = if (sym.isClass) sym else ctx.scope lookup tree.name.toTypeName
+      val module = if (sym.isModule) sym else ctx.scope lookupModule tree.name
+      val clazz  = if (sym.isClass) sym else ctx.scope lookupClass tree.name
       val fails  = (
            module.isModule
         && clazz.isClass
@@ -393,6 +388,8 @@ trait Namers extends MethodSynthesis {
         && (clazz.sourceFile ne null)
         && (module.sourceFile ne null)
         && !(module isCoDefinedWith clazz)
+        && module.exists
+        && clazz.exists
       )
       if (fails) {
         context.unit.error(tree.pos, (
@@ -414,7 +411,7 @@ trait Namers extends MethodSynthesis {
      *  a module definition or a class definition.
      */
     def enterModuleSymbol(tree : ModuleDef): Symbol = {
-      var m: Symbol = context.scope.lookup(tree.name)
+      var m: Symbol = context.scope lookupAll tree.name find (_.isModule) getOrElse NoSymbol
       val moduleFlags = tree.mods.flags | MODULE
       if (m.isModule && !m.isPackage && inCurrentScope(m) && (currentRun.canRedefine(m) || m.isSynthetic)) {
         updatePosFlags(m, tree.pos, moduleFlags)
@@ -429,7 +426,7 @@ trait Namers extends MethodSynthesis {
         setPrivateWithin(tree, m.moduleClass)
       }
       if (m.owner.isPackageClass && !m.isPackage) {
-        m.moduleClass.sourceFile = contextFile
+        m.moduleClass.associatedFile = contextFile
         currentRun.symSource(m) = m.moduleClass.sourceFile
         registerTopLevelSym(m)
       }
@@ -643,7 +640,7 @@ trait Namers extends MethodSynthesis {
     }
 
     def enterClassDef(tree: ClassDef) {
-      val ClassDef(mods, name, tparams, impl) = tree
+      val ClassDef(mods, _, _, impl) = tree
       val primaryConstructorArity = treeInfo.firstConstructorArgs(impl.body).size
       tree.symbol = enterClassSymbol(tree)
       tree.symbol setInfo completerOf(tree)
@@ -707,41 +704,55 @@ trait Namers extends MethodSynthesis {
 
 // --- Lazy Type Assignment --------------------------------------------------
 
-    def initializeLowerBounds(tp: Type): Type = {
+    def findCyclicalLowerBound(tp: Type): Symbol = {
       tp match {
         case TypeBounds(lo, _) =>
           // check that lower bound is not an F-bound
-          for (TypeRef(_, sym, _) <- lo)
-            sym.initialize
+          // but carefully: class Foo[T <: Bar[_ >: T]] should be allowed
+          for (tp1 @ TypeRef(_, sym, _) <- lo) {
+            if (settings.breakCycles.value) {
+              if (!sym.maybeInitialize) {
+                log(s"Cycle inspecting $lo for possible f-bounds: ${sym.fullLocationString}")
+                return sym
+              }
+            }
+            else sym.initialize
+          }
         case _ =>
       }
-      tp
+      NoSymbol
     }
 
     def monoTypeCompleter(tree: Tree) = mkTypeCompleter(tree) { sym =>
+      // this early test is there to avoid infinite baseTypes when
+      // adding setters and getters --> bug798
+      // It is a def in an attempt to provide some insulation against
+      // uninitialized symbols misleading us. It is not a certainty
+      // this accomplishes anything, but performance is a non-consideration
+      // on these flag checks so it can't hurt.
+      def needsCycleCheck = sym.isNonClassType && !sym.isParameter && !sym.isExistential
       logAndValidate(sym) {
-        val tp = initializeLowerBounds(typeSig(tree))
+        val tp = typeSig(tree)
+
+        findCyclicalLowerBound(tp) andAlso { sym =>
+          if (needsCycleCheck) {
+            // neg/t1224:  trait C[T] ; trait A { type T >: C[T] <: C[C[T]] }
+            // To avoid an infinite loop on the above, we cannot break all cycles
+            log(s"Reinitializing info of $sym to catch any genuine cycles")
+            sym reset sym.info
+            sym.initialize
+          }
+        }
         sym setInfo {
           if (sym.isJavaDefined) RestrictJavaArraysMap(tp)
           else tp
         }
-        // this early test is there to avoid infinite baseTypes when
-        // adding setters and getters --> bug798
-        val needsCycleCheck = (sym.isAliasType || sym.isAbstractType) && !sym.isParameter
-        if (needsCycleCheck && !typer.checkNonCyclic(tree.pos, tp))
-          sym setInfo ErrorType
+        if (needsCycleCheck) {
+          log(s"Needs cycle check: ${sym.debugLocationString}")
+          if (!typer.checkNonCyclic(tree.pos, tp))
+            sym setInfo ErrorType
+        }
       }
-      // tree match {
-      //   case ClassDef(_, _, _, impl) =>
-      //     val parentsOK = (
-      //          treeInfo.isInterface(sym, impl.body)
-      //       || (sym eq ArrayClass)
-      //       || (sym isSubClass AnyValClass)
-      //     )
-      //     if (!parentsOK)
-      //       ensureParent(sym, AnyRefClass)
-      //   case _ => ()
-      // }
     }
 
     def moduleClassTypeCompleter(tree: ModuleDef) = {
@@ -1186,9 +1197,9 @@ trait Namers extends MethodSynthesis {
               // same local block several times (which can happen in interactive mode) we might
               // otherwise not find the default symbol, because the second time it the method
               // symbol will be re-entered in the scope but the default parameter will not.
-              val att = meth.attachments.get[DefaultsOfLocalMethodAttachment] match {
+              meth.attachments.get[DefaultsOfLocalMethodAttachment] match {
                 case Some(att) => att.defaultGetters += default
-                case None => meth.updateAttachment(new DefaultsOfLocalMethodAttachment(default))
+                case None      => meth.updateAttachment(new DefaultsOfLocalMethodAttachment(default))
               }
             }
           } else if (baseHasDefault) {

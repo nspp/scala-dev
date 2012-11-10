@@ -1,5 +1,5 @@
 /* NSC -- new Scala compiler
- * Copyright 2007-2012 LAMP/EPFL
+ * Copyright 2007-2013 LAMP/EPFL
  * @author  David Bernard, Manohar Jonnalagedda
  */
 
@@ -7,10 +7,6 @@ package scala.tools.nsc
 package doc
 package html
 package page
-
-import model._
-import model.diagram._
-import diagram._
 
 import scala.xml.{ NodeSeq, Text, UnprefixedAttribute }
 import scala.language.postfixOps
@@ -273,7 +269,7 @@ class Template(universe: doc.Universe, generator: DiagramGenerator, tpl: DocTemp
 
       {
         if (Set("epfl", "EPFL").contains(tpl.universe.settings.docfooter.value))
-          <div id="footer">Scala programming documentation. Copyright (c) 2003-2012 <a href="http://www.epfl.ch" target="_top">EPFL</a>, with contributions from <a href="http://typesafe.com" target="_top">Typesafe</a>.</div>
+          <div id="footer">Scala programming documentation. Copyright (c) 2003-2013 <a href="http://www.epfl.ch" target="_top">EPFL</a>, with contributions from <a href="http://typesafe.com" target="_top">Typesafe</a>.</div>
         else
           <div id="footer"> { tpl.universe.settings.docfooter.value } </div>
       }
@@ -527,7 +523,7 @@ class Template(universe: doc.Universe, generator: DiagramGenerator, tpl: DocTemp
 
     val sourceLink: Seq[scala.xml.Node] = mbr match {
       case dtpl: DocTemplateEntity if (isSelf && dtpl.sourceUrl.isDefined && dtpl.inSource.isDefined && !isReduced) =>
-        val (absFile, line) = dtpl.inSource.get
+        val (absFile, _) = dtpl.inSource.get
         <dt>Source</dt>
         <dd>{ <a href={ dtpl.sourceUrl.get.toString } target="_blank">{ Text(absFile.file.getName) }</a> }</dd>
       case _ => NodeSeq.Empty
@@ -651,7 +647,6 @@ class Template(universe: doc.Universe, generator: DiagramGenerator, tpl: DocTemp
         case dtpl: DocTemplateEntity if isSelf && !isReduced =>
           val diagram = f(dtpl)
           if (diagram.isDefined) {
-            val s = universe.settings
             val diagramSvg = generator.generate(diagram.get, tpl, this)
             if (diagramSvg != NodeSeq.Empty) {
               <div class="toggleContainer block diagram-container" id={ id + "-container"}>

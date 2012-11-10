@@ -1,5 +1,5 @@
  /* NSC -- new Scala compiler
- * Copyright 2005-2012 LAMP/EPFL
+ * Copyright 2005-2013 LAMP/EPFL
  * @author  Martin Odersky
  */
 
@@ -654,7 +654,7 @@ trait Symbols extends api.Symbols { self: SymbolTable =>
       info.firstParent.typeSymbol == AnyValClass && !isPrimitiveValueClass
 
     final def isMethodWithExtension =
-      isMethod && owner.isDerivedValueClass && !isParamAccessor && !isConstructor && !hasFlag(SUPERACCESSOR)
+      isMethod && owner.isDerivedValueClass && !isParamAccessor && !isConstructor && !hasFlag(SUPERACCESSOR) && !isTermMacro
 
     final def isAnonymousFunction = isSynthetic && (name containsName tpnme.ANON_FUN_NAME)
     final def isDefinedInPackage  = effectiveOwner.isPackageClass
@@ -709,10 +709,7 @@ trait Symbols extends api.Symbols { self: SymbolTable =>
       }
 
     def isStrictFP          = hasAnnotation(ScalaStrictFPAttr) || (enclClass hasAnnotation ScalaStrictFPAttr)
-    def isSerializable      = (
-         info.baseClasses.exists(p => p == SerializableClass || p == JavaSerializableClass)
-      || hasAnnotation(SerializableAttr) // last part can be removed, @serializable annotation is deprecated
-    )
+    def isSerializable      = info.baseClasses.exists(p => p == SerializableClass || p == JavaSerializableClass)
     def hasBridgeAnnotation = hasAnnotation(BridgeClass)
     def isDeprecated        = hasAnnotation(DeprecatedAttr)
     def deprecationMessage  = getAnnotation(DeprecatedAttr) flatMap (_ stringArg 0)
@@ -1398,6 +1395,10 @@ trait Symbols extends api.Symbols { self: SymbolTable =>
       if (!isInitialized) info
       this
     }
+    def maybeInitialize = {
+      try   { initialize ; true }
+      catch { case _: CyclicReference => debuglog("Hit cycle in maybeInitialize of $this") ; false }
+    }
 
     /** Called when the programmer requests information that might require initialization of the underlying symbol.
      *
@@ -1671,12 +1672,23 @@ trait Symbols extends api.Symbols { self: SymbolTable =>
 
     def filter(cond: Symbol => Boolean): Symbol =
       if (isOverloaded) {
-        val alts = alternatives
-        val alts1 = alts filter cond
-        if (alts1 eq alts) this
+        var changed = false
+        var alts0: List[Symbol] = alternatives
+        var alts1: List[Symbol] = Nil
+
+        while (alts0.nonEmpty) {
+          if (cond(alts0.head))
+            alts1 ::= alts0.head
+          else
+            changed = true
+
+          alts0 = alts0.tail
+        }
+
+        if (!changed) this
         else if (alts1.isEmpty) NoSymbol
         else if (alts1.tail.isEmpty) alts1.head
-        else owner.newOverloaded(info.prefix, alts1)
+        else owner.newOverloaded(info.prefix, alts1.reverse)
       }
       else if (cond(this)) this
       else NoSymbol
@@ -3280,6 +3292,14 @@ trait Symbols extends api.Symbols { self: SymbolTable =>
   /** A deep map on a symbol's paramss.
    */
   def mapParamss[T](sym: Symbol)(f: Symbol => T): List[List[T]] = mmap(sym.info.paramss)(f)
+
+  /** Return closest enclosing method, unless shadowed by an enclosing class. */
+  // TODO Move back to ExplicitOuter when the other call site is removed.
+  // no use of closures here in the interest of speed.
+  final def closestEnclMethod(from: Symbol): Symbol =
+    if (from.isSourceMethod) from
+    else if (from.isClass) NoSymbol
+    else closestEnclMethod(from.owner)
 
   /** An exception for cyclic references of symbol definitions */
   case class CyclicReference(sym: Symbol, info: Type)

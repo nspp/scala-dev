@@ -1,5 +1,5 @@
 /* NSC -- new Scala compiler
- * Copyright 2009-2012 Scala Solutions and LAMP/EPFL
+ * Copyright 2009-2013 Typesafe/Scala Solutions and LAMP/EPFL
  * @author Martin Odersky
  */
 package scala.tools.nsc
@@ -8,17 +8,13 @@ package interactive
 import java.io.{ PrintWriter, StringWriter, FileReader, FileWriter }
 import scala.collection.mutable
 import mutable.{LinkedHashMap, SynchronizedMap, HashSet, SynchronizedSet}
-import scala.concurrent.SyncVar
 import scala.util.control.ControlThrowable
 import scala.tools.nsc.io.{ AbstractFile, LogReplay, Logger, NullLogger, Replayer }
-import scala.tools.nsc.util.{ WorkScheduler, MultiHashMap }
+import scala.tools.nsc.util.MultiHashMap
 import scala.reflect.internal.util.{ SourceFile, BatchSourceFile, Position, RangePosition, NoPosition }
 import scala.tools.nsc.reporters._
 import scala.tools.nsc.symtab._
-import scala.tools.nsc.ast._
-import scala.tools.nsc.io.Pickler._
 import scala.tools.nsc.typechecker.DivergentImplicit
-import scala.annotation.tailrec
 import symtab.Flags.{ACCESSOR, PARAMACCESSOR}
 import scala.language.implicitConversions
 
@@ -205,7 +201,7 @@ class Global(settings: Settings, _reporter: Reporter, projectName: String = "")
 
   protected[interactive] var minRunId = 1
 
-  private var interruptsEnabled = true
+  private[interactive] var interruptsEnabled = true
 
   private val NoResponse: Response[_] = new Response[Any]
 
@@ -355,7 +351,7 @@ class Global(settings: Settings, _reporter: Reporter, projectName: String = "")
             }
 
             // don't forget to service interrupt requests
-            val iqs = scheduler.dequeueAllInterrupts(_.execute())
+            scheduler.dequeueAllInterrupts(_.execute())
 
             debugLog("ShutdownReq: cleaning work queue (%d items)".format(units.size))
             debugLog("Cleanup up responses (%d loadedType pending, %d parsedEntered pending)"
@@ -1041,6 +1037,7 @@ class Global(settings: Settings, _reporter: Reporter, projectName: String = "")
     }
   }
 
+  @deprecated("SI-6458: Instrumentation logic will be moved out of the compiler.","2.10.0")
   def getInstrumented(source: SourceFile, line: Int, response: Response[(String, Array[Char])]) {
     try {
       interruptsEnabled = false

@@ -1,6 +1,6 @@
 /* NSC -- new Scala compiler
  *
- * Copyright 2011-2012 LAMP/EPFL
+ * Copyright 2011-2013 LAMP/EPFL
  * @author Adriaan Moors
  */
 
@@ -37,13 +37,11 @@ import scala.reflect.internal.Types
   *  - recover exhaustivity/unreachability of user-defined extractors by partitioning the types they match on using an HList or similar type-level structure
   */
 trait PatternMatching extends Transform with TypingTransformers with ast.TreeDSL {   // self: Analyzer =>
-  import Statistics._
   import PatternMatchingStats._
 
   val global: Global               // need to repeat here because otherwise last mixin defines global as
                                    // SymbolTable. If we had DOT this would not be an issue
   import global._                  // the global environment
-  import definitions._             // standard classes and methods
 
   val phaseName: String = "patmat"
 
@@ -192,7 +190,6 @@ trait PatternMatching extends Transform with TypingTransformers with ast.TreeDSL
 
   trait MatchTranslation extends MatchMonadInterface { self: TreeMakers with CodegenCore =>
     import typer.{typed, context, silent, reallyExists}
-    // import typer.infer.containsUnchecked
 
     // Why is it so difficult to say "here's a name and a context, give me any
     // matching symbol in scope" ? I am sure this code is wrong, but attempts to
@@ -1376,10 +1373,6 @@ trait PatternMatching extends Transform with TypingTransformers with ast.TreeDSL
             t.symbol.owner = currentOwner
           case d : DefTree if (d.symbol != NoSymbol) && ((d.symbol.owner == NoSymbol) || (d.symbol.owner == origOwner)) => // don't indiscriminately change existing owners! (see e.g., pos/t3440, pos/t3534, pos/unapplyContexts2)
             patmatDebug("def: "+ (d, d.symbol.ownerChain, currentOwner.ownerChain))
-            if(d.symbol.isLazy) { // for lazy val's accessor -- is there no tree??
-              assert(d.symbol.lazyAccessor != NoSymbol && d.symbol.lazyAccessor.owner == d.symbol.owner, d.symbol.lazyAccessor)
-              d.symbol.lazyAccessor.owner = currentOwner
-            }
             if(d.symbol.moduleClass ne NoSymbol)
               d.symbol.moduleClass.owner = currentOwner
 
@@ -1437,7 +1430,7 @@ trait PatternMatching extends Transform with TypingTransformers with ast.TreeDSL
       def flatMap(prev: Tree, b: Symbol, next: Tree): Tree
       def flatMapCond(cond: Tree, res: Tree, nextBinder: Symbol, next: Tree): Tree
       def flatMapGuard(cond: Tree, next: Tree): Tree
-      def ifThenElseZero(c: Tree, then: Tree): Tree = IF (c) THEN then ELSE zero
+      def ifThenElseZero(c: Tree, thenp: Tree): Tree = IF (c) THEN thenp ELSE zero
       protected def zero: Tree
     }
 
@@ -1530,7 +1523,7 @@ trait PatternMatching extends Transform with TypingTransformers with ast.TreeDSL
       // __match.zero
       protected def zero: Tree = _match(vpmName.zero)
       // __match.guard(`c`, `then`)
-      def guard(c: Tree, then: Tree): Tree = _match(vpmName.guard) APPLY (c, then)
+      def guard(c: Tree, thenp: Tree): Tree = _match(vpmName.guard) APPLY (c, thenp)
 
       //// methods in the monad instance -- used directly in translation
       // `prev`.flatMap(`b` => `next`)
@@ -1823,9 +1816,9 @@ trait PatternMatching extends Transform with TypingTransformers with ast.TreeDSL
       def toString(x: AnyRef) = if (x eq null) "" else x.toString
       if (cols.isEmpty || cols.tails.isEmpty) cols map toString
       else {
-        val (colStrs, colLens) = cols map {c => val s = toString(c); (s, s.length)} unzip
-        val maxLen = max(colLens)
-        val avgLen = colLens.sum/colLens.length
+        val colLens = cols map (c => toString(c).length)
+        val maxLen  = max(colLens)
+        val avgLen  = colLens.sum/colLens.length
         val goalLen = maxLen min avgLen*2
         def pad(s: String) = {
           val toAdd = ((goalLen - s.length) max 0) + 2
@@ -2059,7 +2052,7 @@ trait PatternMatching extends Transform with TypingTransformers with ast.TreeDSL
     // throws an AnalysisBudget.Exception when the prop results in a CNF that's too big
     // TODO: be smarter/more efficient about this (http://lara.epfl.ch/w/sav09:tseitin_s_encoding)
     def eqFreePropToSolvable(p: Prop): Formula = {
-      def negationNormalFormNot(p: Prop, budget: Int = AnalysisBudget.max): Prop =
+      def negationNormalFormNot(p: Prop, budget: Int): Prop =
         if (budget <= 0) throw AnalysisBudget.exceeded
         else p match {
           case And(a, b) =>  Or(negationNormalFormNot(a, budget - 1), negationNormalFormNot(b, budget - 1))
@@ -2268,9 +2261,9 @@ trait PatternMatching extends Transform with TypingTransformers with ast.TreeDSL
       private[this] val id: Int = Var.nextId
 
       // private[this] var canModify: Option[Array[StackTraceElement]] = None
-      private[this] def ensureCanModify = {} //if (canModify.nonEmpty) patmatDebug("BUG!"+ this +" modified after having been observed: "+ canModify.get.mkString("\n"))
+      private[this] def ensureCanModify() = {} //if (canModify.nonEmpty) patmatDebug("BUG!"+ this +" modified after having been observed: "+ canModify.get.mkString("\n"))
 
-      private[this] def observed = {} //canModify = Some(Thread.currentThread.getStackTrace)
+      private[this] def observed() = {} //canModify = Some(Thread.currentThread.getStackTrace)
 
       // don't access until all potential equalities have been registered using registerEquality
       private[this] val symForEqualsTo = new scala.collection.mutable.HashMap[Const, Sym]
@@ -2423,7 +2416,13 @@ trait PatternMatching extends Transform with TypingTransformers with ast.TreeDSL
       private lazy val equalitySyms = {observed; symForEqualsTo.values.toList}
 
       // don't call until all equalities have been registered and registerNull has been called (if needed)
-      def describe = toString + ": " + staticTp + domain.map(_.mkString(" ::= ", " | ", "// "+ symForEqualsTo.keys)).getOrElse(symForEqualsTo.keys.mkString(" ::= ", " | ", " | ...")) + " // = " + path
+      def describe = {
+        def domain_s = domain match {
+          case Some(d) => d mkString (" ::= ", " | ", "// "+ symForEqualsTo.keys)
+          case _       => symForEqualsTo.keys mkString (" ::= ", " | ", " | ...")
+        }
+        s"$this: ${staticTp}${domain_s} // = $path"
+      }
       override def toString = "V"+ id
     }
 
@@ -2509,7 +2508,7 @@ trait PatternMatching extends Transform with TypingTransformers with ast.TreeDSL
     // corresponds to a type test that does not imply any value-equality (well, except for outer checks, which we don't model yet)
     sealed class TypeConst(val tp: Type) extends Const {
       assert(!(tp =:= NullTp))
-      private[this] val id: Int = Const.nextTypeId
+      /*private[this] val id: Int = */ Const.nextTypeId
 
       val wideTp = widenToClass(tp)
       def isValue = false
@@ -2557,7 +2556,7 @@ trait PatternMatching extends Transform with TypingTransformers with ast.TreeDSL
     sealed class ValueConst(val tp: Type, val wideTp: Type, override val toString: String) extends Const {
       // patmatDebug("VC"+(tp, wideTp, toString))
       assert(!(tp =:= NullTp)) // TODO: assert(!tp.isStable)
-      private[this] val id: Int = Const.nextValueId
+      /*private[this] val id: Int = */Const.nextValueId
       def isValue = true
     }
 
@@ -2783,7 +2782,6 @@ trait PatternMatching extends Transform with TypingTransformers with ast.TreeDSL
 
         // when does the match fail?
         val matchFails = Not(\/(symbolicCases))
-        val vars = gatherVariables(matchFails)
 
   // debug output:
         patmatDebug("analysing:")

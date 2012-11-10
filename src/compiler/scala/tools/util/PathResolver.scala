@@ -1,12 +1,11 @@
 /* NSC -- new Scala compiler
- * Copyright 2006-2012 LAMP/EPFL
+ * Copyright 2006-2013 LAMP/EPFL
  * @author  Paul Phillips
  */
 
 package scala.tools
 package util
 
-import java.net.{ URL, MalformedURLException }
 import scala.tools.reflect.WrappedProperties.AccessControl
 import nsc.{ Settings, GenericRunnerSettings }
 import nsc.util.{ ClassPath, JavaClassPath, ScalaClassLoader }
@@ -195,7 +194,7 @@ class PathResolver(settings: Settings, context: JavaContext) {
     def scalaExtDirs        = cmdLineOrElse("extdirs", Defaults.scalaExtDirs)
     /** Scaladoc doesn't need any bootstrapping, otherwise will create errors such as:
      * [scaladoc] ../scala-trunk/src/reflect/scala/reflect/macros/Reifiers.scala:89: error: object api is not a member of package reflect
-     * [scaladoc] case class ReificationError(val pos: reflect.api.PositionApi, val msg: String) extends Throwable(msg)
+     * [scaladoc] case class ReificationException(val pos: reflect.api.PositionApi, val msg: String) extends Throwable(msg)
      * [scaladoc]                                              ^
      * because the bootstrapping will look at the sourcepath and create package "reflect" in "<root>"
      * and then when typing relative names, instead of picking <root>.scala.relect, typedIdentifier will pick up the

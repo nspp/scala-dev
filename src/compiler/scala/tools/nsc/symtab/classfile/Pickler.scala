@@ -1,5 +1,5 @@
 /* NSC -- new Scala compiler
- * Copyright 2005-2012 LAMP/EPFL
+ * Copyright 2005-2013 LAMP/EPFL
  * @author  Martin Odersky
  */
 
@@ -26,15 +26,23 @@ import Flags._
 abstract class Pickler extends SubComponent {
   import global._
 
-  private final val showSig = false
-
   val phaseName = "pickler"
-
-  currentRun
 
   def newPhase(prev: Phase): StdPhase = new PicklePhase(prev)
 
   class PicklePhase(prev: Phase) extends StdPhase(prev) {
+    override def run() {
+      super.run()
+      // This is run here rather than after typer because I found
+      // some symbols - usually annotations, possibly others - had not
+      // yet performed the necessary symbol lookup, leading to
+      // spurious claims of unusedness.
+      if (settings.lint.value) {
+        log("Clearing recorded import selectors.")
+        analyzer.clearUnusedImports()
+      }
+    }
+
     def apply(unit: CompilationUnit) {
       def pickle(tree: Tree) {
         def add(sym: Symbol, pickle: Pickle) = {
@@ -79,6 +87,8 @@ abstract class Pickler extends SubComponent {
       }
 
       pickle(unit.body)
+      if (settings.lint.value)
+        analyzer.warnUnusedImports(unit)
     }
   }
 
@@ -427,7 +437,7 @@ abstract class Pickler extends SubComponent {
      *  argument of some Annotation */
     private def putMods(mods: Modifiers) = if (putEntry(mods)) {
       // annotations in Modifiers are removed by the typechecker
-      val Modifiers(flags, privateWithin, Nil) = mods
+      val Modifiers(_, privateWithin, Nil) = mods
       putEntry(privateWithin)
     }
 
@@ -1000,7 +1010,6 @@ abstract class Pickler extends SubComponent {
       }
       def printRefs(refs: List[AnyRef]) { refs foreach printRef }
       def printSymInfo(sym: Symbol) {
-        var posOffset = 0
         printRef(sym.name)
         printRef(localizedOwner(sym))
         print(flagsToString(sym.flags & PickledFlags)+" ")

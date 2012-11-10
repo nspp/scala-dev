@@ -1,6 +1,12 @@
 package scala.reflect
 package macros
 
+/**
+ * <span class="badge badge-red" style="float: right;">EXPERIMENTAL</span>
+ *
+ *  A helper available in [[scala.reflect.macros.Universe]] that defines shorthands for the
+ *  most common tree-creating functions.
+ */
 abstract class TreeBuilder {
   val global: Universe
 
@@ -46,12 +52,19 @@ abstract class TreeBuilder {
    *  @return               the newly created trees.
    */
   def mkMethodCall(receiver: Symbol, methodName: Name, targs: List[Type], args: List[Tree]): Tree
+
   def mkMethodCall(method: Symbol, targs: List[Type], args: List[Tree]): Tree
+
   def mkMethodCall(method: Symbol, args: List[Tree]): Tree
+
   def mkMethodCall(target: Tree, args: List[Tree]): Tree
+
   def mkMethodCall(receiver: Symbol, methodName: Name, args: List[Tree]): Tree
+
   def mkMethodCall(receiver: Tree, method: Symbol, targs: List[Type], args: List[Tree]): Tree
+
   def mkMethodCall(target: Tree, targs: List[Type], args: List[Tree]): Tree
+
   def mkNullaryCall(method: Symbol, targs: List[Type]): Tree
 
   /** A tree that refers to the runtime reflexive universe, ``scala.reflect.runtime.universe''. */

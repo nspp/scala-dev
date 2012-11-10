@@ -1,12 +1,11 @@
 /* NSC -- new Scala compiler
- * Copyright 2005-2012 LAMP/EPFL
+ * Copyright 2005-2013 LAMP/EPFL
  * Author: Paul Phillips
  */
 
 package scala.tools.nsc
 package matching
 
-import symtab.Flags
 import PartialFunction._
 
 /** Patterns are wrappers for Trees with enhanced semantics.
@@ -189,13 +188,6 @@ trait Patterns extends ast.TreeDSL {
     private lazy val packedType = global.typer.computeType(tpt, tpt.tpe)
     private lazy val consRef    = appliedType(ConsClass, packedType)
     private lazy val listRef    = appliedType(ListClass, packedType)
-    private lazy val seqRef     = appliedType(SeqClass, packedType)
-
-    private def thisSeqRef = {
-      val tc = (tree.tpe baseType SeqClass).typeConstructor
-      if (tc.typeParams.size == 1) appliedType(tc, List(packedType))
-      else seqRef
-    }
 
     // Fold a list into a well-typed x :: y :: etc :: tree.
     private def listFolder(hd: Tree, tl: Tree): Tree = unbind(hd) match {

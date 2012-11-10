@@ -1,5 +1,5 @@
 /* NSC -- new Scala compiler
- * Copyright 2005-2012 LAMP/EPFL
+ * Copyright 2005-2013 LAMP/EPFL
  * @author
  */
 
@@ -111,8 +111,6 @@ abstract class UnCurry extends InfoTransform
 
     private lazy val serialVersionUIDAnnotation =
       AnnotationInfo(SerialVersionUIDAttr.tpe, List(Literal(Constant(0))), List())
-
-    private var nprinted = 0
 
     // I don't have a clue why I'm catching TypeErrors here, but it's better
     // than spewing stack traces at end users for internal errors. Examples
@@ -338,7 +336,7 @@ abstract class UnCurry extends InfoTransform
 
       // def applyOrElse[A1 <: A, B1 >: B](x: A1, default: A1 => B1): B1 =
       val applyOrElseMethodDef = {
-        val methSym = anonClass.newMethod(fun.pos, nme.applyOrElse) setFlag (FINAL | OVERRIDE)
+        val methSym = anonClass.newMethod(nme.applyOrElse, fun.pos, newFlags = FINAL | OVERRIDE)
 
         val List(argtpe)            = formals
         val A1                      = methSym newTypeParameter(newTypeName("A1")) setInfo TypeBounds.upper(argtpe)
@@ -802,10 +800,6 @@ abstract class UnCurry extends InfoTransform
       if (!dd.symbol.hasAnnotation(VarargsClass) || !repeatedParams.contains(dd.symbol))
         return flatdd
 
-      def toSeqType(tp: Type): Type = {
-        val arg = elementType(ArrayClass, tp)
-        seqType(arg)
-      }
       def toArrayType(tp: Type): Type = {
         val arg = elementType(SeqClass, tp)
         // to prevent generation of an `Object` parameter from `Array[T]` parameter later

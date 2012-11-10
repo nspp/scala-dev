@@ -1,5 +1,5 @@
 /* NSC -- new Scala compiler
- * Copyright 2007-2012 LAMP/EPFL
+ * Copyright 2007-2013 LAMP/EPFL
  * @author Manohar Jonnalagedda
  * @author Gilles Dubochet
  */
@@ -148,9 +148,6 @@ trait MemberEntity extends Entity {
 
   /** Some migration warning if this member has a migration annotation, or none otherwise. */
   def migration: Option[Body]
-
-  @deprecated("Use `inDefinitionTemplates` instead", "2.9.0")
-  def inheritedFrom: List[TemplateEntity]
 
   /** For members representing values: the type of the value returned by this member; for members
     * representing types: the type itself. */

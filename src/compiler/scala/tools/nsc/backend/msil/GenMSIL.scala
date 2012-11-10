@@ -1,5 +1,5 @@
 /* NSC -- new scala compiler
- * Copyright 2005-2012 LAMP/EPFL
+ * Copyright 2005-2013 LAMP/EPFL
  * @author Nikolay Mihaylov
  */
 
@@ -8,7 +8,6 @@ package scala.tools.nsc
 package backend.msil
 
 import java.io.{File, IOException}
-import java.nio.{ByteBuffer, ByteOrder}
 import scala.collection.{ mutable, immutable }
 import scala.tools.nsc.symtab._
 
@@ -124,7 +123,6 @@ abstract class GenMSIL extends SubComponent {
 
     // Scala attributes
     // symtab.Definitions -> object (singleton..)
-    val SerializableAttr = definitions.SerializableAttr.tpe
     val CloneableAttr    = definitions.CloneableAttr.tpe
     val TransientAtt     = definitions.TransientAttr.tpe
     // remoting: the architectures are too different, no mapping (no portable code
@@ -259,9 +257,9 @@ abstract class GenMSIL extends SubComponent {
      * and thus shouldn't be added by this method.
      */
     def addAttributes(member: ICustomAttributeSetter, annotations: List[AnnotationInfo]) {
-      val attributes = annotations.map(_.atp.typeSymbol).collect {
-        case definitions.TransientAttr => null // TODO this is just an example
-      }
+      // val attributes = annotations.map(_.atp.typeSymbol).collect {
+      //   case definitions.TransientAttr => null // TODO this is just an example
+      // }
       return // TODO: implement at some point
     }
 
@@ -313,7 +311,7 @@ abstract class GenMSIL extends SubComponent {
 
 /*    def getAttributeArgs(consts: List[Constant], nvPairs: List[(Name, Constant)]): Array[Byte] = {
       val buf = ByteBuffer.allocate(2048) // FIXME: this may be not enough!
-      buf.order(ByteOrder.LITTLE_ENDIAN)
+      buf.order(java.nio.ByteOrder.LITTLE_ENDIAN)
       buf.putShort(1.toShort) // signature
 
       def emitSerString(str: String) = {
@@ -466,7 +464,7 @@ abstract class GenMSIL extends SubComponent {
 
     private[GenMSIL] def genClass(iclass: IClass) {
       val sym = iclass.symbol
-      debuglog("Generating class " + sym + " flags: " + Flags.flagsToString(sym.flags))
+      debuglog("Generating class " + sym + " flags: " + sym.flagString)
       clasz = iclass
 
       val tBuilder = getType(sym).asInstanceOf[TypeBuilder]
@@ -511,7 +509,7 @@ abstract class GenMSIL extends SubComponent {
 
 
     private def genMethod(m: IMethod) {
-      debuglog("Generating method " + m.symbol + " flags: " + Flags.flagsToString(m.symbol.flags) +
+      debuglog("Generating method " + m.symbol + " flags: " + m.symbol.flagString +
             " owner: " + m.symbol.owner)
       method = m
       localBuilders.clear
@@ -526,8 +524,8 @@ abstract class GenMSIL extends SubComponent {
             mcode = mBuilder.GetILGenerator()
           } catch {
             case e: Exception =>
-              java.lang.System.out.println("m.symbol       = " + Flags.flagsToString(m.symbol.flags) + " " + m.symbol)
-              java.lang.System.out.println("m.symbol.owner = " + Flags.flagsToString(m.symbol.owner.flags) + " " + m.symbol.owner)
+              java.lang.System.out.println("m.symbol       = " + m.symbol.flagString + " " + m.symbol)
+              java.lang.System.out.println("m.symbol.owner = " + m.symbol.owner.flagString + " " + m.symbol.owner)
               java.lang.System.out.println("mBuilder       = " + mBuilder)
               java.lang.System.out.println("mBuilder.DeclaringType = " +
                                  TypeAttributes.toString(mBuilder.DeclaringType.Attributes) +
@@ -823,8 +821,8 @@ abstract class GenMSIL extends SubComponent {
 
       def loadFieldOrAddress(field: Symbol, isStatic: Boolean, msg: String, loadAddr : Boolean) {
         debuglog(msg + " with owner: " + field.owner +
-              " flags: " + Flags.flagsToString(field.owner.flags))
-        var fieldInfo = fields.get(field) match {
+              " flags: " + field.owner.flagString)
+        val fieldInfo = fields.get(field) match {
           case Some(fInfo) => fInfo
           case None =>
             val fInfo = getType(field.owner).GetField(msilName(field))
@@ -1255,7 +1253,7 @@ abstract class GenMSIL extends SubComponent {
             mcode.Emit(OpCodes.Stloc, switchLocal)
             var i = 0
             for (l <- tags) {
-              var targetLabel = labels(branches(i))
+              val targetLabel = labels(branches(i))
               for (i <- l) {
                 mcode.Emit(OpCodes.Ldloc, switchLocal)
                 loadI4(i, mcode)
@@ -1633,18 +1631,6 @@ abstract class GenMSIL extends SubComponent {
       mf = mf | (if (sym hasFlag Flags.ABSTRACT) TypeAttributes.Abstract else 0)
       mf = mf | (if (sym.isTrait && !sym.isImplClass) TypeAttributes.Interface else TypeAttributes.Class)
       mf = mf | (if (sym isFinal) TypeAttributes.Sealed else 0)
-
-      sym.annotations foreach { a => a match {
-        case AnnotationInfo(SerializableAttr, _, _) =>
-          // TODO: add the Serializable TypeAttribute also if the annotation
-          // System.SerializableAttribute is present (.net annotation, not scala)
-          //  Best way to do it: compare with
-          //  definitions.getClass("System.SerializableAttribute").tpe
-          //  when frontend available
-          mf = mf | TypeAttributes.Serializable
-        case _ => ()
-      }}
-
       mf
       // static: not possible (or?)
     }
@@ -1884,7 +1870,7 @@ abstract class GenMSIL extends SubComponent {
         val sym = ifield.symbol
         debuglog("Adding field: " + sym.fullName)
 
-        var attributes = msilFieldFlags(sym)
+        val attributes = msilFieldFlags(sym)
         val fieldTypeWithCustomMods =
           new PECustomMod(msilType(sym.tpe),
                           customModifiers(sym.annotations))
@@ -1913,12 +1899,12 @@ abstract class GenMSIL extends SubComponent {
       if (iclass.symbol != definitions.ArrayClass) {
       for (m: IMethod <- iclass.methods) {
         val sym = m.symbol
-        debuglog("Creating MethodBuilder for " + Flags.flagsToString(sym.flags) + " " +
+        debuglog("Creating MethodBuilder for " + sym.flagString + " " +
               sym.owner.fullName + "::" + sym.name)
 
         val ownerType = getType(sym.enclClass).asInstanceOf[TypeBuilder]
         assert(mtype == ownerType, "mtype = " + mtype + "; ownerType = " + ownerType)
-        var paramTypes = msilParamTypes(sym)
+        val paramTypes = msilParamTypes(sym)
         val attr = msilMethodFlags(sym)
 
         if (m.symbol.isClassConstructor) {
@@ -1930,7 +1916,7 @@ abstract class GenMSIL extends SubComponent {
           mapConstructor(sym, constr)
           addAttributes(constr, sym.annotations)
         } else {
-          var resType = msilType(m.returnType)
+          val resType = msilType(m.returnType)
           val method =
             ownerType.DefineMethod(msilName(sym), attr, resType, paramTypes)
           for (i <- 0.until(paramTypes.length)) {
@@ -2050,7 +2036,6 @@ abstract class GenMSIL extends SubComponent {
     }
 
     private def generateMirrorClass(sym: Symbol) {
-      val tBuilder = getType(sym)
       assert(sym.isModuleClass, "Can't generate Mirror-Class for the Non-Module class " + sym)
       debuglog("Dumping mirror class for object: " + sym)
       val moduleName = msilName(sym)
@@ -2257,100 +2242,9 @@ abstract class GenMSIL extends SubComponent {
       methods(sym) = mInfo
     }
 
-    /*
-     * add mapping between sym and method with newName, paramTypes of newClass
-     */
-    private def mapMethod(sym: Symbol, newClass: MsilType, newName: String, paramTypes: Array[MsilType]) {
-      val methodInfo = newClass.GetMethod(newName, paramTypes)
-      assert(methodInfo != null, "Can't find mapping for " + sym + " -> " +
-             newName + "(" + paramTypes + ")")
-      mapMethod(sym, methodInfo)
-      if (methodInfo.IsStatic)
-        dynToStatMapped += sym
-    }
-
-    /*
-     * add mapping between method with name and paramTypes of clazz to
-     * method with newName and newParamTypes of newClass (used for instance
-     * for "wait")
-     */
-    private def mapMethod(
-      clazz: Symbol, name: Name, paramTypes: Array[Type],
-      newClass: MsilType, newName: String, newParamTypes: Array[MsilType]) {
-        val methodSym = lookupMethod(clazz, name, paramTypes)
-        assert(methodSym != null, "cannot find method " + name + "(" +
-               paramTypes + ")" + " in class " + clazz)
-        mapMethod(methodSym, newClass, newName, newParamTypes)
-      }
-
-    /*
-     * add mapping for member with name and paramTypes to member
-     * newName of newClass (same parameters)
-     */
-    private def mapMethod(
-      clazz: Symbol, name: Name, paramTypes: Array[Type],
-      newClass: MsilType, newName: String) {
-        mapMethod(clazz, name, paramTypes, newClass, newName, paramTypes map msilType)
-      }
-
-    /*
-     * add mapping for all methods with name of clazz to the corresponding
-     * method (same parameters) with newName of newClass
-     */
-    private def mapMethod(
-      clazz: Symbol, name: Name,
-      newClass: MsilType, newName: String) {
-        val memberSym: Symbol = clazz.tpe.member(name)
-        memberSym.tpe match {
-          // alternatives: List[Symbol]
-          case OverloadedType(_, alternatives) =>
-            alternatives.foreach(s => mapMethod(s, newClass, newName, msilParamTypes(s)))
-
-          // paramTypes: List[Type], resType: Type
-          case MethodType(params, resType) =>
-            mapMethod(memberSym, newClass, newName, msilParamTypes(memberSym))
-
-          case _ =>
-            abort("member not found: " + clazz + ", " + name)
-        }
-      }
-
-
-    /*
-     * find the method in clazz with name and paramTypes
-     */
-    private def lookupMethod(clazz: Symbol, name: Name, paramTypes: Array[Type]): Symbol = {
-      val memberSym = clazz.tpe.member(name)
-      memberSym.tpe match {
-        case OverloadedType(_, alternatives) =>
-          alternatives.find(s => {
-            var i: Int = 0
-            var typesOK: Boolean = true
-            if (paramTypes.length == s.tpe.paramTypes.length) {
-              while(i < paramTypes.length) {
-                if (paramTypes(i) != s.tpe.paramTypes(i))
-                  typesOK = false
-                i += 1
-              }
-            } else {
-              typesOK = false
-            }
-            typesOK
-          }) match {
-            case Some(sym) => sym
-            case None => abort("member of " + clazz + ", " + name + "(" +
-                               paramTypes + ") not found")
-          }
-
-        case MethodType(_, _) => memberSym
-
-        case _ => abort("member not found: " + name + " of " + clazz)
-      }
-    }
-
     private def showsym(sym: Symbol): String = (sym.toString +
-      "\n  symbol = " + Flags.flagsToString(sym.flags) + " " + sym +
-      "\n  owner  = " + Flags.flagsToString(sym.owner.flags) + " " + sym.owner
+      "\n  symbol = " + sym.flagString + " " + sym +
+      "\n  owner  = " + sym.owner.flagString + " " + sym.owner
     )
 
   } // class BytecodeGenerator

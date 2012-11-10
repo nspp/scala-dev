@@ -1,5 +1,5 @@
 /* NSC -- new Scala compiler
- * Copyright 2005-2012 LAMP/EPFL
+ * Copyright 2005-2013 LAMP/EPFL
  * @author  Paul Phillips
  */
 
@@ -46,7 +46,7 @@ object Reference {
   val MaxLine = 80
 
   class Accumulators() {
-    private var _help     = new ListBuffer[() => String]
+    private val _help    = new ListBuffer[() => String]
     private var _unary   = List[String]()
     private var _binary  = List[String]()
     private var _expand  = Map[String, List[String]]()

@@ -1,5 +1,5 @@
 /* NSC -- new Scala compiler
- * Copyright 2005-2012 LAMP/EPFL
+ * Copyright 2005-2013 LAMP/EPFL
  * @author  Martin Odersky
  */
 
@@ -103,6 +103,34 @@ abstract class TreeInfo {
     case _ =>
       false
   }
+
+  /** As if the name of the method didn't give it away,
+   *  this logic is designed around issuing helpful
+   *  warnings and minimizing spurious ones.  That means
+   *  don't reuse it for important matters like inlining
+   *  decisions.
+   */
+  def isPureExprForWarningPurposes(tree: Tree) = tree match {
+    case EmptyTree | Literal(Constant(())) => false
+    case _                                 =>
+      def isWarnableRefTree = tree match {
+        case t: RefTree => isExprSafeToInline(t.qualifier) && t.symbol != null && t.symbol.isAccessor
+        case _          => false
+      }
+      def isWarnableSymbol = {
+        val sym = tree.symbol
+        (sym == null) || !(sym.isModule || sym.isLazy) || {
+          debuglog("'Pure' but side-effecting expression in statement position: " + tree)
+          false
+        }
+      }
+
+      (    !tree.isErrorTyped
+        && (isExprSafeToInline(tree) || isWarnableRefTree)
+        && isWarnableSymbol
+      )
+  }
+
 
   @deprecated("Use isExprSafeToInline instead", "2.10.0")
   def isPureExpr(tree: Tree) = isExprSafeToInline(tree)
@@ -235,6 +263,20 @@ abstract class TreeInfo {
       expr
     case _ =>
       tree
+  }
+
+  /** Strips layers of `.asInstanceOf[T]` / `_.$asInstanceOf[T]()` from an expression */
+  def stripCast(tree: Tree): Tree = tree match {
+    case TypeApply(sel @ Select(inner, _), _) if isCastSymbol(sel.symbol) =>
+      stripCast(inner)
+    case Apply(TypeApply(sel @ Select(inner, _), _), Nil) if isCastSymbol(sel.symbol) =>
+      stripCast(inner)
+    case t =>
+      t
+  }
+
+  object StripCast {
+    def unapply(tree: Tree): Some[Tree] = Some(stripCast(tree))
   }
 
   /** Is tree a self or super constructor call? */

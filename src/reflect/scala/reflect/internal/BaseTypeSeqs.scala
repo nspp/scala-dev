@@ -1,5 +1,5 @@
 /* NSC -- new Scala compiler
- * Copyright 2005-2012 LAMP/EPFL
+ * Copyright 2005-2013 LAMP/EPFL
  * @author  Martin Odersky
  */
 package scala.reflect
@@ -115,7 +115,7 @@ trait BaseTypeSeqs {
     def map(f: Type => Type): BaseTypeSeq = {
 	  // inlined `elems map f` for performance
       val len = length
-      var arr = new Array[Type](len)
+      val arr = new Array[Type](len)
       var i = 0
       while (i < len) {
         arr(i) = f(elems(i))

@@ -1,5 +1,5 @@
 /* NSC -- new Scala compiler
- * Copyright 2005-2012 LAMP/EPFL
+ * Copyright 2005-2013 LAMP/EPFL
  * @author  Martin Odersky
  */
 package scala.reflect.reify
@@ -11,8 +11,6 @@ trait NodePrinters {
   self: Utils =>
 
   import global._
-  import definitions._
-  import Flag._
 
   object reifiedNodeToString extends (Tree => String) {
     def apply(tree: Tree): String = {
@@ -25,8 +23,8 @@ trait NodePrinters {
       // Rolling a full-fledged, robust TreePrinter would be several times more code.
       // Also as of late we have tests that ensure that UX won't be broken by random changes to the reifier.
       val lines = (tree.toString.split(EOL) drop 1 dropRight 1).toList splitAt 2
-      var (List(universe, mirror), reification) = lines
-      reification = (for (line <- reification) yield {
+      val (List(universe, mirror), reification0) = lines
+      val reification = (for (line <- reification0) yield {
         var s = line substring 2
         s = s.replace(nme.UNIVERSE_PREFIX.toString, "")
         s = s.replace(".apply", "")

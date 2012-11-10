@@ -1,5 +1,5 @@
 /* NSC -- new Scala compiler
- * Copyright 2005-2012 LAMP/EPFL
+ * Copyright 2005-2013 LAMP/EPFL
  * @author Martin Odersky
  */
 
@@ -197,9 +197,6 @@ abstract class Mixin extends InfoTransform with ast.TreeDSL {
    *    - lazy fields don't get a setter.
    */
   def addLateInterfaceMembers(clazz: Symbol) {
-    def makeConcrete(member: Symbol) =
-      member setPos clazz.pos resetFlag (DEFERRED | lateDEFERRED)
-
     if (treatedClassInfos(clazz) != clazz.info) {
       treatedClassInfos(clazz) = clazz.info
       assert(phase == currentRun.mixinPhase, phase)
@@ -387,7 +384,7 @@ abstract class Mixin extends InfoTransform with ast.TreeDSL {
           if (sourceModule != NoSymbol) {
             sourceModule setPos sym.pos
             if (sourceModule.flags != MODULE) {
-              log("!!! Directly setting sourceModule flags from %s to MODULE".format(flagsToString(sourceModule.flags)))
+              log("!!! Directly setting sourceModule flags from %s to MODULE".format(sourceModule.flagString))
               sourceModule.flags = MODULE
             }
           }
@@ -481,7 +478,7 @@ abstract class Mixin extends InfoTransform with ast.TreeDSL {
 
     /** The typer */
     private var localTyper: erasure.Typer = _
-    private def typedPos(pos: Position)(tree: Tree) = localTyper typed { atPos(pos)(tree) }
+    private def typedPos(pos: Position)(tree: Tree): Tree = localTyper.typedPos(pos)(tree)
     private def localTyped(pos: Position, tree: Tree, pt: Type) = localTyper.typed(atPos(pos)(tree), pt)
 
     /** Map lazy values to the fields they should null after initialization. */
@@ -980,12 +977,6 @@ abstract class Mixin extends InfoTransform with ast.TreeDSL {
       def addInitBits(clazz: Symbol, rhs: Tree): Tree =
         new AddInitBitsTransformer(clazz) transform rhs
 
-      def isCheckInitField(field: Symbol) =
-        needsInitFlag(field) && !field.isDeferred
-
-      def superClassesToCheck(clazz: Symbol) =
-        clazz.ancestors filterNot (_ hasFlag TRAIT | JAVA)
-
       // begin addNewDefs
 
       /** Fill the map from fields to offset numbers.
@@ -1213,7 +1204,7 @@ abstract class Mixin extends InfoTransform with ast.TreeDSL {
           tree
 
         case Select(qual, name) if sym.owner.isImplClass && !isStaticOnly(sym) =>
-          assert(!sym.isMethod, "no method allowed here: %s%s %s".format(sym, sym.isImplOnly, flagsToString(sym.flags)))
+          assert(!sym.isMethod, "no method allowed here: %s%s %s".format(sym, sym.isImplOnly, sym.flagString))
           // refer to fields in some implementation class via an abstract
           // getter in the interface.
           val iface  = toInterface(sym.owner.tpe).typeSymbol

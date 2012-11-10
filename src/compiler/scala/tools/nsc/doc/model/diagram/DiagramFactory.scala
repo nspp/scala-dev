@@ -4,7 +4,6 @@ package diagram
 
 import model._
 import comment.CommentFactory
-import scala.collection.mutable
 
 // statistics
 import  html.page.diagram.DiagramStats
@@ -48,7 +47,7 @@ trait DiagramFactory extends DiagramDirectiveParser {
         val thisNode = ThisNode(tpl.resultType, Some(tpl))(Some(tpl.qualifiedName + " (this " + tpl.kind + ")"))
 
         // superclasses
-        var superclasses: List[Node] =
+        val superclasses: List[Node] =
           tpl.parentTypes.collect {
             case p: (TemplateEntity, TypeEntity) if !classExcluded(p._1) => NormalNode(p._2, Some(p._1))()
           }.reverse
