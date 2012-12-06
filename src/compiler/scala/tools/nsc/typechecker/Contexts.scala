@@ -341,6 +341,7 @@ trait Contexts { self: Analyzer =>
       val argContext = baseContext.makeNewScope(tree, owner)
       argContext.inSelfSuperCall = true
       argContext.restoreState(this.state)
+      argContext.buffer = LinkedHashSet[AbsTypeError]()
       def enterElems(c: Context) {
         def enterLocalElems(e: ScopeEntry) {
           if (e != null && e.owner == c.scope) {
