@@ -685,10 +685,13 @@ trait Implicits {
               case t                              => t
             }
 
+            if (context.undetparams.nonEmpty)
+              inferExprInstance(checked, context.extractUndetparams(), ptInstantiated)
+
             if (context.hasErrors)
               fail("typing TypeApply reported errors for the implicit tree: " + context.errBuffer.head.errMsg)
             else {
-              val result = new SearchResult(itree2, subst)
+              val result = new SearchResult(checked, subst)
               if (Statistics.canEnable) Statistics.incCounter(foundImplicits)
               printInference("[success] found %s for pt %s".format(result, ptInstantiated))
               result
