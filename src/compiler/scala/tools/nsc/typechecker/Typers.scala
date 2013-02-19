@@ -1635,18 +1635,23 @@ trait Typers extends Adaptations with Tags {
 */
     private def normalizeFirstParent(parents: List[Tree]): List[Tree] = parents match {
       case first :: rest if treeInfo.isTraitRef(first) =>
+        @annotation.tailrec
         def explode(supertpt: Tree, acc: List[Tree]): List[Tree] = {
-          if (treeInfo.isTraitRef(supertpt)) {
+          if (supertpt.tpe.typeSymbol == AnyClass) {
+            supertpt setType AnyRefClass.tpe
+            supertpt :: acc
+          } else if (!treeInfo.isTraitRef(supertpt))
+            supertpt :: acc
+          else {
             val supertpt1 = typedType(supertpt)
-            if (!supertpt1.isErrorTyped) {
+            if (supertpt1.isErrorTyped) acc
+            else {
               val supersupertpt = TypeTree(supertpt1.tpe.firstParent) setPos supertpt.pos.focus
-              return explode(supersupertpt, supertpt1 :: acc)
+              explode(supersupertpt, supertpt1 :: acc)
             }
           }
-          if (supertpt.tpe.typeSymbol == AnyClass) supertpt setType AnyRefClass.tpe
-          supertpt :: acc
         }
-        explode(first, Nil) ++ rest
+        explode(first, rest)
       case _ => parents
     }
 
