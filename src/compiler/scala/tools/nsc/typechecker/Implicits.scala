@@ -152,6 +152,7 @@ trait Implicits {
 
     def isFailure          = false
     def isAmbiguousFailure = false
+    def isDivergent        = false
     final def isSuccess    = !isFailure
   }
 
@@ -159,6 +160,11 @@ trait Implicits {
     override def isFailure = true
   }
 
+  lazy val DivergentSearchFailure = new SearchResult(EmptyTree, EmptyTreeTypeSubstituter) {
+    override def isFailure   = true
+    override def isDivergent = true
+  }
+  
   lazy val AmbiguousSearchFailure = new SearchResult(EmptyTree, EmptyTreeTypeSubstituter) {
     override def isFailure          = true
     override def isAmbiguousFailure = true
@@ -791,6 +797,8 @@ trait Implicits {
             divergence = x
             log("discarding divergent implicit during implicit search")
             SearchFailure
+          case x: DivergentImplicit =>
+            DivergentSearchFailure
         }
       }
 
@@ -825,6 +833,8 @@ trait Implicits {
             catch divergenceHandler
 
           tryImplicitInfo(i) match {
+            case sr if sr.isDivergent =>
+              Nil
             case sr if sr.isFailure =>
               // We don't want errors that occur during checking implicit info
               // to influence the check of further infos.
