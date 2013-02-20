@@ -80,7 +80,7 @@ trait Implicits {
       printTyping("typing implicit: %s %s".format(tree, context.undetparamsString))
     val implicitSearchContext = context.makeImplicit(reportAmbiguous)
     val result = new ImplicitSearch(tree, pt, isView, implicitSearchContext, pos).bestImplicit
-    if (saveAmbiguousDivergent && implicitSearchContext.hasErrors) {
+    if (result.isFailure && saveAmbiguousDivergent && implicitSearchContext.hasErrors) {
       context.updateBuffer(implicitSearchContext.errBuffer.filter(err => err.kind == ErrorKinds.Ambiguous || err.kind == ErrorKinds.Divergent))
       debuglog("update buffer: " + implicitSearchContext.errBuffer)
     }
@@ -411,7 +411,7 @@ trait Implicits {
                    DivergingImplicitExpansionError(tree, pt, info.sym)(context)
                  SearchFailure
                } else {
-                 throw ex
+                 throw DivergentImplicit(info.sym)
                }
            } finally {
              context.openImplicits = context.openImplicits.tail
@@ -788,8 +788,7 @@ trait Implicits {
         var remaining = 1;
         { case x: DivergentImplicit if remaining > 0 =>
             remaining -= 1
-            if (divergence == null)
-              divergence = x
+            divergence = x
             log("discarding divergent implicit during implicit search")
             SearchFailure
         }
