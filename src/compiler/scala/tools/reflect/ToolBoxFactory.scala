@@ -181,14 +181,13 @@ abstract class ToolBoxFactory[U <: JavaUniverse](val u: U) { factorySelf =>
           (currentTyper, tree) => {
             trace("inferring implicit %s (macros = %s): ".format(if (isView) "view" else "value", !withMacrosDisabled))(showAttributed(pt, true, true, settings.Yshowsymkinds.value))
             val context = currentTyper.context
-            analyzer.inferImplicit(tree, pt, reportAmbiguous = true, isView = isView, context = context, saveAmbiguousDivergent = !silent, pos = pos) match {
-              case failure if failure.tree.isEmpty =>
-                trace("implicit search has failed. to find out the reason, turn on -Xlog-implicits: ")(failure.tree)
+            val result = analyzer.inferImplicit(tree, pt, reportAmbiguous = true, isView = isView, context = context, saveAmbiguousDivergent = !silent, pos = pos)
+            if (result.isFailure) {
+                // @H: what's the point of tracing an empty tree?
+                trace("implicit search has failed. to find out the reason, turn on -Xlog-implicits: ")(result.tree)
                 if (context.hasErrors) throw ToolBoxError("reflective implicit search has failed: %s".format(context.errBuffer.head.errMsg))
-                EmptyTree
-              case success =>
-                success.tree
             }
+            result.tree
           })
 
       def compile(expr0: Tree): () => Any = {

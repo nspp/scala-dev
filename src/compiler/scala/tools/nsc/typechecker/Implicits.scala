@@ -403,22 +403,18 @@ trait Implicits {
       (context.openImplicits find { case (tp, tree1) => tree1.symbol == tree.symbol && dominates(pt, tp)}) match {
          case Some(pending) =>
            //println("Pending implicit "+pending+" dominates "+pt+"/"+undetParams) //@MDEBUG
-           throw DivergentImplicit(info.sym)
+           DivergentSearchFailure
          case None =>
            try {
              context.openImplicits = (pt, tree) :: context.openImplicits
              // println("  "*context.openImplicits.length+"typed implicit "+info+" for "+pt) //@MDEBUG
-             typedImplicit0(info, ptChecked, isLocal)
-           } catch {
-             case ex: DivergentImplicit =>
+             val result = typedImplicit0(info, ptChecked, isLocal)
+             if (result.isDivergent) {
                //println("DivergentImplicit for pt:"+ pt +", open implicits:"+context.openImplicits) //@MDEBUG
-               if (context.openImplicits.tail.isEmpty) {
-                 if (!(pt.isErroneous))
-                   DivergingImplicitExpansionError(tree, pt, info.sym)(context)
-                 SearchFailure
-               } else {
-                 throw DivergentImplicit(info.sym)
-               }
+               if (context.openImplicits.tail.isEmpty && !pt.isErroneous)
+                 DivergingImplicitExpansionError(tree, pt, info.sym)(context)
+             }
+             result
            } finally {
              context.openImplicits = context.openImplicits.tail
            }
@@ -789,18 +785,8 @@ trait Implicits {
       /** Preventing a divergent implicit from terminating implicit search,
        *  so that if there is a best candidate it can still be selected.
        */
-      private var divergence: DivergentImplicit = null
-      private val divergenceHandler: PartialFunction[Throwable, SearchResult] = {
-        var remaining = 1;
-        { case x: DivergentImplicit if remaining > 0 =>
-            remaining -= 1
-            divergence = x
-            log("discarding divergent implicit during implicit search")
-            SearchFailure
-          case x: DivergentImplicit =>
-            DivergentSearchFailure
-        }
-      }
+      private var divergentSym: Symbol = null
+      private var divergenceCountdown = 1
 
       /** Sorted list of eligible implicits.
        */
@@ -828,11 +814,17 @@ trait Implicits {
       @tailrec private def rankImplicits(pending: Infos, acc: Infos): Infos = pending match {
         case Nil      => acc
         case i :: is  =>
-          def tryImplicitInfo(i: ImplicitInfo) =
-            try typedImplicit(i, ptChecked = true, isLocal)
-            catch divergenceHandler
+          def tryExceptionLessImplicitInfo(i: ImplicitInfo) = {
+            val search = typedImplicit(i, ptChecked = true, isLocal)
+            if (search.isDivergent && divergenceCountdown > 0) {
+              divergenceCountdown -= 1
+              divergentSym = i.sym
+              log("discarding divergent implicit during implicit search")
+              SearchFailure
+            } else search
+          }
 
-          tryImplicitInfo(i) match {
+          tryExceptionLessImplicitInfo(i) match {
             case sr if sr.isDivergent =>
               Nil
             case sr if sr.isFailure =>
@@ -886,9 +878,9 @@ trait Implicits {
           /* If there is no winner, and we witnessed and caught divergence,
            * now we can throw it for the error message.
            */
-          if (divergence != null)
-            DivergingImplicitExpansionError(tree, pt, divergence.sym)(context)
-          else if (invalidImplicits.nonEmpty)
+          if (divergentSym != null) {
+            DivergingImplicitExpansionError(tree, pt, divergentSym)(context)
+          } else if (invalidImplicits.nonEmpty)
             setAddendum(pos, () =>
               "\n Note: implicit "+invalidImplicits.head+" is not applicable here"+
               " because it comes after the application point and it lacks an explicit result type")
@@ -1409,12 +1401,6 @@ trait Implicits {
       }
     }
   }
-
-  class DivergentImplicit(val sym: Symbol) extends Exception
-  object DivergentImplicit {
-    def apply(sym: Symbol) = new DivergentImplicit(sym)
-  }
-
 }
 
 object ImplicitsStats {
