@@ -640,7 +640,7 @@ trait Parsers extends AnyRef {//with debugging.DebugableParsers {
     val r = p(in)
     println(name +" --> "+ r)
     r
-  }, loc)
+  }, loc).named("log")
 
   /** A parser generator for repetitions.
    *
@@ -665,7 +665,7 @@ trait Parsers extends AnyRef {//with debugging.DebugableParsers {
    *         The results of `p` are collected in a list. The results of `q` are discarded.
    */
   def repsep[T](p: => Parser[T], q: => Parser[Any])(implicit loc: ParserLocation): Parser[List[T]] =
-    rep1sep(p, q) | success(List()).named("repsep")
+    (rep1sep(p, q) | success(List())).named("repsep")
 
   /** A parser generator for non-empty repetitions.
    *
@@ -734,7 +734,7 @@ trait Parsers extends AnyRef {//with debugging.DebugableParsers {
         }
 
       applyp(in)
-    }, loc)
+    }, loc).named("repN")
 
   /** A parser generator for non-empty repetitions.
    *
@@ -749,7 +749,7 @@ trait Parsers extends AnyRef {//with debugging.DebugableParsers {
    *         The results of `p` are collected in a list. The results of `q` are discarded.
    */
   def rep1sep[T](p : => Parser[T], q : => Parser[Any])(implicit loc: ParserLocation): Parser[List[T]] = {
-    p ~ rep(q ~> p) ^^ {case x~y => x::y}
+    (p ~ rep(q ~> p) ^^ {case x~y => x::y}).named("rep1sep")
   }
 
   /** A parser generator that, roughly, generalises the rep1sep generator so
@@ -778,9 +778,9 @@ trait Parsers extends AnyRef {//with debugging.DebugableParsers {
    */
   def chainl1[T, U](first: => Parser[T], p: => Parser[U], q: => Parser[(T, U) => T])(implicit loc: ParserLocation): Parser[T]
     = {
-      first ~ rep(q ~ p) ^^ {
+      (first ~ rep(q ~ p) ^^ {
         case x ~ xs => xs.foldLeft(x: T){case (a, f ~ b) => f(a, b)} // x's type annotation is needed to deal with changed type inference due to SI-5189
-      }
+      }).named("chainl1")
   }
 
   /** A parser generator that generalises the `rep1sep` generator so that `q`,
@@ -798,9 +798,9 @@ trait Parsers extends AnyRef {//with debugging.DebugableParsers {
    */
   def chainr1[T, U](p: => Parser[T], q: => Parser[(T, U) => U], combine: (T, U) => U, first: U)(implicit loc: ParserLocation): Parser[U]
     = {
-      p ~ rep(q ~ p) ^^ {
+      (p ~ rep(q ~ p) ^^ {
         case x ~ xs => (new ~(combine, x) :: xs).foldRight(first){case (f ~ a, b) => f(a, b)}
-      }
+      }).named("chainr1")
   }
 
   /** A parser generator for optional sub-phrases.
@@ -812,7 +812,7 @@ trait Parsers extends AnyRef {//with debugging.DebugableParsers {
    *         with the empty result
    */
   def opt[T](p: => Parser[T])(implicit loc: ParserLocation): Parser[Option[T]] =
-    p ^^ (x => Some(x)) | success(None)
+    (p ^^ (x => Some(x)) | success(None)).named("opt")
 
   /** Wrap a parser so that its failures and errors become success and
    *  vice versa -- it never consumes any input.
@@ -822,7 +822,7 @@ trait Parsers extends AnyRef {//with debugging.DebugableParsers {
       case Success(_, _)  => Failure("Expected failure", in)
       case _              => Success((), in)
     }
-  }, loc)
+  }, loc).named("not")
 
   /** A parser generator for guard expressions. The resulting parser will
    *  fail or succeed just like the one given as parameter but it will not
@@ -837,7 +837,7 @@ trait Parsers extends AnyRef {//with debugging.DebugableParsers {
       case s@ Success(s1,_) => Success(s1, in)
       case e => e
     }
-  }, loc)
+  }, loc).named("guard")
 
   /** `positioned` decorates a parser's result with the start position of the
    *  input it consumed.
@@ -852,7 +852,7 @@ trait Parsers extends AnyRef {//with debugging.DebugableParsers {
       case Success(t, in1) => Success(if (t.pos == NoPosition) t setPos in.pos else t, in1)
       case ns: NoSuccess => ns
     }
-  }, loc)
+  }, loc).named("positioned")
 
   /** A parser generator delimiting whole phrases (i.e. programs).
    *

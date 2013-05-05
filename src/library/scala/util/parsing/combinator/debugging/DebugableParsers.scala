@@ -247,6 +247,12 @@ trait DebugableParsers extends DefaultParser with LocationAwareParser with Contr
       listeners = elem :: listeners
     }
   }
+  
+  def clearListeners() = {
+    this.synchronized {
+      listeners = Nil
+    }
+  }
 
   private[this] var ids = 0
 
@@ -317,10 +323,6 @@ trait DebugableParsers extends DefaultParser with LocationAwareParser with Contr
 
     def enterRes(in: Input): Unit = {
       if (location != NoParserLocation) {
-
-        // println("Name:  \t " + name)
-        // println("Method:\t" + printMethod(location))
-
         // Redefine name for easier reading
         if (name == "") name = "Undefined"
 
@@ -331,29 +333,41 @@ trait DebugableParsers extends DefaultParser with LocationAwareParser with Contr
         Dispatcher.incLevel
         Dispatcher.go(p)
 
-        //println("Level: \t" + Dispatcher.getLevel)
-        //println("")
-
         listeners.synchronized {
-          val notifiers = listeners.flatMap(_.stepIn(id, name, location, Builder.z))
+          val notifiers = listeners.flatMap(_.stepIn(id, name, location))
           waitForAllAcks(notifiers)
         }
-
-
-        // Check if we are taking a step
-        p match {
-          case WordParser(_,_)      =>
-            /*listeners.synchronized {
-              val notifiers = listeners.flatMap(_.stepIn(id, name, location, Builder.z))
-              waitForAllAcks(notifiers)
-            }*/
-            //step
-          case _                    => {}
-        }
-
       } else {
         if (java.lang.Boolean.getBoolean("parsec.debug"))
           println("NoParserLocation with name: " + name)
+      }
+    }
+
+    def exitRes[U >: T](res: ParseResult[U]): Unit = {
+      if (location != NoParserLocation) {
+        Dispatcher.decLevel
+        res match {
+          case Success(res0, next) =>
+            println("Matched: " + res)
+            Dispatcher.go(SuccessParser(res0.toString))
+          case NoSuccess(msg, next) => {
+            println("Failed: " + msg)
+            Dispatcher.go(FailureParser(msg))
+          }
+        }
+        println("Level: \t" + Dispatcher.getLevel)
+
+        var msg = res match {
+          case Error(m,_) => m
+          case Failure(m,_) => m
+          case Success(_,_) => "OK"
+          case _ => "ERROR"
+        }
+        listeners.synchronized {
+          //val notifiers = listeners.flatMap(_.stepOut(id, res, msg))
+          val notifiers = listeners.flatMap(_.stepOut(id, res.successful, msg))
+          waitForAllAcks(notifiers)
+        }
       }
     }
 
@@ -381,41 +395,6 @@ trait DebugableParsers extends DefaultParser with LocationAwareParser with Contr
           contr.request.isDone = true
           // Notify the request that it has been filled
           contr.request.notify
-        }
-      }
-    }
-
-    def exitRes[U >: T](res: ParseResult[U]): Unit = {
-      if (location != NoParserLocation) {
-        Dispatcher.decLevel
-        res match {
-          case Success(res0, next) =>
-            println("Matched: " + res)
-            Dispatcher.go(SuccessParser(res0.toString))
-          case NoSuccess(msg, next) => {
-            println("Failed: " + msg)
-            Dispatcher.go(FailureParser(msg))
-          }
-        }
-        println("Level: \t" + Dispatcher.getLevel)
-
-
-        /*if (Dispatcher.getLevel == 0) {
-          // fixme: looks to me like there was some sort of hack
-          // left for level 0, this needs to be removed
-
-
-          // If level is 0, then we are done
-          //if (Dispatcher.getLevel == 0) endStep
-          listeners.synchronized {
-            val notifiers = listeners.flatMap(_.stepIn(id, name, location, Builder.z))
-            waitForAllAcks(notifiers)
-          }
-        }*/
-
-        listeners.synchronized {
-          val notifiers = listeners.flatMap(_.stepOut(id, res.successful, Dispatcher.getLevel == 0))
-          waitForAllAcks(notifiers)
         }
       }
     }
